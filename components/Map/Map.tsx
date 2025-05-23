@@ -129,46 +129,6 @@ const Map = () => {
 
   return (
     <View style={styles.container}>
-      {!isAuthenticated && (
-        <Button
-          title="Se connecter"
-          onPress={() => setShowLoginModal(true)}
-          color="#007bff"
-        />
-      )}
-      <Modal visible={showLoginModal} animationType="slide" transparent={true}>
-        <View style={styles.modal}>
-          <View style={styles.modalContent}>
-            <Text style={styles.modalTitle}>Connexion</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Nom d'utilisateur"
-              value={user}
-              onChangeText={setUser}
-            />
-            <Button
-              title="Se connecter"
-              onPress={handleLogin}
-              color="#4CAF50"
-            />
-            <Button
-              title="Annuler"
-              onPress={() => setShowLoginModal(false)}
-              color="#ccc"
-            />
-          </View>
-        </View>
-      </Modal>
-      {isAuthenticated && (
-        <View style={styles.buttonContainer}>
-          <Button
-            title="Ajouter ma localisation"
-            onPress={getLocation}
-            color="#28a745"
-          />
-          <Button title="Déconnexion" onPress={handleLogout} color="#dc3545" />
-        </View>
-      )}
       <MapView
         style={styles.map}
         region={

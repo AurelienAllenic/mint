@@ -1,8 +1,6 @@
-import { View, Text, Button } from "react-native";
-import { useAuth } from "../../context/auth";
-import users from "../../data/users.json"; 
 import { Image } from "expo-image";
-import { StyleSheet } from "react-native";
+import { Button, StyleSheet, Text } from "react-native";
+import { useAuth } from "../../context/auth";
 
 import Map from "@/components/Map/Map";
 import ParallaxScrollView from "@/components/ParallaxScrollView";
@@ -22,7 +20,7 @@ export default function HomeScreen() {
     >
       <Text>Bienvenue {user?.name}</Text>
       <Button title="Se déconnecter" onPress={logout} />
-      <Map />
+      <Map user={user} />
     </ParallaxScrollView>
   );
 }

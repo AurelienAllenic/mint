@@ -2,6 +2,7 @@ import { Image } from "expo-image";
 import { Button, StyleSheet, Text } from "react-native";
 import { useAuth } from "../../context/auth";
 
+import CreateRace from "@/components/CreateRace/CreateRace";
 import Map from "@/components/Map/Map";
 import ParallaxScrollView from "@/components/ParallaxScrollView";
 
@@ -20,7 +21,11 @@ export default function HomeScreen() {
     >
       <Text>Bienvenue {user?.name}</Text>
       <Button title="Se déconnecter" onPress={logout} />
-      {<Map user={user} />}
+      {user?.role === "organisateur" ? (
+        <CreateRace user={user} />
+      ) : (
+        <Map user={user} />
+      )}
     </ParallaxScrollView>
   );
 }

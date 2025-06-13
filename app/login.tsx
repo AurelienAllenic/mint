@@ -1,6 +1,6 @@
 import { router } from "expo-router";
 import { useState } from "react";
-import { Button, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Button, Text, TextInput, View } from "react-native";
 import { useAuth } from "../context/auth";
 import users from "../data/users.json";
 
@@ -16,7 +16,11 @@ export default function LoginScreen() {
     );
 
     if (matchingUser) {
-      login({ email: matchingUser.email, name: matchingUser.name });
+      login({
+        email: matchingUser.email,
+        name: matchingUser.name,
+        role: matchingUser.role,
+      });
       router.replace("/");
     } else {
       setError("Email ou mot de passe incorrect");

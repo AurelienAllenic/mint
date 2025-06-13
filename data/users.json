@@ -1,12 +1,20 @@
 [
   {
     "email": "aurel@gmail.com",
-    "name" : "Aurélien",
-    "password": "password123"
+    "name": "Aurélien",
+    "password": "password123",
+    "role": "coureur"
   },
   {
     "email": "enzo@gmail.com",
-    "name" : "Enzo",
-    "password": "mypassword"
+    "name": "Enzo",
+    "password": "mypassword",
+    "role": "organisateur"
+  },
+  {
+    "email": "enzo@gmail.com",
+    "name": "Enzo",
+    "password": "mypassword",
+    "role": "visiteur"
   }
 ]

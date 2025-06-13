@@ -20,7 +20,7 @@ export default function HomeScreen() {
     >
       <Text>Bienvenue {user?.name}</Text>
       <Button title="Se déconnecter" onPress={logout} />
-      <Map user={user} />
+      {<Map user={user} />}
     </ParallaxScrollView>
   );
 }

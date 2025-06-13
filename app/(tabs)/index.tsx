@@ -1,27 +1,24 @@
 import { Image } from "expo-image";
-import { Button, StyleSheet, Text } from "react-native";
+import { Button, StyleSheet, Text, ScrollView, TextInput, TouchableOpacity } from "react-native";
 import { useAuth } from "../../context/auth";
-
+import { homeStyles } from "../../style/home.styles";
 import Map from "@/components/Map/Map";
-import ParallaxScrollView from "@/components/ParallaxScrollView";
 
 export default function HomeScreen() {
   const { user, logout } = useAuth();
 
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: "#A1CEDC", dark: "#1D3D47" }}
-      headerImage={
-        <Image
-          source={require("@/assets/images/partial-react-logo.png")}
-          style={styles.reactLogo}
-        />
-      }
-    >
-      <Text>Bienvenue {user?.name}</Text>
-      <Button title="Se déconnecter" onPress={logout} />
+    <ScrollView style={homeStyles.container}>
+      <Text style={homeStyles.title}>Bienvenue {user?.name}</Text>
+      <TextInput
+        placeholder="Rechercher un coureur"
+        style={homeStyles.input}
+      />
       <Map user={user} />
-    </ParallaxScrollView>
+      <TouchableOpacity style={homeStyles.button} onPress={logout}>
+        <Text style={homeStyles.buttonText}>Se déconnecter</Text>
+      </TouchableOpacity>
+    </ScrollView>
   );
 }
 

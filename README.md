@@ -18,28 +18,28 @@ Bienvenue sur **Mint**, une application mobile universelle créée avec [Expo](h
 
 3. **Recuperer l'IP local de la machine**
 
-Windows :
+   Windows :
 
-```sh
-ipconfig
-```
+   ```sh
+   ipconfig
+   ```
 
-Mac : 
+   Mac : 
 
-```bash
-ifconfig
-```
+   ```bash
+   ifconfig
+   ```
 
 4. **Modifier le .env**
 
-Renommer `.env.example` en `.env`, et remplacer : 
+   Renommer `.env.example` en `.env`, et remplacer : 
 
 - `XXX.XX.XXX.X` par l'IP local de la machine récupèré précédement
-- `PORT` par le port utilisé par le back (ici 3000)
+- `[PORT]` par le port utilisé par le back (ici 3000)
 
-```sh
-EXPO_PUBLIC_API_URL="http://XXX.XX.XXX.X:[PORT]/api"
-```
+   ```sh
+   EXPO_PUBLIC_API_URL="http://XXX.XX.XXX.X:[PORT]/api"
+   ```
 
    Ouvre ensuite l’application sur :
    - un [build de développement](https://docs.expo.dev/develop/development-builds/introduction/)

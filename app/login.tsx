@@ -2,65 +2,51 @@
 
 import { router } from "expo-router";
 import { useState } from "react";
-import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Text, TextInput, TouchableOpacity, View, Image } from "react-native";
 import { useAuth } from "../context/auth";
-import users from "../data/users.json";
 import { loginStyles } from "../style/login.styles";
 
 export default function LoginScreen() {
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const { login } = useAuth();
 
-  var disabled =
-    (!name || !email || !password || !confirmPassword) ||
-    (password === "" ? true : confirmPassword !== password);
+  const handleLogin = async () => {
 
-  const handleSignup = () => {
-    const matchingUser = users.find(
-      (user) => user.email === email && user.password === password
+    const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+    const matchingUser = await fetch(
+      `${API_URL}/auth/login`,
+      {
+        method: "POST",
+        body: JSON.stringify({ email, password }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      }
     );
 
-    if (matchingUser) {
-      setError("User already exists");
-    }
+    console.log("Response:", matchingUser);
 
-    users.push({
-      email: email,
-      name: name,
-      password: password,
-    });
-    router.replace("/login");
+    if (matchingUser.ok) {
+      const data = await matchingUser.json();
+      console.log("User data:", data);
+      login({ email: data.email, name: data.name });
+      router.replace("/");
+    } else {
+      setError("Email ou mot de passe incorrect");
+    }
   };
 
   return (
     <View style={loginStyles.container}>
       <View style={loginStyles.header}>
-        <Text style={loginStyles.title}>Inscription</Text>
+        <Text style={loginStyles.title}>Connexion</Text>
       </View>
 
       <View style={loginStyles.inputContainer}>
-        <Text style={loginStyles.inputLabel}>Nom</Text>
-        <TextInput
-          placeholder="Nom"
-          value={name}
-          onChangeText={(text) => {
-            setName(text);
-            setError("");
-          }}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          style={[
-            loginStyles.input,
-            focusedInput === "name" && loginStyles.inputFocused,
-          ]}
-          onFocus={() => setFocusedInput("name")}
-          onBlur={() => setFocusedInput(null)}
-        />
         <Text style={loginStyles.inputLabel}>E-mail</Text>
         <TextInput
           placeholder="E-mail"
@@ -99,37 +85,11 @@ export default function LoginScreen() {
         />
       </View>
 
-      <View style={loginStyles.inputContainer}>
-        <Text style={loginStyles.inputLabel}>Confirmation mot de passe</Text>
-        <TextInput
-          placeholder="Mot de passe"
-          value={confirmPassword}
-          onChangeText={(text) => {
-            setConfirmPassword(text);
-            setError("");
-          }}
-          secureTextEntry
-          style={[
-            loginStyles.input,
-            focusedInput === "confirmPassword" && loginStyles.inputFocused,
-          ]}
-          onFocus={() => setFocusedInput("confirmPassword")}
-          onBlur={() => setFocusedInput(null)}
-        />
-      </View>
-
       {error !== "" && <Text style={loginStyles.errorText}>{error}</Text>}
 
       <View style={loginStyles.buttonContainer}>
-        <TouchableOpacity
-          style={[
-            loginStyles.button,
-            disabled && loginStyles.buttonDisabled,
-          ]}
-          onPress={handleSignup}
-          disabled={disabled}
-        >
-          <Text style={loginStyles.buttonText}>Inscription</Text>
+        <TouchableOpacity style={loginStyles.button} onPress={handleLogin}>
+          <Text style={loginStyles.buttonText}>Connexion</Text>
         </TouchableOpacity>
       </View>
 

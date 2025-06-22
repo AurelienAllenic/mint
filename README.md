@@ -1,50 +1,73 @@
-# Welcome to your Expo app 👋
+# Mint – Expo Starter App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+Bienvenue sur **Mint**, une application mobile universelle créée avec [Expo](https://expo.dev) et [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
 
-## Get started
+## 🚀 Démarrage rapide
 
-1. Install dependencies
+1. **Installer les dépendances**
 
    ```bash
    npm install
    ```
 
-2. Start the app
+2. **Lancer l’application**
 
    ```bash
    npx expo start
    ```
 
-In the output, you'll find options to open the app in a
+3. **Recuperer l'IP local de la machine**
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+Windows :
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```sh
+ipconfig
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+Mac : 
 
-## Learn more
+```bash
+ifconfig
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+4. **Modifier le .env**
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Renommer `.env.example` en `.env`, et remplacer : 
 
-## Join the community
+- `XXX.XX.XXX.X` par l'IP local de la machine récupèré précédement
+- `PORT` par le port utilisé par le back (ici 3000)
 
-Join our community of developers creating universal apps.
+```sh
+EXPO_PUBLIC_API_URL="http://XXX.XX.XXX.X:[PORT]/api"
+```
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+   Ouvre ensuite l’application sur :
+   - un [build de développement](https://docs.expo.dev/develop/development-builds/introduction/)
+   - un [émulateur Android](https://docs.expo.dev/workflow/android-studio-emulator/)
+   - un [simulateur iOS](https://docs.expo.dev/workflow/ios-simulator/)
+   - [Expo Go](https://expo.dev/go) sur ton appareil
+
+3. **Développer**
+
+   Modifie les fichiers dans le dossier **app**. Ce projet utilise le [file-based routing d’Expo Router](https://docs.expo.dev/router/introduction/).
+
+## 📂 Structure du projet
+
+```
+mint/
+├── app/                # Code principal de l’application (pages, navigation)
+├── components/         # Composants réutilisables
+├── hooks/              # Hooks personnalisés
+├── constants/          # Constantes globales
+├── scripts/            # Scripts utilitaires (ex: reset-project.js)
+├── app-example/        # (optionnel) Ancien code déplacé après reset
+├── package.json
+└── README.md
+```
+
+## 📖 Ressources utiles
+
+- [Documentation Expo](https://docs.expo.dev/)
+- [Tutoriel Expo](https://docs.expo.dev/tutorial/introduction/)
+- [Expo sur GitHub](https://github.com/expo/expo)
+- [Communauté Discord](https://chat.expo.dev)

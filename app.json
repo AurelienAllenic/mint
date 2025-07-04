@@ -37,6 +37,7 @@
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "assets": ["./data/users.json", "./data/races.json"]
   }
 }

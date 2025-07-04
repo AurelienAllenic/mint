@@ -5,7 +5,6 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Button,
-  Modal,
   ScrollView,
   StyleSheet,
   Text,
@@ -35,7 +34,7 @@ const USERS_FILE_PATH = `${DATA_DIR}users.json`;
 const RACES_FILE_PATH = `${DATA_DIR}races.json`;
 
 /**
- * Initialise les fichiers JSON nécessaires en créant les dossiers/fichiers s'ils n'existent pas
+ * Initialise les fichiers JSON nécessaires
  */
 const initializeJsonFiles = async () => {
   try {
@@ -52,35 +51,61 @@ const initializeJsonFiles = async () => {
     }
   } catch (err) {
     console.error("Erreur lors de l'initialisation des fichiers JSON :", err);
+    Alert.alert("Erreur", "Impossible d'initialiser les fichiers de données");
   }
 };
 
 /**
- * Parse le contenu XML GPX et extrait les coordonnées lat/lon
+ * Parse le contenu XML GPX et extrait les coordonnées
  * @param xml contenu XML du fichier GPX
  * @returns tableau de coordonnées {latitude, longitude}
  */
 const parseGpx = (xml: string): { latitude: number; longitude: number }[] => {
-  const matches = [...xml.matchAll(/<trkpt lat="([\d.-]+)" lon="([\d.-]+)"/g)];
-  return matches.map((m) => ({
-    latitude: parseFloat(m[1]),
-    longitude: parseFloat(m[2]),
-  }));
+  try {
+    const matches = [
+      ...xml.matchAll(/<trkpt lat="([\d.-]+)" lon="([\d.-]+)"/g),
+    ];
+    const coords = matches.map((m) => ({
+      latitude: parseFloat(m[1]),
+      longitude: parseFloat(m[2]),
+    }));
+    return coords.filter(
+      (coord) => !isNaN(coord.latitude) && !isNaN(coord.longitude)
+    );
+  } catch (err) {
+    console.error("Erreur lors du parsing GPX :", err);
+    return [];
+  }
 };
 
 /**
- * Exporte une course au format JSON et propose le partage si possible
+ * Exporte une course au format JSON et propose le partage
  * @param race course à exporter
  */
-const exportRaceAsJson = async (race: Race) => {
+const exportRaceAsText = async (race: Race, gpxFileName: string | null) => {
   try {
-    const path = `${FileSystem.documentDirectory}race-${race.id}.json`;
-    await FileSystem.writeAsStringAsync(path, JSON.stringify(race, null, 2));
+    const path = `${FileSystem.documentDirectory}race-${race.id}.txt`;
+    const content = `
+Résumé de la course :
+- ID : ${race.id}
+- Nom : ${race.name}
+- Créée par : ${race.createdBy}
+- Nombre de coureurs : ${race.runners.length}
+- Point de départ : (${race.startLocation.latitude}, ${
+      race.startLocation.longitude
+    })
+- Point d'arrivée : (${race.endLocation.latitude}, ${
+      race.endLocation.longitude
+    })
+- Longueur du tracé : ${race.route.length} points
+- Fichier GPX : ${gpxFileName || "Aucun fichier sélectionné"}
+    `.trim();
+    await FileSystem.writeAsStringAsync(path, content);
 
     if (await Sharing.isAvailableAsync()) {
       await Sharing.shareAsync(path, {
-        mimeType: "application/json",
-        dialogTitle: "Partager la course",
+        mimeType: "text/plain",
+        dialogTitle: "Partager le résumé de la course",
       });
     } else {
       Alert.alert(
@@ -89,8 +114,8 @@ const exportRaceAsJson = async (race: Race) => {
       );
     }
   } catch (err) {
-    console.error("Erreur export JSON :", err);
-    Alert.alert("Erreur", "Impossible d'exporter la course");
+    console.error("Erreur export TXT :", err);
+    Alert.alert("Erreur", "Impossible d'exporter le résumé de la course");
   }
 };
 
@@ -101,17 +126,23 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
   const [route, setRoute] = useState<{ latitude: number; longitude: number }[]>(
     []
   );
+  const [gpxFileName, setGpxFileName] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastCreatedRace, setLastCreatedRace] = useState<Race | null>(null);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [region, setRegion] = useState({
+    latitude: 48.8566, // Paris par défaut
+    longitude: 2.3522,
+    latitudeDelta: 0.0922,
+    longitudeDelta: 0.0421,
+  });
 
   useEffect(() => {
     initializeJsonFiles();
   }, []);
 
   /**
-   * Ajoute un coureur après validation de son email dans users.json
+   * Ajoute un coureur après validation de son email
    */
   const addRunner = async () => {
     const emailTrimmed = runnerEmail.trim().toLowerCase();
@@ -143,10 +174,11 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
   };
 
   /**
-   * Importe un fichier GPX et extrait le tracé
+   * Importe un fichier GPX et met à jour le tracé et la région de la carte
    */
   const importGpx = async () => {
     try {
+      setLoading(true);
       const res = await DocumentPicker.getDocumentAsync({
         type: ["application/gpx+xml", "application/xml", "text/xml", "*/*"],
       });
@@ -156,8 +188,9 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         return;
       }
 
-      // URI du fichier sélectionné
       const uri = res.uri || (res.assets && res.assets[0]?.uri);
+      const fileName =
+        res.name || (res.assets && res.assets[0]?.name) || "fichier_gpx";
       if (!uri) {
         setError("URI du fichier introuvable");
         return;
@@ -170,16 +203,37 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         setError("Fichier GPX invalide ou trop court");
         return;
       }
+
       setRoute(coords);
+      setGpxFileName(fileName);
       setError(null);
+
+      // Ajuster la région de la carte pour centrer sur le tracé
+      if (coords.length > 0) {
+        const latitudes = coords.map((coord) => coord.latitude);
+        const longitudes = coords.map((coord) => coord.longitude);
+        const minLat = Math.min(...latitudes);
+        const maxLat = Math.max(...latitudes);
+        const minLon = Math.min(...longitudes);
+        const maxLon = Math.max(...longitudes);
+
+        setRegion({
+          latitude: (minLat + maxLat) / 2,
+          longitude: (minLon + maxLon) / 2,
+          latitudeDelta: Math.max((maxLat - minLat) * 1.5, 0.01),
+          longitudeDelta: Math.max((maxLon - minLon) * 1.5, 0.01),
+        });
+      }
     } catch (err) {
       console.error("Erreur import GPX :", err);
       setError("Erreur lors de l'import du fichier GPX");
+    } finally {
+      setLoading(false);
     }
   };
 
   /**
-   * Crée une nouvelle course et l'enregistre dans races.json
+   * Crée une nouvelle course et l'enregistre
    */
   const createRace = async () => {
     if (!raceName.trim()) {
@@ -216,6 +270,7 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         JSON.stringify(races, null, 2)
       );
 
+      // Log des informations de la course
       console.log("Nouvelle course créée :", {
         id: newRace.id,
         name: newRace.name,
@@ -224,22 +279,31 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         startLocation: newRace.startLocation,
         endLocation: newRace.endLocation,
         routeLength: newRace.route.length,
+        gpxFileName: gpxFileName || "Aucun fichier sélectionné",
       });
 
       Alert.alert("Succès", "Course créée avec succès");
       setLastCreatedRace(newRace);
 
-      // Reset form
+      // Réinitialiser le formulaire
       setRaceName("");
       setRunnerEmail("");
       setRunners([]);
       setRoute([]);
+      setGpxFileName(null);
       setError(null);
+      setRegion({
+        latitude: 48.8566,
+        longitude: 2.3522,
+        latitudeDelta: 0.0922,
+        longitudeDelta: 0.0421,
+      });
     } catch (err) {
       console.error("Erreur création course :", err);
       setError("Erreur lors de la création de la course");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
@@ -289,7 +353,12 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         disabled={loading}
       />
 
-      <MapView style={styles.map} scrollEnabled={false} zoomEnabled={false}>
+      <MapView
+        style={styles.map}
+        region={region}
+        scrollEnabled={true}
+        zoomEnabled={true}
+      >
         {route.length > 0 && (
           <>
             <Marker coordinate={route[0]} pinColor="green" title="Départ" />
@@ -308,52 +377,6 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
       </MapView>
 
       <Button title="Créer la course" onPress={createRace} disabled={loading} />
-
-      {route.length > 1 && (
-        <View style={{ marginTop: 10 }}>
-          <Button
-            title="Voir le tracé"
-            onPress={() => setModalVisible(true)}
-            color="#007AFF"
-          />
-        </View>
-      )}
-
-      {lastCreatedRace && (
-        <View style={{ marginTop: 20 }}>
-          <Button
-            title="Exporter la course au format JSON"
-            onPress={() => exportRaceAsJson(lastCreatedRace)}
-          />
-        </View>
-      )}
-
-      <Modal visible={modalVisible} animationType="slide" transparent={false}>
-        <View style={styles.modalContainer}>
-          <Button title="Fermer" onPress={() => setModalVisible(false)} />
-          <MapView
-            style={styles.modalMap}
-            initialRegion={{
-              latitude: route[0]?.latitude || 0,
-              longitude: route[0]?.longitude || 0,
-              latitudeDelta: 0.05,
-              longitudeDelta: 0.05,
-            }}
-          >
-            <Polyline
-              coordinates={route}
-              strokeColor="#007AFF"
-              strokeWidth={3}
-            />
-            <Marker coordinate={route[0]} pinColor="green" title="Départ" />
-            <Marker
-              coordinate={route[route.length - 1]}
-              pinColor="red"
-              title="Arrivée"
-            />
-          </MapView>
-        </View>
-      </Modal>
     </ScrollView>
   );
 };
@@ -379,15 +402,8 @@ const styles = StyleSheet.create({
   },
   map: {
     width: "100%",
-    height: 200,
+    height: 300,
     marginVertical: 15,
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: "#fff",
-  },
-  modalMap: {
-    flex: 1,
   },
   errorBox: {
     backgroundColor: "#ffe6e6",

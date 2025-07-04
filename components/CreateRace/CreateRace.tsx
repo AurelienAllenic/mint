@@ -1,3 +1,4 @@
+import DateTimePicker from "@react-native-community/datetimepicker";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import * as Sharing from "expo-sharing";
@@ -5,6 +6,7 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Button,
+  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -27,6 +29,10 @@ interface Race {
   endLocation: { latitude: number; longitude: number };
   createdBy: string;
   route: { latitude: number; longitude: number }[];
+  startDate: string; // ISO string (e.g., "2025-07-04")
+  endDate: string; // ISO string
+  startTime: string; // ISO string (e.g., "14:30:00")
+  endTime: string; // ISO string
 }
 
 const DATA_DIR = `${FileSystem.documentDirectory}data/`;
@@ -79,8 +85,9 @@ const parseGpx = (xml: string): { latitude: number; longitude: number }[] => {
 };
 
 /**
- * Exporte une course au format JSON et propose le partage
+ * Exporte une course au format texte et propose le partage
  * @param race course à exporter
+ * @param gpxFileName nom du fichier GPX
  */
 const exportRaceAsText = async (race: Race, gpxFileName: string | null) => {
   try {
@@ -99,6 +106,10 @@ Résumé de la course :
     })
 - Longueur du tracé : ${race.route.length} points
 - Fichier GPX : ${gpxFileName || "Aucun fichier sélectionné"}
+- Date de début : ${race.startDate}
+- Date de fin : ${race.endDate}
+- Heure de début : ${race.startTime}
+- Heure de fin : ${race.endTime}
     `.trim();
     await FileSystem.writeAsStringAsync(path, content);
 
@@ -136,6 +147,14 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
   });
+  const [startDate, setStartDate] = useState<Date | null>(null);
+  const [endDate, setEndDate] = useState<Date | null>(null);
+  const [startTime, setStartTime] = useState<Date | null>(null);
+  const [endTime, setEndTime] = useState<Date | null>(null);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
   useEffect(() => {
     initializeJsonFiles();
@@ -248,6 +267,14 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
       setError("Importe un fichier GPX valide avant de créer");
       return;
     }
+    if (!startDate || !endDate || !startTime || !endTime) {
+      setError("Veuillez sélectionner les dates et heures de début et de fin");
+      return;
+    }
+    if (startDate > endDate) {
+      setError("La date de fin doit être postérieure à la date de début");
+      return;
+    }
 
     setLoading(true);
     try {
@@ -259,6 +286,10 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         endLocation: route[route.length - 1],
         createdBy: user.email,
         route,
+        startDate: startDate.toISOString().split("T")[0], // Format YYYY-MM-DD
+        endDate: endDate.toISOString().split("T")[0],
+        startTime: startTime.toISOString().split("T")[1].substring(0, 8), // Format HH:MM:SS
+        endTime: endTime.toISOString().split("T")[1].substring(0, 8),
       };
 
       const raw = await FileSystem.readAsStringAsync(RACES_FILE_PATH);
@@ -280,6 +311,10 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         endLocation: newRace.endLocation,
         routeLength: newRace.route.length,
         gpxFileName: gpxFileName || "Aucun fichier sélectionné",
+        startDate: newRace.startDate,
+        endDate: newRace.endDate,
+        startTime: newRace.startTime,
+        endTime: newRace.endTime,
       });
 
       Alert.alert("Succès", "Course créée avec succès");
@@ -292,6 +327,10 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
       setRoute([]);
       setGpxFileName(null);
       setError(null);
+      setStartDate(null);
+      setEndDate(null);
+      setStartTime(null);
+      setEndTime(null);
       setRegion({
         latitude: 48.8566,
         longitude: 2.3522,
@@ -347,6 +386,112 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         </View>
       )}
 
+      {/* Date et heure de début */}
+      <View style={styles.row}>
+        <Text style={styles.label}>
+          Date de début :{" "}
+          {startDate ? startDate.toISOString().split("T")[0] : "Non définie"}
+        </Text>
+        <Button
+          title="Choisir"
+          onPress={() => setShowStartDatePicker(true)}
+          disabled={loading}
+        />
+      </View>
+      {showStartDatePicker && (
+        <DateTimePicker
+          value={startDate || new Date()}
+          mode="date"
+          display={Platform.OS === "ios" ? "inline" : "default"}
+          onChange={(event, selectedDate) => {
+            setShowStartDatePicker(Platform.OS === "ios" ? true : false);
+            if (selectedDate) {
+              setStartDate(selectedDate);
+            }
+          }}
+        />
+      )}
+
+      <View style={styles.row}>
+        <Text style={styles.label}>
+          Heure de début :{" "}
+          {startTime
+            ? startTime.toISOString().split("T")[1].substring(0, 8)
+            : "Non définie"}
+        </Text>
+        <Button
+          title="Choisir"
+          onPress={() => setShowStartTimePicker(true)}
+          disabled={loading}
+        />
+      </View>
+      {showStartTimePicker && (
+        <DateTimePicker
+          value={startTime || new Date()}
+          mode="time"
+          display={Platform.OS === "ios" ? "inline" : "default"}
+          onChange={(event, selectedTime) => {
+            setShowStartTimePicker(Platform.OS === "ios" ? true : false);
+            if (selectedTime) {
+              setStartTime(selectedTime);
+            }
+          }}
+        />
+      )}
+
+      {/* Date et heure de fin */}
+      <View style={styles.row}>
+        <Text style={styles.label}>
+          Date de fin :{" "}
+          {endDate ? endDate.toISOString().split("T")[0] : "Non définie"}
+        </Text>
+        <Button
+          title="Choisir"
+          onPress={() => setShowEndDatePicker(true)}
+          disabled={loading}
+        />
+      </View>
+      {showEndDatePicker && (
+        <DateTimePicker
+          value={endDate || new Date()}
+          mode="date"
+          display={Platform.OS === "ios" ? "inline" : "default"}
+          onChange={(event, selectedDate) => {
+            setShowEndDatePicker(Platform.OS === "ios" ? true : false);
+            if (selectedDate) {
+              setEndDate(selectedDate);
+            }
+          }}
+        />
+      )}
+
+      <View style={styles.row}>
+        <Text style={styles.label}>
+          Heure de fin :{" "}
+          {endTime
+            ? endTime.toISOString().split("T")[1].substring(0, 8)
+            : "Non définie"}
+        </Text>
+        <Button
+          title="Choisir"
+          onPress={() => setShowEndTimePicker(true)}
+          disabled={loading}
+        />
+      </View>
+      {showEndTimePicker && (
+        <DateTimePicker
+          value={endTime || new Date()}
+          mode="time"
+          display={Platform.OS === "ios" ? "inline" : "default"}
+          onChange={(event, selectedTime) => {
+            setShowEndTimePicker(Platform.OS === "ios" ? true : false);
+            if (selectedTime) {
+              setEndTime(selectedTime);
+            }
+          }}
+        />
+      )}
+
       <Button
         title="Importer fichier GPX"
         onPress={importGpx}
@@ -399,6 +544,10 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     marginBottom: 10,
+  },
+  label: {
+    flex: 1,
+    fontSize: 16,
   },
   map: {
     width: "100%",

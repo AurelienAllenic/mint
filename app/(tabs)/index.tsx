@@ -47,14 +47,18 @@ export default function HomeScreen() {
       <TouchableOpacity style={homeStyles.button} onPress={logout}>
         <Text style={homeStyles.buttonText}>Se déconnecter</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={homeStyles.button} onPress={createOrganisation}>
-        <Text style={homeStyles.buttonText}>Créer une organisation</Text>
-      </TouchableOpacity>
+      { user?.isConnected && (
+        <>
+          <TouchableOpacity style={homeStyles.button} onPress={createOrganisation}>
+            <Text style={homeStyles.buttonText}>Créer une organisation</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={homeStyles.button} onPress={createRace}>
+            <Text style={homeStyles.buttonText}>Créer une course</Text>
+          </TouchableOpacity>
+        </>
+      )}
       <TouchableOpacity style={homeStyles.button} onPress={seeOrganisation}>
         <Text style={homeStyles.buttonText}>Voir les organisations</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={homeStyles.button} onPress={createRace}>
-        <Text style={homeStyles.buttonText}>Créer une course</Text>
       </TouchableOpacity>
       <TouchableOpacity style={homeStyles.button} onPress={seeRaces}>
         <Text style={homeStyles.buttonText}>Voir les courses disponibles</Text>

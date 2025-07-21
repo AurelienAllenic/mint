@@ -39,11 +39,12 @@ export default function LoginScreen() {
           email: data.technicalUser.email,
           name: `${data.userProfile.firstname} ${data.userProfile.lastname}`,
           token: data.access_token,
+          isConnected: !isVisitor,
         });
         router.replace("/");
       }
       else if (isVisitor) {
-        login({ email: "visitor@example.com", name: "Visitor", token: "visitor-token" });
+        login({ email: "visitor@example.com", name: "Visiteur", token: "visitor-token", isConnected: !isVisitor });
         router.replace("/");
       }
       else {

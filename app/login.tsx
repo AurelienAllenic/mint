@@ -29,7 +29,7 @@ export default function LoginScreen() {
       console.log("Response JSON:", data);
 
       if (response.ok) {
-        login({ email: data.email, name: data.name });
+        login({ email: data.email, name: data.name, token: data.access_token });
         router.replace("/");
       } else {
         setError(data.message || "Email ou mot de passe incorrect");

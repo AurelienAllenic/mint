@@ -20,6 +20,25 @@ export default function HomeScreen() {
     });
   };
 
+  const createOrganisation = () => {
+    router.push({
+      pathname: "/create-organisation",
+    });
+  };
+
+  const seeOrganisation = () => {
+    router.push({
+      pathname: "/see-organisations",
+    });
+  };
+
+  const seeRaces = () => {
+    router.push({
+      pathname: "/see-races",
+      params: { user: JSON.stringify(user) },
+    });
+  };
+
   return (
     <ScrollView style={styles.container}>
       <Text style={homeStyles.title}>Bienvenue {user?.name}</Text>
@@ -28,13 +47,16 @@ export default function HomeScreen() {
       <TouchableOpacity style={homeStyles.button} onPress={logout}>
         <Text style={homeStyles.buttonText}>Se déconnecter</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={homeStyles.button} onPress={createRace}>
+      <TouchableOpacity style={homeStyles.button} onPress={createOrganisation}>
         <Text style={homeStyles.buttonText}>Créer une organisation</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={homeStyles.button} onPress={seeOrganisation}>
+        <Text style={homeStyles.buttonText}>Voir les organisations</Text>
       </TouchableOpacity>
       <TouchableOpacity style={homeStyles.button} onPress={createRace}>
         <Text style={homeStyles.buttonText}>Créer une course</Text>
       </TouchableOpacity>
-      <TouchableOpacity style={homeStyles.button} onPress={createRace}>
+      <TouchableOpacity style={homeStyles.button} onPress={seeRaces}>
         <Text style={homeStyles.buttonText}>Voir les courses disponibles</Text>
       </TouchableOpacity>
     </ScrollView>

@@ -6,11 +6,13 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Button,
+  FlatList,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TextInput,
+  TouchableOpacity,
   View,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
@@ -18,7 +20,7 @@ import MapView, { Marker, Polyline } from "react-native-maps";
 interface User {
   email: string;
   name: string;
-  role: string;
+  role?: string; // Role est optionnel car il n'existe pas dans l'API
 }
 
 interface Race {
@@ -36,7 +38,6 @@ interface Race {
 }
 
 const DATA_DIR = `${FileSystem.documentDirectory}data/`;
-const USERS_FILE_PATH = `${DATA_DIR}users.json`;
 const RACES_FILE_PATH = `${DATA_DIR}races.json`;
 
 /**
@@ -49,9 +50,6 @@ const initializeJsonFiles = async () => {
       await FileSystem.makeDirectoryAsync(DATA_DIR, { intermediates: true });
     }
 
-    if (!(await FileSystem.getInfoAsync(USERS_FILE_PATH)).exists) {
-      await FileSystem.writeAsStringAsync(USERS_FILE_PATH, "[]");
-    }
     if (!(await FileSystem.getInfoAsync(RACES_FILE_PATH)).exists) {
       await FileSystem.writeAsStringAsync(RACES_FILE_PATH, "[]");
     }
@@ -155,10 +153,80 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
+  const [availableRunners, setAvailableRunners] = useState<User[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
+  /**
+   * Charge les coureurs via l'API
+   */
   useEffect(() => {
     initializeJsonFiles();
+
+    const fetchRunners = async () => {
+      try {
+        const API_URL = process.env.EXPO_PUBLIC_API_URL;
+        if (!API_URL) {
+          setError("Erreur: API_URL non défini dans .env");
+          console.error("Erreur: API_URL non défini");
+          return;
+        }
+        console.log("API_URL:", API_URL);
+        console.log("Requête envoyée à:", `${API_URL}/users`);
+        const response = await fetch(`${API_URL}/users`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+        console.log("Statut HTTP:", response.status);
+        console.log(
+          "En-têtes HTTP:",
+          Object.fromEntries(response.headers.entries())
+        );
+        const text = await response.text();
+        console.log("Réponse brute de l'API (complète):", text);
+        if (response.ok) {
+          try {
+            const users: User[] = JSON.parse(text);
+            console.log("Utilisateurs chargés:", users);
+            setAvailableRunners(users);
+          } catch (jsonErr) {
+            console.error("Erreur de parsing JSON:", jsonErr);
+            setError(`La réponse de l'API n'est pas un JSON valide: "${text}"`);
+          }
+        } else {
+          setError(`Erreur HTTP ${response.status}: ${text}`);
+          console.error(`Erreur HTTP ${response.status}: ${text}`);
+        }
+      } catch (err) {
+        console.error("Erreur réseau:", err);
+        setError(
+          `Erreur réseau lors du chargement des coureurs: ${err.message}`
+        );
+      }
+    };
+
+    fetchRunners();
+
+    // Données simulées pour tester si l'API ne fonctionne pas
+    /*
+    const mockUsers: User[] = [
+      { email: "user1@example.com", name: "User 1" },
+      { email: "user2@example.com", name: "User 2" },
+    ];
+    console.log("Utilisateurs simulés:", mockUsers);
+    setAvailableRunners(mockUsers);
+    */
   }, []);
+
+  /**
+   * Filtre les suggestions d'utilisateurs en fonction de l'email saisi
+   */
+  const filteredRunners = availableRunners
+    .filter(
+      (runner) =>
+        runner.email.toLowerCase().includes(runnerEmail.toLowerCase()) &&
+        !runners.includes(runner.email.toLowerCase())
+    )
+    .slice(0, 5); // Limiter à 5 suggestions max
 
   /**
    * Ajoute un coureur après validation de son email
@@ -171,25 +239,37 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
     }
     setLoading(true);
     try {
-      const usersRaw = await FileSystem.readAsStringAsync(USERS_FILE_PATH);
-      const users: User[] = JSON.parse(usersRaw);
-      const runner = users.find(
-        (u) => u.email.toLowerCase() === emailTrimmed && u.role === "coureur"
+      const runner = availableRunners.find(
+        (u) => u.email.toLowerCase() === emailTrimmed
       );
       if (!runner) {
-        setError("Coureur introuvable");
+        setError("Utilisateur introuvable");
       } else if (runners.includes(emailTrimmed)) {
-        setError("Coureur déjà ajouté");
+        setError("Utilisateur déjà ajouté");
       } else {
         setRunners((prev) => [...prev, emailTrimmed]);
         setRunnerEmail("");
+        setShowSuggestions(false);
         setError(null);
       }
     } catch (err) {
-      console.error("Erreur lecture users.json :", err);
-      setError("Erreur lors de la lecture des utilisateurs");
+      console.error("Erreur ajout coureur:", err);
+      setError("Erreur lors de l'ajout de l'utilisateur");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
+  };
+
+  /**
+   * Sélectionne un coureur depuis les suggestions
+   */
+  const selectRunner = (email: string) => {
+    if (!runners.includes(email.toLowerCase())) {
+      setRunners((prev) => [...prev, email.toLowerCase()]);
+      setRunnerEmail("");
+      setShowSuggestions(false);
+      setError(null);
+    }
   };
 
   /**
@@ -286,9 +366,9 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         endLocation: route[route.length - 1],
         createdBy: user.email,
         route,
-        startDate: startDate.toISOString().split("T")[0], // Format YYYY-MM-DD
+        startDate: startDate.toISOString().split("T")[0],
         endDate: endDate.toISOString().split("T")[0],
-        startTime: startTime.toISOString().split("T")[1].substring(0, 8), // Format HH:MM:SS
+        startTime: startTime.toISOString().split("T")[1].substring(0, 8),
         endTime: endTime.toISOString().split("T")[1].substring(0, 8),
       };
 
@@ -301,7 +381,6 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         JSON.stringify(races, null, 2)
       );
 
-      // Log des informations de la course
       console.log("Nouvelle course créée :", {
         id: newRace.id,
         name: newRace.name,
@@ -370,13 +449,37 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
           style={[styles.input, { flex: 1 }]}
           placeholder="Email du coureur"
           value={runnerEmail}
-          onChangeText={setRunnerEmail}
+          onChangeText={(text) => {
+            setRunnerEmail(text);
+            setShowSuggestions(true);
+          }}
+          onFocus={() => setShowSuggestions(true)}
+          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
           autoCapitalize="none"
           keyboardType="email-address"
           editable={!loading}
         />
         <Button title="Ajouter" onPress={addRunner} disabled={loading} />
       </View>
+
+      {showSuggestions && filteredRunners.length > 0 && (
+        <View style={styles.suggestionsContainer}>
+          <FlatList
+            data={filteredRunners}
+            keyExtractor={(item) => item.email}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={styles.suggestionItem}
+                onPress={() => selectRunner(item.email)}
+              >
+                <Text>
+                  {item.email} ({item.name})
+                </Text>
+              </TouchableOpacity>
+            )}
+          />
+        </View>
+      )}
 
       {runners.length > 0 && (
         <View style={{ marginBottom: 10 }}>
@@ -386,7 +489,6 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         </View>
       )}
 
-      {/* Date et heure de début */}
       <View style={styles.row}>
         <Text style={styles.label}>
           Date de début :{" "}
@@ -439,7 +541,6 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         />
       )}
 
-      {/* Date et heure de fin */}
       <View style={styles.row}>
         <Text style={styles.label}>
           Date de fin :{" "}
@@ -565,6 +666,19 @@ const styles = StyleSheet.create({
   errorText: {
     color: "#b00000",
     marginBottom: 5,
+  },
+  suggestionsContainer: {
+    maxHeight: 150,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 4,
+    marginBottom: 10,
+  },
+  suggestionItem: {
+    padding: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
   },
 });
 

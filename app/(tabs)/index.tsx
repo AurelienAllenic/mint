@@ -1,28 +1,53 @@
-import { Image } from "expo-image";
-import { Button, StyleSheet, Text, ScrollView, TextInput, TouchableOpacity } from "react-native";
+import Map from "@/components/Map/Map";
+import { router } from "expo-router";
+import {
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+} from "react-native";
 import { useAuth } from "../../context/auth";
 import { homeStyles } from "../../style/home.styles";
-import Map from "@/components/Map/Map";
 
 export default function HomeScreen() {
   const { user, logout } = useAuth();
 
+  const createRace = () => {
+    router.push({
+      pathname: "/create-race",
+      params: { user: JSON.stringify(user) },
+    });
+  };
+
   return (
-    <ScrollView style={homeStyles.container}>
+    <ScrollView style={styles.container}>
       <Text style={homeStyles.title}>Bienvenue {user?.name}</Text>
-      <TextInput
-        placeholder="Rechercher un coureur"
-        style={homeStyles.input}
-      />
+      <TextInput placeholder="Rechercher un coureur" style={homeStyles.input} />
       <Map user={user} />
       <TouchableOpacity style={homeStyles.button} onPress={logout}>
         <Text style={homeStyles.buttonText}>Se déconnecter</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={homeStyles.button} onPress={createRace}>
+        <Text style={homeStyles.buttonText}>Créer une organisation</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={homeStyles.button} onPress={createRace}>
+        <Text style={homeStyles.buttonText}>Créer une course</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={homeStyles.button} onPress={createRace}>
+        <Text style={homeStyles.buttonText}>Voir les courses disponibles</Text>
       </TouchableOpacity>
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 16,
+    gap: 16,
+    backgroundColor: "#fff",
+  },
   titleContainer: {
     flexDirection: "row",
     alignItems: "center",

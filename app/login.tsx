@@ -2,41 +2,41 @@
 
 import { router } from "expo-router";
 import { useState } from "react";
-import { Text, TextInput, TouchableOpacity, View, Image } from "react-native";
+import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useAuth } from "../context/auth";
 import { loginStyles } from "../style/login.styles";
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [email, setEmail] = useState("user@example.com");
+  const [password, setPassword] = useState("password");
   const [error, setError] = useState("");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const { login } = useAuth();
 
   const handleLogin = async () => {
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      console.log("API_URL:", API_URL);
 
-    const API_URL = process.env.EXPO_PUBLIC_API_URL;
-
-    const matchingUser = await fetch(
-      `${API_URL}/auth/login`,
-      {
+      const response = await fetch(`${API_URL}/auth/login`, {
         method: "POST",
         body: JSON.stringify({ email, password }),
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
+      });
+
+      console.log("Response status:", response.status);
+      const data = await response.json();
+      console.log("Response JSON:", data);
+
+      if (response.ok) {
+        login({ email: data.email, name: data.name });
+        router.replace("/");
+      } else {
+        setError(data.message || "Email ou mot de passe incorrect");
       }
-    );
-
-    console.log("Response:", matchingUser);
-
-    if (matchingUser.ok) {
-      const data = await matchingUser.json();
-      console.log("User data:", data);
-      login({ email: data.email, name: data.name });
-      router.replace("/");
-    } else {
-      setError("Email ou mot de passe incorrect");
+    } catch (err) {
+      console.error("Fetch error:", err);
+      setError("Erreur réseau, veuillez réessayer");
     }
   };
 

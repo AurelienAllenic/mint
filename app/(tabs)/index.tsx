@@ -5,7 +5,9 @@ import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   Alert,
+  Animated,
   Image,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -26,6 +28,10 @@ export default function HomeScreen() {
   const [selectedRaceRoute, setSelectedRaceRoute] = useState<
     { latitude: number; longitude: number }[] | null
   >(null);
+  const [raceDistances, setRaceDistances] = useState<{ [id: string]: number }>(
+    {}
+  );
+  const raceMenuAnim = useState(new Animated.Value(0))[0];
 
   // Fonction pour gérer la déconnexion
   const handleLogout = () => {
@@ -161,6 +167,47 @@ export default function HomeScreen() {
     };
   };
 
+  useEffect(() => {
+    if (showRaceMenu) {
+      Animated.timing(raceMenuAnim, {
+        toValue: 1,
+        duration: 350,
+        useNativeDriver: true,
+      }).start();
+    } else {
+      Animated.timing(raceMenuAnim, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, [showRaceMenu]);
+
+  function calculateDistance(
+    coords: { latitude: number; longitude: number }[]
+  ): number {
+    if (!coords || coords.length < 2) return 0;
+    let total = 0;
+    for (let i = 1; i < coords.length; i++) {
+      const prev = coords[i - 1];
+      const curr = coords[i];
+      const R = 6371; // Rayon de la Terre en km
+      const dLat = ((curr.latitude - prev.latitude) * Math.PI) / 180;
+      const dLon = ((curr.longitude - prev.longitude) * Math.PI) / 180;
+      const lat1 = (prev.latitude * Math.PI) / 180;
+      const lat2 = (curr.latitude * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.sin(dLon / 2) *
+          Math.sin(dLon / 2) *
+          Math.cos(lat1) *
+          Math.cos(lat2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      total += R * c;
+    }
+    return total;
+  }
+
   return (
     <TouchableWithoutFeedback
       onPress={() => {
@@ -209,102 +256,163 @@ export default function HomeScreen() {
         </View>
         {/* Menu déroulant des courses */}
         {showRaceMenu && (
-          <View style={styles.raceMenu}>
-            <Text style={styles.raceMenuTitle}>Courses créées</Text>
-            {loadingRaces ? (
-              <Text style={{ margin: 16 }}>Chargement...</Text>
-            ) : (
-              <>
-                {races.length === 0 ? (
-                  <Text style={{ margin: 16 }}>Aucune course trouvée</Text>
+          <Animated.View
+            style={[
+              styles.raceMenu,
+              {
+                opacity: raceMenuAnim,
+                transform: [
+                  {
+                    translateX: raceMenuAnim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [320, 0],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          >
+            <View style={styles.raceMenuHeader}>
+              <Text style={styles.raceMenuTitle}>Courses créées</Text>
+              <TouchableOpacity
+                style={styles.closeButton}
+                onPress={() => setShowRaceMenu(false)}
+                accessibilityLabel="Fermer le menu"
+              >
+                <Icon name="close" size={28} color="#181818" />
+              </TouchableOpacity>
+            </View>
+            <View style={{ flex: 1 }}>
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={{ paddingBottom: 24 }}
+                showsVerticalScrollIndicator={false}
+              >
+                {loadingRaces ? (
+                  <Text style={{ margin: 16, color: "#181818" }}>
+                    Chargement...
+                  </Text>
                 ) : (
-                  races.map((race) => (
-                    <TouchableOpacity
-                      key={race.id}
-                      style={styles.raceItem}
-                      disabled={loadingRaces}
-                      onPress={async () => {
-                        if (loadingRaces) return;
-                        setLoadingRaces(true);
-                        try {
-                          const API_URL = process.env.EXPO_PUBLIC_API_URL;
-                          if (!API_URL) throw new Error("API URL manquante");
-                          const authHeader = token?.startsWith("Bearer ")
-                            ? token
-                            : `Bearer ${token}`;
-                          const gpxTrackUrl = `${API_URL}/races/${race.id}/track`;
-                          const gpxResponse = await fetch(gpxTrackUrl, {
-                            method: "GET",
-                            headers: { Authorization: authHeader },
-                          });
-                          let gpxCoordinates: { latitude: number; longitude: number }[] = [];
-                          let gpxError = false;
-                          if (gpxResponse.ok) {
-                            const gpxText = await gpxResponse.text();
+                  <>
+                    {races.length === 0 ? (
+                      <Text style={{ margin: 16, color: "#888" }}>
+                        Aucune course trouvée
+                      </Text>
+                    ) : (
+                      races.map((race) => (
+                        <TouchableOpacity
+                          key={race.id}
+                          style={styles.raceItem}
+                          disabled={loadingRaces}
+                          onPress={async () => {
+                            if (loadingRaces) return;
+                            setLoadingRaces(true);
                             try {
-                              const geojson = JSON.parse(gpxText);
-                              if (
-                                geojson.type === "LineString" &&
-                                Array.isArray(geojson.coordinates)
-                              ) {
-                                gpxCoordinates = geojson.coordinates.map(
-                                  ([lng, lat]: [number, number]) => ({ latitude: lat, longitude: lng })
-                                );
+                              const API_URL = process.env.EXPO_PUBLIC_API_URL;
+                              if (!API_URL)
+                                throw new Error("API URL manquante");
+                              const authHeader = token?.startsWith("Bearer ")
+                                ? token
+                                : `Bearer ${token}`;
+                              const gpxTrackUrl = `${API_URL}/races/${race.id}/track`;
+                              const gpxResponse = await fetch(gpxTrackUrl, {
+                                method: "GET",
+                                headers: { Authorization: authHeader },
+                              });
+                              let gpxCoordinates: {
+                                latitude: number;
+                                longitude: number;
+                              }[] = [];
+                              let gpxError = false;
+                              if (gpxResponse.ok) {
+                                const gpxText = await gpxResponse.text();
+                                try {
+                                  const geojson = JSON.parse(gpxText);
+                                  if (
+                                    geojson.type === "LineString" &&
+                                    Array.isArray(geojson.coordinates)
+                                  ) {
+                                    gpxCoordinates = geojson.coordinates.map(
+                                      ([lng, lat]: [number, number]) => ({
+                                        latitude: lat,
+                                        longitude: lng,
+                                      })
+                                    );
+                                  } else {
+                                    gpxCoordinates = parseGpx(gpxText);
+                                  }
+                                } catch {
+                                  try {
+                                    gpxCoordinates = parseGpx(gpxText);
+                                  } catch (e) {
+                                    console.error("Erreur de parsing GPX:", e);
+                                    gpxError = true;
+                                  }
+                                }
+                                if (gpxCoordinates.length > 200) {
+                                  const step = Math.ceil(
+                                    gpxCoordinates.length / 200
+                                  );
+                                  gpxCoordinates = gpxCoordinates.filter(
+                                    (
+                                      point: {
+                                        latitude: number;
+                                        longitude: number;
+                                      },
+                                      i: number
+                                    ) =>
+                                      i === 0 ||
+                                      i === gpxCoordinates.length - 1 ||
+                                      i % step === 0
+                                  );
+                                }
+                                // Calculer et stocker la distance
+                                const dist = calculateDistance(gpxCoordinates);
+                                setRaceDistances((prev) => ({
+                                  ...prev,
+                                  [race.id]: dist,
+                                }));
                               } else {
-                                gpxCoordinates = parseGpx(gpxText);
-                              }
-                            } catch {
-                              try {
-                                gpxCoordinates = parseGpx(gpxText);
-                              } catch (e) {
-                                console.error("Erreur de parsing GPX:", e);
                                 gpxError = true;
                               }
-                            }
-                            if (gpxCoordinates.length > 200) {
-                              const step = Math.ceil(gpxCoordinates.length / 200);
-                              gpxCoordinates = gpxCoordinates.filter(
-                                (point: { latitude: number; longitude: number }, i: number) =>
-                                  i === 0 ||
-                                  i === gpxCoordinates.length - 1 ||
-                                  i % step === 0
+                              if (gpxError || gpxCoordinates.length === 0) {
+                                Alert.alert(
+                                  "Erreur",
+                                  "Impossible d'afficher le tracé GPX de cette course."
+                                );
+                                setSelectedRaceRoute(null);
+                              } else {
+                                setSelectedRaceRoute(gpxCoordinates);
+                              }
+                            } catch (e) {
+                              console.error(
+                                "Erreur lors du chargement de la course :",
+                                e
                               );
+                              Alert.alert(
+                                "Erreur",
+                                "Une erreur est survenue lors de l'affichage de cette course."
+                              );
+                              setSelectedRaceRoute(null);
+                            } finally {
+                              setLoadingRaces(false);
                             }
-                          } else {
-                            gpxError = true;
-                          }
-                          if (gpxError || gpxCoordinates.length === 0) {
-                            Alert.alert(
-                              "Erreur",
-                              "Impossible d'afficher le tracé GPX de cette course."
-                            );
-                            setSelectedRaceRoute(null);
-                          } else {
-                            setSelectedRaceRoute(gpxCoordinates);
-                          }
-                        } catch (e) {
-                          console.error(
-                            "Erreur lors du chargement de la course :",
-                            e
-                          );
-                          Alert.alert(
-                            "Erreur",
-                            "Une erreur est survenue lors de l'affichage de cette course."
-                          );
-                          setSelectedRaceRoute(null);
-                        } finally {
-                          setLoadingRaces(false);
-                        }
-                      }}
-                    >
-                      <Text style={styles.raceName}>{race.name}</Text>
-                      <Text style={styles.raceId}>ID: {race.id}</Text>
-                    </TouchableOpacity>
-                  ))
+                          }}
+                        >
+                          <Text style={styles.raceName}>{race.name}</Text>
+                          <Text style={styles.raceDistance}>
+                            {race.distance
+                              ? `${race.distance} km`
+                              : "Distance inconnue"}
+                          </Text>
+                        </TouchableOpacity>
+                      ))
+                    )}
+                  </>
                 )}
-              </>
-            )}
-          </View>
+              </ScrollView>
+            </View>
+          </Animated.View>
         )}
         <View style={styles.container__btns}>
           <TouchableOpacity
@@ -491,35 +599,67 @@ const styles = StyleSheet.create({
   },
   raceMenu: {
     position: "absolute",
-    top: 0,
+    top: 0, // occupe toute la hauteur
     right: 0,
     width: 320,
-    height: "100%",
-    backgroundColor: "#fff",
+    height: "100%", // toute la hauteur de l'écran
+    backgroundColor: "#181818",
     zIndex: 100,
     borderLeftWidth: 2,
     borderLeftColor: "#A1F763",
+    borderTopLeftRadius: 24,
+    borderBottomLeftRadius: 24,
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    elevation: 8,
+    paddingBottom: 24,
+  },
+  raceMenuHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 18,
+    paddingTop: 60,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#A1F763",
+  },
+  closeButton: {
+    backgroundColor: "#fff",
+    borderRadius: 16,
+    padding: 4,
+    marginLeft: 8,
+    shadowColor: "#8EFF00",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 2,
   },
   raceMenuTitle: {
     fontSize: 22,
     fontWeight: "bold",
-    padding: 8,
-    marginBottom: 18,
-    color: "#181818",
-    textAlign: "center",
+    color: "#A1F763",
+    textAlign: "left",
   },
   raceItem: {
     paddingVertical: 14,
+    paddingHorizontal: 18,
     borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    borderBottomColor: "#222",
+    borderRadius: 12,
+    marginHorizontal: 8,
+    marginVertical: 4,
+    backgroundColor: "#232323",
   },
   raceName: {
     fontSize: 18,
-    fontWeight: "500",
-    color: "#007bff",
+    fontWeight: "600",
+    color: "#A1F763",
   },
-  raceId: {
-    fontSize: 12,
-    color: "#888",
+  raceDistance: {
+    fontSize: 14,
+    color: "#fff",
+    marginTop: 2,
+    fontWeight: "400",
   },
 });

@@ -23,11 +23,17 @@ interface LatLng {
 }
 
 interface MapProps {
-  user?: { email?: string };
-  gpxCoordinates?: { latitude: number; longitude: number }[];
+  user: { email?: string };
+  gpxCoordinates: { latitude: number; longitude: number }[];
+  region?: {
+    latitude: number;
+    longitude: number;
+    latitudeDelta: number;
+    longitudeDelta: number;
+  };
 }
 
-const Map = ({ user, gpxCoordinates }: MapProps) => {
+const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
   const [location] = useState<LatLng | null>(null);
   const [locations, setLocations] = useState<UserLocation[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +44,7 @@ const Map = ({ user, gpxCoordinates }: MapProps) => {
   useEffect(() => {
     if (gpxCoordinates && gpxCoordinates.length > 0 && mapRef.current) {
       const region = calculateGPXRegion(gpxCoordinates);
+      // On annule toute animation précédente avant de centrer sur le nouveau tracé
       mapRef.current.animateToRegion(region, 1000);
     }
   }, [gpxCoordinates]);
@@ -88,23 +95,18 @@ const Map = ({ user, gpxCoordinates }: MapProps) => {
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
-        region={
-          location
-            ? {
-                latitude: location.latitude,
-                longitude: location.longitude,
-                latitudeDelta: 0.0922,
-                longitudeDelta: 0.0421,
-              }
-            : {
-                latitude: 48.8566,
-                longitude: 2.3522,
-                latitudeDelta: 0.0922,
-                longitudeDelta: 0.0421,
-              }
-        }
+        region={region}
         customMapStyle={darkMapStyle}
       >
+        {/* Affichage du tracé GPX : un seul tracé à la fois, pas de superposition */}
+        {gpxCoordinates && gpxCoordinates.length > 1 && (
+          <Polyline
+            coordinates={gpxCoordinates}
+            strokeColor="#A1F763"
+            strokeWidth={4}
+            lineDashPattern={[1]}
+          />
+        )}
         {location && (
           <Marker coordinate={location}>
             <Callout>
@@ -135,16 +137,6 @@ const Map = ({ user, gpxCoordinates }: MapProps) => {
             </Callout>
           </Marker>
         ))}
-
-        {/* Affichage du tracé GPX */}
-        {gpxCoordinates && gpxCoordinates.length > 1 && (
-          <Polyline
-            coordinates={gpxCoordinates}
-            strokeColor="#A1F763"
-            strokeWidth={4}
-            lineDashPattern={[1]}
-          />
-        )}
       </MapView>
 
       {/* <View style={styles.buttonContainer}>

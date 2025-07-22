@@ -2,7 +2,7 @@ import Map from "@/components/Map/Map";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Image,
@@ -13,13 +13,19 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../../context/auth";
-import { GPXPoint, parseGPXFile } from "../../utils/gpxParser";
+import { GPXPoint, parseGPXFile, parseGpx } from "../../utils/gpxParser";
 
 export default function HomeScreen() {
-  const { user, logout } = useAuth();
+  const { user, logout, token } = useAuth();
   const router = useRouter();
   const [gpxCoordinates, setGpxCoordinates] = useState<GPXPoint[]>([]);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [showRaceMenu, setShowRaceMenu] = useState(false);
+  const [races, setRaces] = useState<{ id: string; name: string }[]>([]);
+  const [loadingRaces, setLoadingRaces] = useState(false);
+  const [selectedRaceRoute, setSelectedRaceRoute] = useState<
+    { latitude: number; longitude: number }[] | null
+  >(null);
 
   // Fonction pour gérer la déconnexion
   const handleLogout = () => {
@@ -93,9 +99,75 @@ export default function HomeScreen() {
     });
   };
 
+  // Fetch des courses
+  useEffect(() => {
+    if (showRaceMenu) {
+      const fetchRaces = async () => {
+        setLoadingRaces(true);
+        try {
+          const API_URL = process.env.EXPO_PUBLIC_API_URL;
+          if (!API_URL) return;
+          const authHeader = token?.startsWith("Bearer ")
+            ? token
+            : `Bearer ${token}`;
+          const response = await fetch(`${API_URL}/races`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: authHeader,
+            },
+          });
+          const rawText = await response.text();
+          console.log("Réponse brute /api/races:", rawText);
+          console.log("Status:", response.status, "Token:", authHeader);
+          let data = [];
+          try {
+            data = JSON.parse(rawText);
+          } catch (e) {
+            console.log("Erreur de parsing JSON /api/races:", e);
+          }
+          if (response.ok && Array.isArray(data)) {
+            setRaces(data);
+          } else {
+            setRaces([]);
+          }
+        } catch (err) {
+          setRaces([]);
+          console.log("Erreur fetch /api/races:", err);
+        } finally {
+          setLoadingRaces(false);
+        }
+      };
+      fetchRaces();
+    }
+  }, [showRaceMenu, token]);
+
+  // Calcul de la région centrée sur le tracé sélectionné
+  const getRegionFromCoordinates = (
+    coords: { latitude: number; longitude: number }[]
+  ) => {
+    if (!coords || coords.length === 0) return undefined;
+    const latitudes = coords.map((c) => c.latitude);
+    const longitudes = coords.map((c) => c.longitude);
+    const minLat = Math.min(...latitudes);
+    const maxLat = Math.max(...latitudes);
+    const minLng = Math.min(...longitudes);
+    const maxLng = Math.max(...longitudes);
+    return {
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLng + maxLng) / 2,
+      latitudeDelta: Math.max(0.01, (maxLat - minLat) * 1.2),
+      longitudeDelta: Math.max(0.01, (maxLng - minLng) * 1.2),
+    };
+  };
 
   return (
-    <TouchableWithoutFeedback onPress={() => setShowProfileMenu(false)}>
+    <TouchableWithoutFeedback
+      onPress={() => {
+        setShowProfileMenu(false);
+        setShowRaceMenu(false);
+      }}
+    >
       <View style={styles.container}>
         <View style={styles.header}>
           <View>
@@ -125,8 +197,115 @@ export default function HomeScreen() {
           </View>
         </View>
         <View style={styles.mapContainer}>
-          <Map user={{ email: user?.email }} gpxCoordinates={gpxCoordinates} />
+          <Map
+            user={{ email: user?.email }}
+            gpxCoordinates={selectedRaceRoute || gpxCoordinates}
+            region={
+              selectedRaceRoute
+                ? getRegionFromCoordinates(selectedRaceRoute)
+                : undefined
+            }
+          />
         </View>
+        {/* Menu déroulant des courses */}
+        {showRaceMenu && (
+          <View style={styles.raceMenu}>
+            <Text style={styles.raceMenuTitle}>Courses créées</Text>
+            {loadingRaces ? (
+              <Text style={{ margin: 16 }}>Chargement...</Text>
+            ) : (
+              <>
+                {races.length === 0 ? (
+                  <Text style={{ margin: 16 }}>Aucune course trouvée</Text>
+                ) : (
+                  races.map((race) => (
+                    <TouchableOpacity
+                      key={race.id}
+                      style={styles.raceItem}
+                      disabled={loadingRaces}
+                      onPress={async () => {
+                        if (loadingRaces) return;
+                        setLoadingRaces(true);
+                        try {
+                          const API_URL = process.env.EXPO_PUBLIC_API_URL;
+                          if (!API_URL) throw new Error("API URL manquante");
+                          const authHeader = token?.startsWith("Bearer ")
+                            ? token
+                            : `Bearer ${token}`;
+                          const gpxTrackUrl = `${API_URL}/races/${race.id}/track`;
+                          const gpxResponse = await fetch(gpxTrackUrl, {
+                            method: "GET",
+                            headers: { Authorization: authHeader },
+                          });
+                          let gpxCoordinates: { latitude: number; longitude: number }[] = [];
+                          let gpxError = false;
+                          if (gpxResponse.ok) {
+                            const gpxText = await gpxResponse.text();
+                            try {
+                              const geojson = JSON.parse(gpxText);
+                              if (
+                                geojson.type === "LineString" &&
+                                Array.isArray(geojson.coordinates)
+                              ) {
+                                gpxCoordinates = geojson.coordinates.map(
+                                  ([lng, lat]: [number, number]) => ({ latitude: lat, longitude: lng })
+                                );
+                              } else {
+                                gpxCoordinates = parseGpx(gpxText);
+                              }
+                            } catch {
+                              try {
+                                gpxCoordinates = parseGpx(gpxText);
+                              } catch (e) {
+                                console.error("Erreur de parsing GPX:", e);
+                                gpxError = true;
+                              }
+                            }
+                            if (gpxCoordinates.length > 200) {
+                              const step = Math.ceil(gpxCoordinates.length / 200);
+                              gpxCoordinates = gpxCoordinates.filter(
+                                (point: { latitude: number; longitude: number }, i: number) =>
+                                  i === 0 ||
+                                  i === gpxCoordinates.length - 1 ||
+                                  i % step === 0
+                              );
+                            }
+                          } else {
+                            gpxError = true;
+                          }
+                          if (gpxError || gpxCoordinates.length === 0) {
+                            Alert.alert(
+                              "Erreur",
+                              "Impossible d'afficher le tracé GPX de cette course."
+                            );
+                            setSelectedRaceRoute(null);
+                          } else {
+                            setSelectedRaceRoute(gpxCoordinates);
+                          }
+                        } catch (e) {
+                          console.error(
+                            "Erreur lors du chargement de la course :",
+                            e
+                          );
+                          Alert.alert(
+                            "Erreur",
+                            "Une erreur est survenue lors de l'affichage de cette course."
+                          );
+                          setSelectedRaceRoute(null);
+                        } finally {
+                          setLoadingRaces(false);
+                        }
+                      }}
+                    >
+                      <Text style={styles.raceName}>{race.name}</Text>
+                      <Text style={styles.raceId}>ID: {race.id}</Text>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </>
+            )}
+          </View>
+        )}
         <View style={styles.container__btns}>
           <TouchableOpacity
             style={styles.mainButton}
@@ -134,7 +313,7 @@ export default function HomeScreen() {
           >
             <Text style={styles.mainButtonText}>Créer une course</Text>
           </TouchableOpacity>
-          <TouchableOpacity
+          {/* <TouchableOpacity
             style={[
               styles.mainButton,
               { marginTop: 10, backgroundColor: "#fff" },
@@ -144,7 +323,7 @@ export default function HomeScreen() {
             <Text style={[styles.mainButtonText, { color: "#A1F763" }]}>
               Importer GPX
             </Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
           <View style={styles.bottomButtons}>
             <TouchableOpacity style={styles.roundButton}>
               <Icon name="account-group" size={32} color="#000" />
@@ -154,22 +333,12 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.roundButton}
-              onPress={() => setGpxCoordinates([])}
+              onPress={() => setShowRaceMenu((v) => !v)}
             >
               <Icon name="map-outline" size={32} color="#000" />
             </TouchableOpacity>
-          </View>
-        </View>
-      </View>
-    </TouchableWithoutFeedback>
-    <ScrollView style={styles.container}>
-      <Text style={homeStyles.title}>Bienvenue {user?.name}</Text>
-      <TextInput placeholder="Rechercher un coureur" style={homeStyles.input} />
-      <Map user={user} />
-      <TouchableOpacity style={homeStyles.button} onPress={logout}>
-        <Text style={homeStyles.buttonText}>Se déconnecter</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={homeStyles.button} onPress={createOrganisation}>
+
+            {/* <TouchableOpacity style={homeStyles.button} onPress={createOrganisation}>
         <Text style={homeStyles.buttonText}>Créer une organisation</Text>
       </TouchableOpacity>
       <TouchableOpacity style={homeStyles.button} onPress={seeOrganisation}>
@@ -180,8 +349,11 @@ export default function HomeScreen() {
       </TouchableOpacity>
       <TouchableOpacity style={homeStyles.button} onPress={seeRaces}>
         <Text style={homeStyles.buttonText}>Voir les courses disponibles</Text>
-      </TouchableOpacity>
-    </ScrollView>
+      </TouchableOpacity> */}
+          </View>
+        </View>
+      </View>
+    </TouchableWithoutFeedback>
   );
 }
 
@@ -298,7 +470,6 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 5,
     zIndex: 1000,
-    minWidth: 150,
   },
   menuItem: {
     flexDirection: "row",
@@ -310,12 +481,45 @@ const styles = StyleSheet.create({
     backgroundColor: "transparent",
   },
   menuText: {
+    justifyContent: "center",
     width: "100%",
     alignItems: "center",
-
     color: "#fff",
     fontSize: 16,
     marginLeft: 12,
     fontWeight: "500",
+  },
+  raceMenu: {
+    position: "absolute",
+    top: 0,
+    right: 0,
+    width: 320,
+    height: "100%",
+    backgroundColor: "#fff",
+    zIndex: 100,
+    borderLeftWidth: 2,
+    borderLeftColor: "#A1F763",
+  },
+  raceMenuTitle: {
+    fontSize: 22,
+    fontWeight: "bold",
+    padding: 8,
+    marginBottom: 18,
+    color: "#181818",
+    textAlign: "center",
+  },
+  raceItem: {
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  raceName: {
+    fontSize: 18,
+    fontWeight: "500",
+    color: "#007bff",
+  },
+  raceId: {
+    fontSize: 12,
+    color: "#888",
   },
 });

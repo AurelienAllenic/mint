@@ -1,12 +1,11 @@
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { useNavigation } from "@react-navigation/native";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
   FlatList,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,7 +14,7 @@ import {
   View,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+import { useAuth } from "../../context/auth";
 
 interface User {
   id: string;
@@ -86,6 +85,8 @@ const parseGpx = (xml: string): { latitude: number; longitude: number }[] => {
 };
 
 const CreateRace: React.FC<{ user: User }> = ({ user }) => {
+  const { token } = useAuth();
+  const navigation = useNavigation();
   const [raceName, setRaceName] = useState("");
   const [runners, setRunners] = useState<string[]>([]);
   const [route, setRoute] = useState<{ latitude: number; longitude: number }[]>(
@@ -110,19 +111,6 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [availableRunners, setAvailableRunners] = useState<User[]>([]);
-  // Ajout d'un state pour le token
-  const [token, setToken] = useState<string>("");
-
-  /**
-   * Récupération automatique du token depuis AsyncStorage
-   */
-  useEffect(() => {
-    const getToken = async () => {
-      const value = await AsyncStorage.getItem("token");
-      if (value) setToken(value);
-    };
-    getToken();
-  }, []);
 
   /**
    * Charge les coureurs via l'API
@@ -273,21 +261,21 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
 
     setLoading(true);
     try {
-      // Log du token pour debug
+      if (!token) {
+        setError("Token d'authentification manquant. Veuillez vous connecter.");
+        setLoading(false);
+        return;
+      }
       console.log("Token utilisé pour la requête:", token);
-      const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
-      const newRace: Race = {
-        id: `${Date.now()}`,
+      const authHeader = token.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
+      // Construction de l'objet conforme à l'API
+      const racePayload = {
         name: raceName.trim(),
-        runners: [...runners],
-        startLocation: route[0],
-        endLocation: route[route.length - 1],
-        createdBy: user.email || `${user.firstname || ""} ${user.lastname || ""}`,
-        route: [...route],
-        startDate: startDate.toISOString().split("T")[0], // YYYY-MM-DD
-        endDate: endDate.toISOString().split("T")[0], // YYYY-MM-DD
-        startTime: startTime.toISOString().split("T")[1].slice(0, 8), // HH:mm:ss
-        endTime: endTime.toISOString().split("T")[1].slice(0, 8), // HH:mm:ss
+        start_date: startDate?.toISOString(),
+        // end_date retiré car non accepté par l'API
+        // Ajoute ici les autres champs attendus par l'API
       };
 
       const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -303,7 +291,7 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
           "Content-Type": "application/json",
           Authorization: authHeader,
         },
-        body: JSON.stringify(newRace),
+        body: JSON.stringify(racePayload),
       });
 
       if (response.ok) {
@@ -335,6 +323,18 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
 
   return (
     <ScrollView contentContainerStyle={styles.container}>
+      {/* Bouton retour vers HomeScreen */}
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => {
+          // Utilise uniquement goBack pour éviter l'erreur de typage
+          if (navigation.canGoBack()) {
+            navigation.goBack();
+          }
+        }}
+      >
+        <Text style={styles.backButtonText}>Retour à l&apos;accueil</Text>
+      </TouchableOpacity>
       <Text style={styles.title}>Créer une nouvelle course</Text>
 
       <View style={styles.formGroup}>
@@ -509,7 +509,17 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
           </Text>
           <TouchableOpacity
             onPress={() => {
-              // TODO: Naviguer vers la page de la course créée
+              // Navigation vers la page de détails de la course créée
+              if (navigation.navigate) {
+                navigation.navigate("RaceDetails", {
+                  raceId: lastCreatedRace.id,
+                });
+              } else {
+                Alert.alert(
+                  "Navigation",
+                  "La page de détails de la course n'est pas disponible."
+                );
+              }
             }}
             style={styles.viewRaceButton}
           >
@@ -518,23 +528,63 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         </View>
       )}
 
-      <View style={styles.mapContainer}>
-        <MapView
-          style={styles.map}
-          region={region}
-          onRegionChangeComplete={setRegion}
-        >
-          {route.length > 0 && (
-            <Polyline coordinates={route} strokeColor="#000" strokeWidth={4} />
-          )}
-          {route.length > 0 && (
-            <>
-              <Marker coordinate={route[0]} title="Départ" />
-              <Marker coordinate={route[route.length - 1]} title="Arrivée" />
-            </>
-          )}
-        </MapView>
-      </View>
+      {/* Affichage du tracé de la dernière course créée */}
+      {lastCreatedRace &&
+        lastCreatedRace.route &&
+        lastCreatedRace.route.length > 0 && (
+          <View style={styles.mapContainer}>
+            <Text style={{ fontWeight: "bold", marginBottom: 8 }}>
+              Tracé de la course créée :
+            </Text>
+            <MapView
+              style={styles.map}
+              region={{
+                latitude: lastCreatedRace.route[0].latitude,
+                longitude: lastCreatedRace.route[0].longitude,
+                latitudeDelta: 0.05,
+                longitudeDelta: 0.05,
+              }}
+            >
+              <Polyline
+                coordinates={lastCreatedRace.route}
+                strokeColor="#007bff"
+                strokeWidth={4}
+              />
+              <Marker coordinate={lastCreatedRace.route[0]} title="Départ" />
+              <Marker
+                coordinate={
+                  lastCreatedRace.route[lastCreatedRace.route.length - 1]
+                }
+                title="Arrivée"
+              />
+            </MapView>
+          </View>
+        )}
+
+      {/* Carte pour le tracé en cours de création (si pas de course créée) */}
+      {!lastCreatedRace && (
+        <View style={styles.mapContainer}>
+          <MapView
+            style={styles.map}
+            region={region}
+            onRegionChangeComplete={setRegion}
+          >
+            {route.length > 0 && (
+              <Polyline
+                coordinates={route}
+                strokeColor="#000"
+                strokeWidth={4}
+              />
+            )}
+            {route.length > 0 && (
+              <>
+                <Marker coordinate={route[0]} title="Départ" />
+                <Marker coordinate={route[route.length - 1]} title="Arrivée" />
+              </>
+            )}
+          </MapView>
+        </View>
+      )}
     </ScrollView>
   );
 };
@@ -651,6 +701,19 @@ const styles = StyleSheet.create({
   map: {
     width: "100%",
     height: "100%",
+  },
+  backButton: {
+    backgroundColor: "#eee",
+    padding: 10,
+    borderRadius: 4,
+    alignItems: "center",
+    marginBottom: 12,
+    marginTop: 30,
+  },
+  backButtonText: {
+    color: "#007bff",
+    fontWeight: "bold",
+    fontSize: 16,
   },
 });
 

@@ -9,7 +9,7 @@ import {
 } from "react-native";
 
 type Organization = {
-  id: number;
+  _id: string;
   name: string;
 };
 
@@ -32,7 +32,7 @@ const OrganizationsList = () => {
         const API_URL = process.env.EXPO_PUBLIC_API_URL;
         if (!API_URL) throw new Error("API_URL non définie");
 
-        const response = await fetch(`${API_URL}/organizations`, {
+        const response = await fetch(`${API_URL}/organization`, {
           method: "GET",
           headers: {
             Authorization: `Bearer ${token}`,
@@ -89,7 +89,7 @@ const OrganizationsList = () => {
       <Text style={styles.title}>Liste des organisations</Text>
       <FlatList
         data={organizations}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(item) => item._id}
         renderItem={({ item }) => <Text style={styles.item}>{item.name}</Text>}
       />
     </View>

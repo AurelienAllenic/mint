@@ -32,7 +32,7 @@ const CreateOrganisation: React.FC = () => {
         throw new Error("API_URL non défini dans .env");
       }
 
-      const response = await fetch(`${API_URL}/organizations`, {
+      const response = await fetch(`${API_URL}/organization`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",

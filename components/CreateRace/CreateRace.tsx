@@ -1,3 +1,4 @@
+import { useAuth } from "@/context/auth";
 import DateTimePicker from "@react-native-community/datetimepicker";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
@@ -6,7 +7,6 @@ import React, { useEffect, useState } from "react";
 import {
   Alert,
   Button,
-  FlatList,
   Platform,
   ScrollView,
   StyleSheet,
@@ -18,9 +18,9 @@ import {
 import MapView, { Marker, Polyline } from "react-native-maps";
 
 interface User {
+  _id: string;
   email: string;
-  name: string;
-  role?: string; // Role est optionnel car il n'existe pas dans l'API
+  role?: string;
 }
 
 interface Race {
@@ -31,25 +31,21 @@ interface Race {
   endLocation: { latitude: number; longitude: number };
   createdBy: string;
   route: { latitude: number; longitude: number }[];
-  startDate: string; // ISO string (e.g., "2025-07-04")
-  endDate: string; // ISO string
-  startTime: string; // ISO string (e.g., "14:30:00")
-  endTime: string; // ISO string
+  startDate: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
 }
 
 const DATA_DIR = `${FileSystem.documentDirectory}data/`;
 const RACES_FILE_PATH = `${DATA_DIR}races.json`;
 
-/**
- * Initialise les fichiers JSON nécessaires
- */
 const initializeJsonFiles = async () => {
   try {
     const dirInfo = await FileSystem.getInfoAsync(DATA_DIR);
     if (!dirInfo.exists) {
       await FileSystem.makeDirectoryAsync(DATA_DIR, { intermediates: true });
     }
-
     if (!(await FileSystem.getInfoAsync(RACES_FILE_PATH)).exists) {
       await FileSystem.writeAsStringAsync(RACES_FILE_PATH, "[]");
     }
@@ -59,11 +55,6 @@ const initializeJsonFiles = async () => {
   }
 };
 
-/**
- * Parse le contenu XML GPX et extrait les coordonnées
- * @param xml contenu XML du fichier GPX
- * @returns tableau de coordonnées {latitude, longitude}
- */
 const parseGpx = (xml: string): { latitude: number; longitude: number }[] => {
   try {
     const matches = [
@@ -82,11 +73,6 @@ const parseGpx = (xml: string): { latitude: number; longitude: number }[] => {
   }
 };
 
-/**
- * Exporte une course au format texte et propose le partage
- * @param race course à exporter
- * @param gpxFileName nom du fichier GPX
- */
 const exportRaceAsText = async (race: Race, gpxFileName: string | null) => {
   try {
     const path = `${FileSystem.documentDirectory}race-${race.id}.txt`;
@@ -135,12 +121,14 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
   const [route, setRoute] = useState<{ latitude: number; longitude: number }[]>(
     []
   );
+  const { token } = useAuth();
   const [gpxFileName, setGpxFileName] = useState<string | null>(null);
+  const [gpxFileContent, setGpxFileContent] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastCreatedRace, setLastCreatedRace] = useState<Race | null>(null);
   const [region, setRegion] = useState({
-    latitude: 48.8566, // Paris par défaut
+    latitude: 48.8566,
     longitude: 2.3522,
     latitudeDelta: 0.0922,
     longitudeDelta: 0.0421,
@@ -155,10 +143,28 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [availableRunners, setAvailableRunners] = useState<User[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [organizationId, setOrganizationId] = useState<string | null>(null);
 
-  /**
-   * Charge les coureurs via l'API
-   */
+  useEffect(() => {
+    const fetchOrganization = async () => {
+      try {
+        const API_URL = process.env.EXPO_PUBLIC_API_URL;
+        if (!API_URL || !user) return;
+        const response = await fetch(`${API_URL}/organization`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const orgs = await response.json();
+        const myOrg = orgs.find(
+          (org: any) => org.owner === user._id || org.created_by_id === user._id
+        );
+        if (myOrg) setOrganizationId(myOrg._id);
+      } catch (err) {
+        setOrganizationId(null);
+      }
+    };
+    fetchOrganization();
+  }, [token, user]);
+
   useEffect(() => {
     initializeJsonFiles();
 
@@ -174,7 +180,10 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         console.log("Requête envoyée à:", `${API_URL}/users`);
         const response = await fetch(`${API_URL}/users`, {
           method: "GET",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
         });
         console.log("Statut HTTP:", response.status);
         console.log(
@@ -205,32 +214,16 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
     };
 
     fetchRunners();
-
-    // Données simulées pour tester si l'API ne fonctionne pas
-    /*
-    const mockUsers: User[] = [
-      { email: "user1@example.com", name: "User 1" },
-      { email: "user2@example.com", name: "User 2" },
-    ];
-    console.log("Utilisateurs simulés:", mockUsers);
-    setAvailableRunners(mockUsers);
-    */
   }, []);
 
-  /**
-   * Filtre les suggestions d'utilisateurs en fonction de l'email saisi
-   */
   const filteredRunners = availableRunners
     .filter(
       (runner) =>
         runner.email.toLowerCase().includes(runnerEmail.toLowerCase()) &&
-        !runners.includes(runner.email.toLowerCase())
+        !runners.includes(runner._id)
     )
-    .slice(0, 5); // Limiter à 5 suggestions max
+    .slice(0, 5);
 
-  /**
-   * Ajoute un coureur après validation de son email
-   */
   const addRunner = async () => {
     const emailTrimmed = runnerEmail.trim().toLowerCase();
     if (!emailTrimmed) {
@@ -244,10 +237,10 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
       );
       if (!runner) {
         setError("Utilisateur introuvable");
-      } else if (runners.includes(emailTrimmed)) {
+      } else if (runners.includes(runner._id)) {
         setError("Utilisateur déjà ajouté");
       } else {
-        setRunners((prev) => [...prev, emailTrimmed]);
+        setRunners((prev) => [...prev, runner._id]);
         setRunnerEmail("");
         setShowSuggestions(false);
         setError(null);
@@ -260,21 +253,15 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
     }
   };
 
-  /**
-   * Sélectionne un coureur depuis les suggestions
-   */
-  const selectRunner = (email: string) => {
-    if (!runners.includes(email.toLowerCase())) {
-      setRunners((prev) => [...prev, email.toLowerCase()]);
+  const selectRunner = (id: string) => {
+    if (!runners.includes(id)) {
+      setRunners((prev) => [...prev, id]);
       setRunnerEmail("");
       setShowSuggestions(false);
       setError(null);
     }
   };
 
-  /**
-   * Importe un fichier GPX et met à jour le tracé et la région de la carte
-   */
   const importGpx = async () => {
     try {
       setLoading(true);
@@ -305,9 +292,9 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
 
       setRoute(coords);
       setGpxFileName(fileName);
+      setGpxFileContent(xml);
       setError(null);
 
-      // Ajuster la région de la carte pour centrer sur le tracé
       if (coords.length > 0) {
         const latitudes = coords.map((coord) => coord.latitude);
         const longitudes = coords.map((coord) => coord.longitude);
@@ -325,87 +312,177 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
       }
     } catch (err) {
       console.error("Erreur import GPX :", err);
-      setError("Erreur lors de l'import du fichier GPX");
+      setError(`Erreur lors de l'import du fichier GPX: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  /**
-   * Crée une nouvelle course et l'enregistre
-   */
   const createRace = async () => {
+    console.log("Fonction createRace déclenchée");
+
+    console.log("Début création course :", {
+      raceName: raceName.trim(),
+      runners: runners,
+      routeLength: route.length,
+      startDate: startDate?.toISOString(),
+      endDate: endDate?.toISOString(),
+      startTime: startTime?.toISOString(),
+      endTime: endTime?.toISOString(),
+      token: token ? "présent" : "absent",
+      organizationId,
+      user: { _id: user._id, email: user.email },
+      gpxFileName,
+      gpxFileContentLength: gpxFileContent ? gpxFileContent.length : null, // Loguer seulement la longueur
+    });
+
     if (!raceName.trim()) {
       setError("Nom de la course requis");
+      console.log("Erreur: Nom de la course vide");
+      Alert.alert("Erreur", "Nom de la course requis");
       return;
     }
     if (runners.length === 0) {
       setError("Ajoute au moins un coureur");
+      console.log("Erreur: Aucun coureur ajouté");
+      Alert.alert("Erreur", "Ajoute au moins un coureur");
       return;
     }
     if (route.length < 2) {
       setError("Importe un fichier GPX valide avant de créer");
+      console.log("Erreur: Route GPX invalide ou trop courte");
+      Alert.alert("Erreur", "Importe un fichier GPX valide avant de créer");
       return;
     }
     if (!startDate || !endDate || !startTime || !endTime) {
       setError("Veuillez sélectionner les dates et heures de début et de fin");
+      console.log("Erreur: Dates ou heures manquantes");
+      Alert.alert(
+        "Erreur",
+        "Veuillez sélectionner les dates et heures de début et de fin"
+      );
       return;
     }
     if (startDate > endDate) {
       setError("La date de fin doit être postérieure à la date de début");
+      console.log("Erreur: Date de fin antérieure à la date de début");
+      Alert.alert(
+        "Erreur",
+        "La date de fin doit être postérieure à la date de début"
+      );
+      return;
+    }
+    if (!token) {
+      setError("Utilisateur non authentifié.");
+      console.log("Erreur: Token absent");
+      Alert.alert("Erreur", "Utilisateur non authentifié.");
+      return;
+    }
+    if (!organizationId) {
+      setError("Impossible de retrouver l'organisation de l'utilisateur.");
+      console.log("Erreur: organizationId manquant");
+      Alert.alert(
+        "Erreur",
+        "Impossible de retrouver l'organisation de l'utilisateur."
+      );
+      return;
+    }
+    const currentUser = user._id
+      ? user
+      : availableRunners.find((u) => u.email === user.email);
+    if (!currentUser || !currentUser._id) {
+      setError("ID utilisateur manquant.");
+      console.log("Erreur: user._id est undefined ou utilisateur introuvable");
+      Alert.alert("Erreur", "ID utilisateur manquant.");
       return;
     }
 
     setLoading(true);
     try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      if (!API_URL) {
+        console.log("Erreur: API_URL non défini dans .env");
+        throw new Error("API_URL non défini");
+      }
+      console.log("API_URL utilisée:", API_URL);
+
+      const start = new Date(startDate);
+      start.setHours(startTime.getHours(), startTime.getMinutes(), 0, 0);
+      const end = new Date(endDate);
+      end.setHours(endTime.getHours(), endTime.getMinutes(), 0, 0);
+
       const newRace: Race = {
         id: Math.random().toString(36).substring(2, 9),
         name: raceName.trim(),
         runners,
         startLocation: route[0],
         endLocation: route[route.length - 1],
-        createdBy: user.email,
+        createdBy: currentUser._id,
         route,
-        startDate: startDate.toISOString().split("T")[0],
-        endDate: endDate.toISOString().split("T")[0],
-        startTime: startTime.toISOString().split("T")[1].substring(0, 8),
-        endTime: endTime.toISOString().split("T")[1].substring(0, 8),
+        startDate: start.toISOString().split("T")[0],
+        endDate: end.toISOString().split("T")[0],
+        startTime: start.toISOString().split("T")[1].substring(0, 8),
+        endTime: end.toISOString().split("T")[1].substring(0, 8),
       };
 
-      const raw = await FileSystem.readAsStringAsync(RACES_FILE_PATH);
-      const races: Race[] = JSON.parse(raw);
-      races.push(newRace);
+      // On passe le contenu du GPX (texte brut) dans gpx_file si dispo, sinon chaîne vide
+      const payload = {
+        name: raceName.trim(),
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        organization: organizationId,
+        runners,
+        owner: currentUser._id,
+        gpxFile: gpxFileContent ? gpxFileContent : "",
+        route,
+      };
 
-      await FileSystem.writeAsStringAsync(
-        RACES_FILE_PATH,
-        JSON.stringify(races, null, 2)
-      );
+      console.log("Payload envoyé à l'API:", JSON.stringify(payload, null, 2));
 
-      console.log("Nouvelle course créée :", {
-        id: newRace.id,
-        name: newRace.name,
-        createdBy: newRace.createdBy,
-        runnersCount: newRace.runners.length,
-        startLocation: newRace.startLocation,
-        endLocation: newRace.endLocation,
-        routeLength: newRace.route.length,
-        gpxFileName: gpxFileName || "Aucun fichier sélectionné",
-        startDate: newRace.startDate,
-        endDate: newRace.endDate,
-        startTime: newRace.startTime,
-        endTime: newRace.endTime,
+      const response = await fetch(`${API_URL}/race`, {
+        // Corrigé : /race -> /races
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
       });
 
-      Alert.alert("Succès", "Course créée avec succès");
-      setLastCreatedRace(newRace);
+      console.log("Statut HTTP de la réponse:", response.status);
+      console.log(
+        "En-têtes HTTP:",
+        Object.fromEntries(response.headers.entries())
+      );
+      const text = await response.text();
+      console.log("Réponse brute de l'API:", text);
 
-      // Réinitialiser le formulaire
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (jsonErr) {
+        console.error("Erreur de parsing JSON:", jsonErr);
+        throw new Error(
+          `La réponse de l'API n'est pas un JSON valide: ${text}`
+        );
+      }
+
+      if (!response.ok) {
+        const errorMessage = result.message || `Erreur HTTP ${response.status}`;
+        console.log("Erreur API:", errorMessage);
+        throw new Error(errorMessage);
+      }
+
+      console.log("Course créée avec succès:", result);
+      setLastCreatedRace(newRace);
+      Alert.alert("Succès", "Course créée avec succès");
+
       setRaceName("");
       setRunnerEmail("");
       setRunners([]);
       setRoute([]);
       setGpxFileName(null);
-      setError(null);
+      setGpxFileContent(null);
       setStartDate(null);
       setEndDate(null);
       setStartTime(null);
@@ -417,8 +494,12 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         longitudeDelta: 0.0421,
       });
     } catch (err) {
-      console.error("Erreur création course :", err);
-      setError("Erreur lors de la création de la course");
+      console.error("Erreur lors de la création de la course:", err);
+      setError(`Erreur lors de la création de la course: ${err.message}`);
+      Alert.alert(
+        "Erreur",
+        `Échec de la création de la course: ${err.message}`
+      );
     } finally {
       setLoading(false);
     }
@@ -464,28 +545,24 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
 
       {showSuggestions && filteredRunners.length > 0 && (
         <View style={styles.suggestionsContainer}>
-          <FlatList
-            data={filteredRunners}
-            keyExtractor={(item) => item.email}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.suggestionItem}
-                onPress={() => selectRunner(item.email)}
-              >
-                <Text>
-                  {item.email} ({item.name})
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
+          {filteredRunners.map((runner) => (
+            <TouchableOpacity
+              key={runner._id}
+              style={styles.suggestionItem}
+              onPress={() => selectRunner(runner._id)}
+            >
+              <Text>{runner.email}</Text>
+            </TouchableOpacity>
+          ))}
         </View>
       )}
 
       {runners.length > 0 && (
         <View style={{ marginBottom: 10 }}>
-          {runners.map((email, i) => (
-            <Text key={i}>• {email}</Text>
-          ))}
+          {runners.map((id, i) => {
+            const runner = availableRunners.find((u) => u._id === id);
+            return <Text key={i}>• {runner ? runner.email : `ID ${id}`}</Text>;
+          })}
         </View>
       )}
 
@@ -507,9 +584,7 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
           display={Platform.OS === "ios" ? "inline" : "default"}
           onChange={(event, selectedDate) => {
             setShowStartDatePicker(Platform.OS === "ios" ? true : false);
-            if (selectedDate) {
-              setStartDate(selectedDate);
-            }
+            if (selectedDate) setStartDate(selectedDate);
           }}
         />
       )}
@@ -534,9 +609,7 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
           display={Platform.OS === "ios" ? "inline" : "default"}
           onChange={(event, selectedTime) => {
             setShowStartTimePicker(Platform.OS === "ios" ? true : false);
-            if (selectedTime) {
-              setStartTime(selectedTime);
-            }
+            if (selectedTime) setStartTime(selectedTime);
           }}
         />
       )}
@@ -559,9 +632,7 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
           display={Platform.OS === "ios" ? "inline" : "default"}
           onChange={(event, selectedDate) => {
             setShowEndDatePicker(Platform.OS === "ios" ? true : false);
-            if (selectedDate) {
-              setEndDate(selectedDate);
-            }
+            if (selectedDate) setEndDate(selectedDate);
           }}
         />
       )}
@@ -586,9 +657,7 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
           display={Platform.OS === "ios" ? "inline" : "default"}
           onChange={(event, selectedTime) => {
             setShowEndTimePicker(Platform.OS === "ios" ? true : false);
-            if (selectedTime) {
-              setEndTime(selectedTime);
-            }
+            if (selectedTime) setEndTime(selectedTime);
           }}
         />
       )}
@@ -622,7 +691,14 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         )}
       </MapView>
 
-      <Button title="Créer la course" onPress={createRace} disabled={loading} />
+      <Button
+        title="Créer la course"
+        onPress={() => {
+          console.log("Bouton Créer la course cliqué");
+          createRace();
+        }}
+        disabled={loading}
+      />
     </ScrollView>
   );
 };

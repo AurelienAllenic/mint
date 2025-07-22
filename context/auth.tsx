@@ -3,6 +3,9 @@ import { createContext, useContext, useState } from "react";
 type User = {
   email: string;
   name: string;
+  id?: number;
+  firstname?: string | null;
+  lastname?: string | null;
 } | null;
 
 type AuthContextType = {
@@ -18,7 +21,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<User>(null);
   const [token, setToken] = useState<string | null>(null);
 
-  const login = (userData: { email: string; name: string; token: string }) => {
+  const login = (userData: {
+    email: string;
+    name: string;
+    token: string;
+    id?: number;
+    firstname?: string | null;
+    lastname?: string | null;
+  }) => {
     setUser({ email: userData.email, name: userData.name });
     setToken(userData.token);
   };

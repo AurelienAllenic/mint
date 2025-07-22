@@ -1,16 +1,46 @@
 import * as FileSystem from "expo-file-system";
-import * as Location from "expo-location";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button, StyleSheet, Text, View } from "react-native";
-import MapView, { Callout, Marker } from "react-native-maps";
+import MapView, {
+  Callout,
+  Marker,
+  PROVIDER_GOOGLE,
+  Polyline,
+} from "react-native-maps";
+import { calculateGPXRegion } from "../../utils/gpxParser";
 
 const FILE_PATH = FileSystem.documentDirectory + "/locations.json";
 
-const Map = ({ user }) => {
-  const [location, setLocation] = useState(null);
-  const [locations, setLocations] = useState([]);
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
+// Types pour la sécurité et la correction des erreurs
+interface UserLocation {
+  user: string;
+  lat: number;
+  long: number;
+}
+interface LatLng {
+  latitude: number;
+  longitude: number;
+}
+
+interface MapProps {
+  user?: { email?: string };
+  gpxCoordinates?: { latitude: number; longitude: number }[];
+}
+
+const Map = ({ user, gpxCoordinates }: MapProps) => {
+  const [location] = useState<LatLng | null>(null);
+  const [locations, setLocations] = useState<UserLocation[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading] = useState(false);
+  const mapRef = useRef<MapView>(null);
+
+  // Ajuster la vue quand le GPX change
+  useEffect(() => {
+    if (gpxCoordinates && gpxCoordinates.length > 0 && mapRef.current) {
+      const region = calculateGPXRegion(gpxCoordinates);
+      mapRef.current.animateToRegion(region, 1000);
+    }
+  }, [gpxCoordinates]);
 
   useEffect(() => {
     console.log("User prop:", user);
@@ -28,69 +58,14 @@ const Map = ({ user }) => {
         const parsed = JSON.parse(content);
         setLocations(parsed);
         console.log("Données chargées :", parsed);
-      } catch (err) {
-        setError("Erreur lors du chargement du fichier: " + err.message);
+      } catch (err: any) {
+        setError(
+          "Erreur lors du chargement du fichier: " + (err?.message || err)
+        );
         console.error("Lecture fichier erreur :", err);
       }
     })();
   }, []);
-
-  const getLocation = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const email = user?.email || "test@example.com";
-
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== "granted") {
-        setError("Permission de géolocalisation refusée");
-        setLoading(false);
-        return;
-      }
-
-      let position;
-      try {
-        position = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-          timeout: 10000,
-        });
-      } catch (err) {
-        console.warn("Localisation échouée, fallback à Paris :", err.message);
-        position = { coords: { latitude: 48.8566, longitude: 2.3522 } };
-      }
-
-      const { latitude, longitude } = position.coords;
-      setLocation({ latitude, longitude });
-
-      const newLocation = { user: email, lat: latitude, long: longitude };
-      const updatedLocations = [...locations, newLocation];
-      setLocations(updatedLocations);
-
-      await FileSystem.writeAsStringAsync(
-        FILE_PATH,
-        JSON.stringify(updatedLocations, null, 2)
-      );
-      console.log("Données enregistrées dans :", FILE_PATH);
-      setLoading(false);
-    } catch (err) {
-      setError("Erreur lors de l'obtention de la localisation: " + err.message);
-      console.error("Erreur globale :", err);
-      setLoading(false);
-    }
-  };
-
-  const clearStorage = async () => {
-    try {
-      await FileSystem.writeAsStringAsync(FILE_PATH, JSON.stringify([]));
-      setLocations([]);
-      setLocation(null);
-      setError("Fichier local vidé pour débogage.");
-      console.log("Fichier JSON vidé");
-    } catch (err) {
-      setError("Erreur lors du vidage du fichier: " + err.message);
-      console.error("Erreur vidage fichier :", err);
-    }
-  };
 
   return (
     <View style={styles.container}>
@@ -110,6 +85,8 @@ const Map = ({ user }) => {
         </View>
       )}
       <MapView
+        ref={mapRef}
+        provider={PROVIDER_GOOGLE}
         style={styles.map}
         region={
           location
@@ -126,6 +103,7 @@ const Map = ({ user }) => {
                 longitudeDelta: 0.0421,
               }
         }
+        customMapStyle={darkMapStyle}
       >
         {location && (
           <Marker coordinate={location}>
@@ -157,9 +135,19 @@ const Map = ({ user }) => {
             </Callout>
           </Marker>
         ))}
+
+        {/* Affichage du tracé GPX */}
+        {gpxCoordinates && gpxCoordinates.length > 1 && (
+          <Polyline
+            coordinates={gpxCoordinates}
+            strokeColor="#A1F763"
+            strokeWidth={4}
+            lineDashPattern={[1]}
+          />
+        )}
       </MapView>
 
-      <View style={styles.buttonContainer}>
+      {/* <View style={styles.buttonContainer}>
         <Button
           title="Ajouter un marqueur"
           onPress={getLocation}
@@ -170,7 +158,7 @@ const Map = ({ user }) => {
           onPress={clearStorage}
           color="red"
         />
-      </View>
+      </View> */}
     </View>
   );
 };
@@ -199,7 +187,7 @@ const styles = StyleSheet.create({
   },
   map: {
     width: "100%",
-    height: 500,
+    height: "100%",
   },
   errorText: {
     color: "red",
@@ -217,5 +205,97 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
 });
+
+// Ajout du style dark officiel Google Maps
+const darkMapStyle = [
+  { elementType: "geometry", stylers: [{ color: "#212121" }] },
+  { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+  { elementType: "labels.text.stroke", stylers: [{ color: "#212121" }] },
+  {
+    featureType: "administrative",
+    elementType: "geometry",
+    stylers: [{ color: "#757575" }],
+  },
+  {
+    featureType: "administrative.country",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#9e9e9e" }],
+  },
+  {
+    featureType: "administrative.land_parcel",
+    stylers: [{ visibility: "off" }],
+  },
+  {
+    featureType: "administrative.locality",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#bdbdbd" }],
+  },
+  {
+    featureType: "poi",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#757575" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "geometry",
+    stylers: [{ color: "#181818" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#616161" }],
+  },
+  {
+    featureType: "poi.park",
+    elementType: "labels.text.stroke",
+    stylers: [{ color: "#1b1b1b" }],
+  },
+  {
+    featureType: "road",
+    elementType: "geometry.fill",
+    stylers: [{ color: "#2c2c2c" }],
+  },
+  {
+    featureType: "road",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#8a8a8a" }],
+  },
+  {
+    featureType: "road.arterial",
+    elementType: "geometry",
+    stylers: [{ color: "#373737" }],
+  },
+  {
+    featureType: "road.highway",
+    elementType: "geometry",
+    stylers: [{ color: "#3c3c3c" }],
+  },
+  {
+    featureType: "road.highway.controlled_access",
+    elementType: "geometry",
+    stylers: [{ color: "#4e4e4e" }],
+  },
+  {
+    featureType: "road.local",
+    elementType: "geometry",
+    stylers: [{ color: "#212121" }],
+  },
+  {
+    featureType: "transit",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#757575" }],
+  },
+  {
+    featureType: "water",
+    elementType: "geometry",
+    stylers: [{ color: "#000000" }],
+  },
+  {
+    featureType: "water",
+    elementType: "labels.text.fill",
+    stylers: [{ color: "#3d3d3d" }],
+  },
+];
 
 export default Map;

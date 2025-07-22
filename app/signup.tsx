@@ -15,7 +15,7 @@ export default function SignupScreen() {
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const { login } = useAuth();
 
-  var disabled =
+  const disabled =
     !name ||
     !email ||
     !password ||
@@ -23,19 +23,15 @@ export default function SignupScreen() {
     (password === "" ? true : confirmPassword !== password);
 
   const handleSignup = async () => {
-
     const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-    const emailExists = await fetch(
-      `${API_URL}/auth/email-exists`,
-      {
-        method: "POST",
-        body: JSON.stringify({ email: email }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    );
+    const emailExists = await fetch(`${API_URL}/auth/email-exists`, {
+      method: "POST",
+      body: JSON.stringify({ email: email }),
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
 
     console.log("Response:", emailExists);
 
@@ -72,80 +68,54 @@ export default function SignupScreen() {
 
   return (
     <View style={loginStyles.container}>
-      <View style={loginStyles.header}>
+      <View style={loginStyles.logoContainer}>
+        <Image
+          source={require("@/assets/images/welcome-logo.png")}
+          style={loginStyles.logo}
+          resizeMode="contain"
+        />
         <Text style={loginStyles.title}>Inscription</Text>
       </View>
 
-      <View style={loginStyles.inputContainer}>
-        <Text style={loginStyles.inputLabel}>Nom</Text>
+      <View style={loginStyles.inputSection}>
         <TextInput
+          style={loginStyles.input}
           placeholder="Nom"
+          placeholderTextColor="#A1A1A1"
           value={name}
-          onChangeText={(text) => {
-            setName(text);
-            setError("");
-          }}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          style={[
-            loginStyles.input,
-            focusedInput === "name" && loginStyles.inputFocused,
-          ]}
+          onChangeText={setName}
+          autoCapitalize="words"
           onFocus={() => setFocusedInput("name")}
           onBlur={() => setFocusedInput(null)}
         />
-        <Text style={loginStyles.inputLabel}>E-mail</Text>
         <TextInput
-          placeholder="E-mail"
+          style={loginStyles.input}
+          placeholder="Email"
+          placeholderTextColor="#A1A1A1"
           value={email}
-          onChangeText={(text) => {
-            setEmail(text);
-            setError("");
-          }}
+          onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
-          style={[
-            loginStyles.input,
-            focusedInput === "email" && loginStyles.inputFocused,
-          ]}
           onFocus={() => setFocusedInput("email")}
           onBlur={() => setFocusedInput(null)}
         />
-      </View>
-
-      <View style={loginStyles.inputContainer}>
-        <Text style={loginStyles.inputLabel}>Mot de passe</Text>
         <TextInput
+          style={loginStyles.input}
           placeholder="Mot de passe"
+          placeholderTextColor="#A1A1A1"
           value={password}
-          onChangeText={(text) => {
-            setPassword(text);
-            setError("");
-          }}
+          onChangeText={setPassword}
           secureTextEntry
-          style={[
-            loginStyles.input,
-            focusedInput === "password" && loginStyles.inputFocused,
-          ]}
           onFocus={() => setFocusedInput("password")}
           onBlur={() => setFocusedInput(null)}
         />
-      </View>
-
-      <View style={loginStyles.inputContainer}>
-        <Text style={loginStyles.inputLabel}>Confirmation mot de passe</Text>
         <TextInput
-          placeholder="Mot de passe"
+          style={loginStyles.input}
+          placeholder="Confirmation mot de passe"
+          placeholderTextColor="#A1A1A1"
           value={confirmPassword}
-          onChangeText={(text) => {
-            setConfirmPassword(text);
-            setError("");
-          }}
+          onChangeText={setConfirmPassword}
           secureTextEntry
-          style={[
-            loginStyles.input,
-            focusedInput === "confirmPassword" && loginStyles.inputFocused,
-          ]}
           onFocus={() => setFocusedInput("confirmPassword")}
           onBlur={() => setFocusedInput(null)}
         />
@@ -153,31 +123,30 @@ export default function SignupScreen() {
 
       {error !== "" && <Text style={loginStyles.errorText}>{error}</Text>}
 
-      <View style={loginStyles.buttonContainer}>
-        <TouchableOpacity
-          style={[loginStyles.button, disabled && loginStyles.buttonDisabled]}
-          onPress={handleSignup}
-          disabled={disabled}
-        >
-          <Text style={loginStyles.buttonText}>Inscription</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity
+        style={[loginStyles.button, disabled && { opacity: 0.5 }]}
+        onPress={handleSignup}
+        disabled={disabled}
+      >
+        <Text style={loginStyles.buttonText}>Inscription</Text>
+      </TouchableOpacity>
 
-      <View style={loginStyles.socialButtonsContainer}>
+      <View style={loginStyles.divider} />
+
+      <View style={loginStyles.socialSection}>
         <TouchableOpacity style={loginStyles.socialButton}>
           <Image
             source={require("@/assets/images/google.png")}
-            style={{ width: 20, height: 20 }}
+            style={loginStyles.socialIcon}
           />
           <Text style={loginStyles.socialButtonText}>
             Continuer avec Google
           </Text>
         </TouchableOpacity>
-
         <TouchableOpacity style={loginStyles.socialButton}>
           <Image
             source={require("@/assets/images/apple.png")}
-            style={{ width: 20, height: 20 }}
+            style={loginStyles.socialIcon}
           />
           <Text style={loginStyles.socialButtonText}>Continuer avec Apple</Text>
         </TouchableOpacity>
@@ -185,12 +154,12 @@ export default function SignupScreen() {
 
       <Text style={loginStyles.termsText}>
         En continuant, vous acceptez nos conditions de service et notre
-        politique de confidentialité
+        <Text style={loginStyles.link}> politique de confidentialité.</Text>
       </Text>
       <Text style={loginStyles.termsText}>
         Vous avez déjà un compte ?{" "}
         <Text style={loginStyles.link} onPress={() => router.push("/login")}>
-          Connectez vous
+          Connectez-vous
         </Text>
       </Text>
     </View>

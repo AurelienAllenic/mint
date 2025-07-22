@@ -5,7 +5,6 @@ import * as Sharing from "expo-sharing";
 import React, { useEffect, useState } from "react";
 import {
   Alert,
-  Button,
   FlatList,
   Platform,
   ScrollView,
@@ -16,11 +15,15 @@ import {
   View,
 } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 interface User {
-  email: string;
-  name: string;
-  role?: string; // Role est optionnel car il n'existe pas dans l'API
+  id: string;
+  email?: string;
+  firstname?: string | null;
+  lastname?: string | null;
+  name?: string;
+  role?: string;
 }
 
 interface Race {
@@ -82,55 +85,8 @@ const parseGpx = (xml: string): { latitude: number; longitude: number }[] => {
   }
 };
 
-/**
- * Exporte une course au format texte et propose le partage
- * @param race course à exporter
- * @param gpxFileName nom du fichier GPX
- */
-const exportRaceAsText = async (race: Race, gpxFileName: string | null) => {
-  try {
-    const path = `${FileSystem.documentDirectory}race-${race.id}.txt`;
-    const content = `
-Résumé de la course :
-- ID : ${race.id}
-- Nom : ${race.name}
-- Créée par : ${race.createdBy}
-- Nombre de coureurs : ${race.runners.length}
-- Point de départ : (${race.startLocation.latitude}, ${
-      race.startLocation.longitude
-    })
-- Point d'arrivée : (${race.endLocation.latitude}, ${
-      race.endLocation.longitude
-    })
-- Longueur du tracé : ${race.route.length} points
-- Fichier GPX : ${gpxFileName || "Aucun fichier sélectionné"}
-- Date de début : ${race.startDate}
-- Date de fin : ${race.endDate}
-- Heure de début : ${race.startTime}
-- Heure de fin : ${race.endTime}
-    `.trim();
-    await FileSystem.writeAsStringAsync(path, content);
-
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(path, {
-        mimeType: "text/plain",
-        dialogTitle: "Partager le résumé de la course",
-      });
-    } else {
-      Alert.alert(
-        "Partage non disponible",
-        "Impossible de partager sur cet appareil"
-      );
-    }
-  } catch (err) {
-    console.error("Erreur export TXT :", err);
-    Alert.alert("Erreur", "Impossible d'exporter le résumé de la course");
-  }
-};
-
 const CreateRace: React.FC<{ user: User }> = ({ user }) => {
   const [raceName, setRaceName] = useState("");
-  const [runnerEmail, setRunnerEmail] = useState("");
   const [runners, setRunners] = useState<string[]>([]);
   const [route, setRoute] = useState<{ latitude: number; longitude: number }[]>(
     []
@@ -154,7 +110,19 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
   const [availableRunners, setAvailableRunners] = useState<User[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
+  // Ajout d'un state pour le token
+  const [token, setToken] = useState<string>("");
+
+  /**
+   * Récupération automatique du token depuis AsyncStorage
+   */
+  useEffect(() => {
+    const getToken = async () => {
+      const value = await AsyncStorage.getItem("token");
+      if (value) setToken(value);
+    };
+    getToken();
+  }, []);
 
   /**
    * Charge les coureurs via l'API
@@ -199,77 +167,26 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
       } catch (err) {
         console.error("Erreur réseau:", err);
         setError(
-          `Erreur réseau lors du chargement des coureurs: ${err.message}`
+          `Erreur réseau lors du chargement des coureurs: ${
+            err instanceof Error ? err.message : String(err)
+          }`
         );
       }
     };
 
     fetchRunners();
-
-    // Données simulées pour tester si l'API ne fonctionne pas
-    /*
-    const mockUsers: User[] = [
-      { email: "user1@example.com", name: "User 1" },
-      { email: "user2@example.com", name: "User 2" },
-    ];
-    console.log("Utilisateurs simulés:", mockUsers);
-    setAvailableRunners(mockUsers);
-    */
   }, []);
 
   /**
-   * Filtre les suggestions d'utilisateurs en fonction de l'email saisi
+   * Ajoute un coureur depuis la liste déroulante
    */
-  const filteredRunners = availableRunners
-    .filter(
-      (runner) =>
-        runner.email.toLowerCase().includes(runnerEmail.toLowerCase()) &&
-        !runners.includes(runner.email.toLowerCase())
-    )
-    .slice(0, 5); // Limiter à 5 suggestions max
-
-  /**
-   * Ajoute un coureur après validation de son email
-   */
-  const addRunner = async () => {
-    const emailTrimmed = runnerEmail.trim().toLowerCase();
-    if (!emailTrimmed) {
-      setError("Email du coureur requis");
+  const addRunner = (user: User) => {
+    if (runners.includes(user.id)) {
+      setError("Utilisateur déjà ajouté");
       return;
     }
-    setLoading(true);
-    try {
-      const runner = availableRunners.find(
-        (u) => u.email.toLowerCase() === emailTrimmed
-      );
-      if (!runner) {
-        setError("Utilisateur introuvable");
-      } else if (runners.includes(emailTrimmed)) {
-        setError("Utilisateur déjà ajouté");
-      } else {
-        setRunners((prev) => [...prev, emailTrimmed]);
-        setRunnerEmail("");
-        setShowSuggestions(false);
-        setError(null);
-      }
-    } catch (err) {
-      console.error("Erreur ajout coureur:", err);
-      setError("Erreur lors de l'ajout de l'utilisateur");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  /**
-   * Sélectionne un coureur depuis les suggestions
-   */
-  const selectRunner = (email: string) => {
-    if (!runners.includes(email.toLowerCase())) {
-      setRunners((prev) => [...prev, email.toLowerCase()]);
-      setRunnerEmail("");
-      setShowSuggestions(false);
-      setError(null);
-    }
+    setRunners((prev) => [...prev, user.id]);
+    setError(null);
   };
 
   /**
@@ -282,14 +199,15 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
         type: ["application/gpx+xml", "application/xml", "text/xml", "*/*"],
       });
 
-      if (res.type === "cancel") {
+      // Correction : utilisation de res.canceled et res.assets
+      if (res.canceled) {
         setError(null);
         return;
       }
 
-      const uri = res.uri || (res.assets && res.assets[0]?.uri);
-      const fileName =
-        res.name || (res.assets && res.assets[0]?.name) || "fichier_gpx";
+      const asset = res.assets && res.assets[0];
+      const uri = asset?.uri;
+      const fileName = asset?.name || "fichier_gpx";
       if (!uri) {
         setError("URI du fichier introuvable");
         return;
@@ -298,8 +216,8 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
       const xml = await FileSystem.readAsStringAsync(uri);
       const coords = parseGpx(xml);
 
-      if (coords.length < 2) {
-        setError("Fichier GPX invalide ou trop court");
+      if (coords.length === 0) {
+        setError("Aucune coordonnée valide trouvée dans le fichier GPX");
         return;
       }
 
@@ -307,22 +225,19 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
       setGpxFileName(fileName);
       setError(null);
 
-      // Ajuster la région de la carte pour centrer sur le tracé
-      if (coords.length > 0) {
-        const latitudes = coords.map((coord) => coord.latitude);
-        const longitudes = coords.map((coord) => coord.longitude);
-        const minLat = Math.min(...latitudes);
-        const maxLat = Math.max(...latitudes);
-        const minLon = Math.min(...longitudes);
-        const maxLon = Math.max(...longitudes);
-
-        setRegion({
-          latitude: (minLat + maxLat) / 2,
-          longitude: (minLon + maxLon) / 2,
-          latitudeDelta: Math.max((maxLat - minLat) * 1.5, 0.01),
-          longitudeDelta: Math.max((maxLon - minLon) * 1.5, 0.01),
-        });
-      }
+      // Ajustement de la région de la carte pour inclure tous les points
+      const latitudes = coords.map((c) => c.latitude);
+      const longitudes = coords.map((c) => c.longitude);
+      const minLat = Math.min(...latitudes);
+      const maxLat = Math.max(...latitudes);
+      const minLng = Math.min(...longitudes);
+      const maxLng = Math.max(...longitudes);
+      setRegion({
+        latitude: (minLat + maxLat) / 2,
+        longitude: (minLng + maxLng) / 2,
+        latitudeDelta: (maxLat - minLat) * 1.2,
+        longitudeDelta: (maxLng - minLng) * 1.2,
+      });
     } catch (err) {
       console.error("Erreur import GPX :", err);
       setError("Erreur lors de l'import du fichier GPX");
@@ -332,7 +247,7 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
   };
 
   /**
-   * Crée une nouvelle course et l'enregistre
+   * Crée une nouvelle course
    */
   const createRace = async () => {
     if (!raceName.trim()) {
@@ -340,84 +255,78 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
       return;
     }
     if (runners.length === 0) {
-      setError("Ajoute au moins un coureur");
+      setError("Au moins un coureur doit être sélectionné");
       return;
     }
-    if (route.length < 2) {
-      setError("Importe un fichier GPX valide avant de créer");
+    if (route.length === 0) {
+      setError("Le tracé de la course est requis");
       return;
     }
-    if (!startDate || !endDate || !startTime || !endTime) {
-      setError("Veuillez sélectionner les dates et heures de début et de fin");
+    if (!startDate || !endDate) {
+      setError("Les dates de début et de fin sont requises");
       return;
     }
-    if (startDate > endDate) {
-      setError("La date de fin doit être postérieure à la date de début");
+    if (!startTime || !endTime) {
+      setError("Les heures de début et de fin sont requises");
       return;
     }
 
     setLoading(true);
     try {
+      // Log du token pour debug
+      console.log("Token utilisé pour la requête:", token);
+      const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
       const newRace: Race = {
-        id: Math.random().toString(36).substring(2, 9),
+        id: `${Date.now()}`,
         name: raceName.trim(),
-        runners,
+        runners: [...runners],
         startLocation: route[0],
         endLocation: route[route.length - 1],
-        createdBy: user.email,
-        route,
-        startDate: startDate.toISOString().split("T")[0],
-        endDate: endDate.toISOString().split("T")[0],
-        startTime: startTime.toISOString().split("T")[1].substring(0, 8),
-        endTime: endTime.toISOString().split("T")[1].substring(0, 8),
+        createdBy: user.email || `${user.firstname || ""} ${user.lastname || ""}`,
+        route: [...route],
+        startDate: startDate.toISOString().split("T")[0], // YYYY-MM-DD
+        endDate: endDate.toISOString().split("T")[0], // YYYY-MM-DD
+        startTime: startTime.toISOString().split("T")[1].slice(0, 8), // HH:mm:ss
+        endTime: endTime.toISOString().split("T")[1].slice(0, 8), // HH:mm:ss
       };
 
-      const raw = await FileSystem.readAsStringAsync(RACES_FILE_PATH);
-      const races: Race[] = JSON.parse(raw);
-      races.push(newRace);
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      if (!API_URL) {
+        setError("Erreur: API_URL non défini dans .env");
+        console.error("Erreur: API_URL non défini");
+        return;
+      }
 
-      await FileSystem.writeAsStringAsync(
-        RACES_FILE_PATH,
-        JSON.stringify(races, null, 2)
-      );
-
-      console.log("Nouvelle course créée :", {
-        id: newRace.id,
-        name: newRace.name,
-        createdBy: newRace.createdBy,
-        runnersCount: newRace.runners.length,
-        startLocation: newRace.startLocation,
-        endLocation: newRace.endLocation,
-        routeLength: newRace.route.length,
-        gpxFileName: gpxFileName || "Aucun fichier sélectionné",
-        startDate: newRace.startDate,
-        endDate: newRace.endDate,
-        startTime: newRace.startTime,
-        endTime: newRace.endTime,
+      const response = await fetch(`${API_URL}/races`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+        body: JSON.stringify(newRace),
       });
 
-      Alert.alert("Succès", "Course créée avec succès");
-      setLastCreatedRace(newRace);
-
-      // Réinitialiser le formulaire
-      setRaceName("");
-      setRunnerEmail("");
-      setRunners([]);
-      setRoute([]);
-      setGpxFileName(null);
-      setError(null);
-      setStartDate(null);
-      setEndDate(null);
-      setStartTime(null);
-      setEndTime(null);
-      setRegion({
-        latitude: 48.8566,
-        longitude: 2.3522,
-        latitudeDelta: 0.0922,
-        longitudeDelta: 0.0421,
-      });
+      if (response.ok) {
+        const savedRace = await response.json();
+        setLastCreatedRace(savedRace);
+        Alert.alert("Succès", "Course créée avec succès");
+        // Réinitialiser le formulaire
+        setRaceName("");
+        setRunners([]);
+        setRoute([]);
+        setGpxFileName(null);
+        setStartDate(null);
+        setEndDate(null);
+        setStartTime(null);
+        setEndTime(null);
+        setError(null);
+      } else {
+        const text = await response.text();
+        setError(`Erreur lors de la création de la course: ${text}`);
+        console.error(`Erreur lors de la création de la course: ${text}`);
+      }
     } catch (err) {
-      console.error("Erreur création course :", err);
+      console.error("Erreur création course:", err);
       setError("Erreur lors de la création de la course");
     } finally {
       setLoading(false);
@@ -425,260 +334,323 @@ const CreateRace: React.FC<{ user: User }> = ({ user }) => {
   };
 
   return (
-    <ScrollView
-      contentContainerStyle={styles.container}
-      keyboardShouldPersistTaps="handled"
-    >
-      {error && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
-          <Button title="Effacer" onPress={() => setError(null)} />
-        </View>
-      )}
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.title}>Créer une nouvelle course</Text>
 
-      <TextInput
-        style={styles.input}
-        placeholder="Nom de la course"
-        value={raceName}
-        onChangeText={setRaceName}
-        editable={!loading}
-      />
-
-      <View style={styles.row}>
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Nom de la course</Text>
         <TextInput
-          style={[styles.input, { flex: 1 }]}
-          placeholder="Email du coureur"
-          value={runnerEmail}
-          onChangeText={(text) => {
-            setRunnerEmail(text);
-            setShowSuggestions(true);
-          }}
-          onFocus={() => setShowSuggestions(true)}
-          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-          autoCapitalize="none"
-          keyboardType="email-address"
-          editable={!loading}
-        />
-        <Button title="Ajouter" onPress={addRunner} disabled={loading} />
-      </View>
-
-      {showSuggestions && filteredRunners.length > 0 && (
-        <View style={styles.suggestionsContainer}>
-          <FlatList
-            data={filteredRunners}
-            keyExtractor={(item) => item.email}
-            renderItem={({ item }) => (
-              <TouchableOpacity
-                style={styles.suggestionItem}
-                onPress={() => selectRunner(item.email)}
-              >
-                <Text>
-                  {item.email} ({item.name})
-                </Text>
-              </TouchableOpacity>
-            )}
-          />
-        </View>
-      )}
-
-      {runners.length > 0 && (
-        <View style={{ marginBottom: 10 }}>
-          {runners.map((email, i) => (
-            <Text key={i}>• {email}</Text>
-          ))}
-        </View>
-      )}
-
-      <View style={styles.row}>
-        <Text style={styles.label}>
-          Date de début :{" "}
-          {startDate ? startDate.toISOString().split("T")[0] : "Non définie"}
-        </Text>
-        <Button
-          title="Choisir"
-          onPress={() => setShowStartDatePicker(true)}
-          disabled={loading}
+          style={styles.input}
+          value={raceName}
+          onChangeText={setRaceName}
+          placeholder="Entrez le nom de la course"
         />
       </View>
-      {showStartDatePicker && (
-        <DateTimePicker
-          value={startDate || new Date()}
-          mode="date"
-          display={Platform.OS === "ios" ? "inline" : "default"}
-          onChange={(event, selectedDate) => {
-            setShowStartDatePicker(Platform.OS === "ios" ? true : false);
-            if (selectedDate) {
-              setStartDate(selectedDate);
-            }
-          }}
-        />
-      )}
 
-      <View style={styles.row}>
-        <Text style={styles.label}>
-          Heure de début :{" "}
-          {startTime
-            ? startTime.toISOString().split("T")[1].substring(0, 8)
-            : "Non définie"}
-        </Text>
-        <Button
-          title="Choisir"
-          onPress={() => setShowStartTimePicker(true)}
-          disabled={loading}
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Coureurs</Text>
+        <FlatList
+          data={availableRunners}
+          keyExtractor={(item) => item.id}
+          renderItem={({ item }) => (
+            <TouchableOpacity
+              onPress={() => addRunner(item)}
+              style={styles.suggestion}
+            >
+              <Text>
+                {(item.firstname || "") + " " + (item.lastname || "")}
+              </Text>
+            </TouchableOpacity>
+          )}
+          style={styles.suggestionsList}
         />
-      </View>
-      {showStartTimePicker && (
-        <DateTimePicker
-          value={startTime || new Date()}
-          mode="time"
-          display={Platform.OS === "ios" ? "inline" : "default"}
-          onChange={(event, selectedTime) => {
-            setShowStartTimePicker(Platform.OS === "ios" ? true : false);
-            if (selectedTime) {
-              setStartTime(selectedTime);
-            }
-          }}
-        />
-      )}
-
-      <View style={styles.row}>
-        <Text style={styles.label}>
-          Date de fin :{" "}
-          {endDate ? endDate.toISOString().split("T")[0] : "Non définie"}
-        </Text>
-        <Button
-          title="Choisir"
-          onPress={() => setShowEndDatePicker(true)}
-          disabled={loading}
-        />
-      </View>
-      {showEndDatePicker && (
-        <DateTimePicker
-          value={endDate || new Date()}
-          mode="date"
-          display={Platform.OS === "ios" ? "inline" : "default"}
-          onChange={(event, selectedDate) => {
-            setShowEndDatePicker(Platform.OS === "ios" ? true : false);
-            if (selectedDate) {
-              setEndDate(selectedDate);
-            }
-          }}
-        />
-      )}
-
-      <View style={styles.row}>
-        <Text style={styles.label}>
-          Heure de fin :{" "}
-          {endTime
-            ? endTime.toISOString().split("T")[1].substring(0, 8)
-            : "Non définie"}
-        </Text>
-        <Button
-          title="Choisir"
-          onPress={() => setShowEndTimePicker(true)}
-          disabled={loading}
-        />
-      </View>
-      {showEndTimePicker && (
-        <DateTimePicker
-          value={endTime || new Date()}
-          mode="time"
-          display={Platform.OS === "ios" ? "inline" : "default"}
-          onChange={(event, selectedTime) => {
-            setShowEndTimePicker(Platform.OS === "ios" ? true : false);
-            if (selectedTime) {
-              setEndTime(selectedTime);
-            }
-          }}
-        />
-      )}
-
-      <Button
-        title="Importer fichier GPX"
-        onPress={importGpx}
-        disabled={loading}
-      />
-
-      <MapView
-        style={styles.map}
-        region={region}
-        scrollEnabled={true}
-        zoomEnabled={true}
-      >
-        {route.length > 0 && (
-          <>
-            <Marker coordinate={route[0]} pinColor="green" title="Départ" />
-            <Marker
-              coordinate={route[route.length - 1]}
-              pinColor="red"
-              title="Arrivée"
-            />
-            <Polyline
-              coordinates={route}
-              strokeColor="#007AFF"
-              strokeWidth={3}
-            />
-          </>
+        {runners.length > 0 && (
+          <View style={{ marginTop: 8 }}>
+            <Text style={styles.label}>Coureurs sélectionnés :</Text>
+            {runners.map((id, i) => (
+              <Text key={i}>• {id}</Text>
+            ))}
+          </View>
         )}
-      </MapView>
+      </View>
 
-      <Button title="Créer la course" onPress={createRace} disabled={loading} />
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Tracé de la course (GPX)</Text>
+        <TouchableOpacity onPress={importGpx} style={styles.gpxImportButton}>
+          <Text style={styles.gpxImportButtonText}>
+            {gpxFileName
+              ? `Fichier GPX sélectionné : ${gpxFileName}`
+              : "Importer un fichier GPX"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Date et heure de début</Text>
+        <TouchableOpacity
+          onPress={() => setShowStartDatePicker(true)}
+          style={styles.dateTimePicker}
+        >
+          <Text>
+            {startDate
+              ? `Date de début : ${startDate.toLocaleDateString()}`
+              : "Sélectionner la date de début"}
+          </Text>
+        </TouchableOpacity>
+        {showStartDatePicker && (
+          <DateTimePicker
+            value={startDate || new Date()}
+            mode="date"
+            display="default"
+            onChange={(event, date) => {
+              setShowStartDatePicker(false);
+              if (date) {
+                setStartDate(date);
+              }
+            }}
+          />
+        )}
+        <TouchableOpacity
+          onPress={() => setShowStartTimePicker(true)}
+          style={styles.dateTimePicker}
+        >
+          <Text>
+            {startTime
+              ? `Heure de début : ${startTime.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}`
+              : "Sélectionner l'heure de début"}
+          </Text>
+        </TouchableOpacity>
+        {showStartTimePicker && (
+          <DateTimePicker
+            value={startTime || new Date()}
+            mode="time"
+            display="default"
+            onChange={(event, time) => {
+              setShowStartTimePicker(false);
+              if (time) {
+                setStartTime(time);
+              }
+            }}
+          />
+        )}
+      </View>
+      <View style={styles.formGroup}>
+        <Text style={styles.label}>Date et heure de fin</Text>
+        <TouchableOpacity
+          onPress={() => setShowEndDatePicker(true)}
+          style={styles.dateTimePicker}
+        >
+          <Text>
+            {endDate
+              ? `Date de fin : ${endDate.toLocaleDateString()}`
+              : "Sélectionner la date de fin"}
+          </Text>
+        </TouchableOpacity>
+        {showEndDatePicker && (
+          <DateTimePicker
+            value={endDate || new Date()}
+            mode="date"
+            display="default"
+            onChange={(event, date) => {
+              setShowEndDatePicker(false);
+              if (date) {
+                setEndDate(date);
+              }
+            }}
+          />
+        )}
+        <TouchableOpacity
+          onPress={() => setShowEndTimePicker(true)}
+          style={styles.dateTimePicker}
+        >
+          <Text>
+            {endTime
+              ? `Heure de fin : ${endTime.toLocaleTimeString([], {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}`
+              : "Sélectionner l'heure de fin"}
+          </Text>
+        </TouchableOpacity>
+        {showEndTimePicker && (
+          <DateTimePicker
+            value={endTime || new Date()}
+            mode="time"
+            display="default"
+            onChange={(event, time) => {
+              setShowEndTimePicker(false);
+              if (time) {
+                setEndTime(time);
+              }
+            }}
+          />
+        )}
+      </View>
+
+      {error && <Text style={styles.error}>{error}</Text>}
+
+      <TouchableOpacity
+        onPress={createRace}
+        style={styles.createRaceButton}
+        disabled={loading}
+      >
+        <Text style={styles.createRaceButtonText}>
+          {loading ? "Création en cours..." : "Créer la course"}
+        </Text>
+      </TouchableOpacity>
+
+      {lastCreatedRace && (
+        <View style={styles.lastRaceInfo}>
+          <Text style={styles.lastRaceText}>
+            Dernière course créée : {lastCreatedRace.name}
+          </Text>
+          <TouchableOpacity
+            onPress={() => {
+              // TODO: Naviguer vers la page de la course créée
+            }}
+            style={styles.viewRaceButton}
+          >
+            <Text style={styles.viewRaceButtonText}>Voir la course</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      <View style={styles.mapContainer}>
+        <MapView
+          style={styles.map}
+          region={region}
+          onRegionChangeComplete={setRegion}
+        >
+          {route.length > 0 && (
+            <Polyline coordinates={route} strokeColor="#000" strokeWidth={4} />
+          )}
+          {route.length > 0 && (
+            <>
+              <Marker coordinate={route[0]} title="Départ" />
+              <Marker coordinate={route[route.length - 1]} title="Arrivée" />
+            </>
+          )}
+        </MapView>
+      </View>
     </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
-    padding: 20,
-    paddingBottom: 40,
+    flexGrow: 1,
+    padding: 16,
     backgroundColor: "#fff",
   },
+  title: {
+    fontSize: 24,
+    fontWeight: "bold",
+    marginBottom: 16,
+  },
+  formGroup: {
+    marginBottom: 16,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "500",
+    marginBottom: 8,
+  },
   input: {
+    height: 40,
+    borderColor: "#ccc",
     borderWidth: 1,
-    borderColor: "#888",
     borderRadius: 4,
-    padding: 8,
-    marginBottom: 10,
-    backgroundColor: "#fff",
+    paddingHorizontal: 8,
+    fontSize: 16,
   },
   row: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 10,
   },
-  label: {
+  suggestion: {
+    padding: 8,
+    backgroundColor: "#f9f9f9",
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+  },
+  suggestionsList: {
+    maxHeight: 100,
+    marginTop: 4,
+    borderRadius: 4,
+    overflow: "hidden",
+    borderColor: "#ccc",
+    borderWidth: 1,
+  },
+  gpxImportButton: {
+    backgroundColor: "#007bff",
+    padding: 12,
+    borderRadius: 4,
+    alignItems: "center",
+  },
+  gpxImportButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  dateTimePicker: {
+    padding: 12,
+    backgroundColor: "#f0f0f0",
+    borderRadius: 4,
+    marginBottom: 8,
+  },
+  error: {
+    color: "red",
+    marginBottom: 16,
+    fontWeight: "500",
+  },
+  createRaceButton: {
+    backgroundColor: "#28a745",
+    padding: 12,
+    borderRadius: 4,
+    alignItems: "center",
+    marginTop: 16,
+  },
+  createRaceButtonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  lastRaceInfo: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: "#e9ecef",
+    borderRadius: 4,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  lastRaceText: {
     flex: 1,
     fontSize: 16,
+    fontWeight: "500",
+  },
+  viewRaceButton: {
+    backgroundColor: "#007bff",
+    padding: 8,
+    borderRadius: 4,
+    alignItems: "center",
+  },
+  viewRaceButtonText: {
+    color: "#fff",
+    fontSize: 14,
+    fontWeight: "500",
+  },
+  mapContainer: {
+    height: 300,
+    borderRadius: 4,
+    overflow: "hidden",
+    marginTop: 16,
   },
   map: {
     width: "100%",
-    height: 300,
-    marginVertical: 15,
-  },
-  errorBox: {
-    backgroundColor: "#ffe6e6",
-    padding: 10,
-    marginBottom: 10,
-    borderRadius: 4,
-    borderColor: "#ff4d4d",
-    borderWidth: 1,
-  },
-  errorText: {
-    color: "#b00000",
-    marginBottom: 5,
-  },
-  suggestionsContainer: {
-    maxHeight: 150,
-    backgroundColor: "#fff",
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 4,
-    marginBottom: 10,
-  },
-  suggestionItem: {
-    padding: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: "#eee",
+    height: "100%",
   },
 });
 

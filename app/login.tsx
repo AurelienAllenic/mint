@@ -7,8 +7,9 @@ import { useAuth } from "../context/auth";
 import { loginStyles } from "../style/login.styles";
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("user@example.com");
+  const [email, setEmail] = useState("enzolemercier@gmail.com");
   const [password, setPassword] = useState("password");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const { login } = useAuth();
@@ -42,83 +43,88 @@ export default function LoginScreen() {
 
   return (
     <View style={loginStyles.container}>
-      <View style={loginStyles.header}>
+      <View style={loginStyles.logoContainer}>
+        <Image
+          source={require("@/assets/images/welcome-logo.png")}
+          style={loginStyles.logo}
+          resizeMode="contain"
+        />
         <Text style={loginStyles.title}>Connexion</Text>
       </View>
 
-      <View style={loginStyles.inputContainer}>
-        <Text style={loginStyles.inputLabel}>E-mail</Text>
+      <View style={loginStyles.inputSection}>
         <TextInput
-          placeholder="E-mail"
+          style={loginStyles.input}
+          placeholder="Email"
+          placeholderTextColor="#A1A1A1"
           value={email}
-          onChangeText={(text) => {
-            setEmail(text);
-            setError("");
-          }}
+          onChangeText={setEmail}
           autoCapitalize="none"
           keyboardType="email-address"
-          style={[
-            loginStyles.input,
-            focusedInput === "email" && loginStyles.inputFocused,
-          ]}
           onFocus={() => setFocusedInput("email")}
           onBlur={() => setFocusedInput(null)}
         />
-      </View>
-
-      <View style={loginStyles.inputContainer}>
-        <Text style={loginStyles.inputLabel}>Mot de passe</Text>
         <TextInput
+          style={loginStyles.input}
           placeholder="Mot de passe"
+          placeholderTextColor="#A1A1A1"
           value={password}
-          onChangeText={(text) => {
-            setPassword(text);
-            setError("");
-          }}
+          onChangeText={setPassword}
           secureTextEntry
-          style={[
-            loginStyles.input,
-            focusedInput === "password" && loginStyles.inputFocused,
-          ]}
           onFocus={() => setFocusedInput("password")}
           onBlur={() => setFocusedInput(null)}
         />
+        <TouchableOpacity>
+          <Text style={loginStyles.forgotPassword}>Mot de passe oublié ?</Text>
+        </TouchableOpacity>
       </View>
 
       {error !== "" && <Text style={loginStyles.errorText}>{error}</Text>}
 
-      <View style={loginStyles.buttonContainer}>
-        <TouchableOpacity style={loginStyles.button} onPress={handleLogin}>
-          <Text style={loginStyles.buttonText}>Connexion</Text>
-        </TouchableOpacity>
-      </View>
+      <TouchableOpacity style={loginStyles.button} onPress={handleLogin}>
+        <Text style={loginStyles.buttonText}>Se connecter</Text>
+      </TouchableOpacity>
 
-      <View style={loginStyles.socialButtonsContainer}>
+      <View style={loginStyles.divider} />
+
+      <View style={loginStyles.socialSection}>
         <TouchableOpacity style={loginStyles.socialButton}>
           <Image
             source={require("@/assets/images/google.png")}
-            style={{ width: 20, height: 20 }}
+            style={loginStyles.socialIcon}
           />
           <Text style={loginStyles.socialButtonText}>
             Continuer avec Google
           </Text>
         </TouchableOpacity>
-
         <TouchableOpacity style={loginStyles.socialButton}>
           <Image
             source={require("@/assets/images/apple.png")}
-            style={{ width: 20, height: 20 }}
+            style={loginStyles.socialIcon}
           />
-          <Text style={loginStyles.socialButtonText}>Continuer avec Apple</Text>
+          <Text style={loginStyles.socialButtonText}>
+            Continuer avec Google
+          </Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={loginStyles.inviteSection}>
+        <Text style={loginStyles.inviteLabel}>J’ai un code invité</Text>
+        <TextInput
+          style={loginStyles.inviteInput}
+          placeholder="KTYZPQ"
+          placeholderTextColor="#A1A1A1"
+          value={inviteCode}
+          onChangeText={setInviteCode}
+        />
       </View>
 
       <Text style={loginStyles.termsText}>
         En continuant, vous acceptez nos conditions de service et notre
-        politique de confidentialité
+        <Text style={loginStyles.link}> politique de confidentialité.</Text>
       </Text>
       <Text style={loginStyles.termsText}>
-        Vous n'avez pas de compte ?{" "}
+        Vous n&apos;avez pas de compte ?{" "}
         <Text style={loginStyles.link} onPress={() => router.push("/signup")}>
           Inscrivez-vous
         </Text>

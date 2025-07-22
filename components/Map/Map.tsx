@@ -74,6 +74,15 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
     })();
   }, []);
 
+  const DOWNSAMPLE_STEP = 10; // Garde 1 point sur 15
+  function downsampleCoordinates(
+    coords: LatLng[],
+    step: number = DOWNSAMPLE_STEP
+  ) {
+    if (!coords || coords.length <= step) return coords;
+    return coords.filter((_, i) => i % step === 0);
+  }
+
   return (
     <View style={styles.container}>
       {error && (
@@ -101,7 +110,7 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
         {/* Affichage du tracé GPX : un seul tracé à la fois, pas de superposition */}
         {gpxCoordinates && gpxCoordinates.length > 1 && (
           <Polyline
-            coordinates={gpxCoordinates}
+            coordinates={downsampleCoordinates(gpxCoordinates)}
             strokeColor="#A1F763"
             strokeWidth={4}
             lineDashPattern={[1]}

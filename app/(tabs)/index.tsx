@@ -4,6 +4,7 @@ import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Animated,
   Image,
@@ -396,6 +397,7 @@ export default function HomeScreen() {
                               setSelectedRaceRoute(null);
                             } finally {
                               setLoadingRaces(false);
+                              setShowRaceMenu(false);
                             }
                           }}
                         >
@@ -413,6 +415,15 @@ export default function HomeScreen() {
               </ScrollView>
             </View>
           </Animated.View>
+        )}
+        {/* Loader global pour le chargement du tracé d'une course */}
+        {loadingRaces && (
+          <View style={styles.loaderOverlay} pointerEvents="box-none">
+            <View style={styles.loaderBox}>
+              <ActivityIndicator size="large" color="#A1F763" />
+              <Text style={styles.loaderText}>Chargement du tracé...</Text>
+            </View>
+          </View>
         )}
         <View style={styles.container__btns}>
           <TouchableOpacity
@@ -661,5 +672,35 @@ const styles = StyleSheet.create({
     color: "#fff",
     marginTop: 2,
     fontWeight: "400",
+  },
+  loaderOverlay: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: "100%",
+    height: "100%",
+    backgroundColor: "rgba(0,0,0,0.45)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 9999,
+  },
+  loaderBox: {
+    backgroundColor: "rgba(255,255,255,0.95)",
+    padding: 32,
+    borderRadius: 18,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+  },
+  loaderText: {
+    fontSize: 18,
+    color: "#181818",
+    fontWeight: "bold",
+    textAlign: "center",
+    marginTop: 16,
   },
 });

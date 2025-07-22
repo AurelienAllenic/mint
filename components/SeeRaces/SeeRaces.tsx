@@ -32,10 +32,14 @@ interface Race {
 const DATA_DIR = `${FileSystem.documentDirectory}data/`;
 const RACES_FILE_PATH = `${DATA_DIR}races.json`;
 
-const UserRacesList: React.FC<{ user: User }> = ({ user }) => {
+const UserRacesList: React.FC<{ user: User; onCloseMenu?: () => void }> = ({
+  user,
+  onCloseMenu,
+}) => {
   const [races, setRaces] = useState<Race[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadingTrack, setLoadingTrack] = useState(false);
 
   // Charger les courses au montage du composant
   useEffect(() => {
@@ -73,7 +77,17 @@ const UserRacesList: React.FC<{ user: User }> = ({ user }) => {
 
   // Rendu de chaque élément de la liste
   const renderRaceItem = ({ item }: { item: Race }) => (
-    <TouchableOpacity style={styles.raceCard}>
+    <TouchableOpacity
+      style={styles.raceCard}
+      onPress={async () => {
+        if (onCloseMenu) onCloseMenu(); // Ferme le menu déroulant si callback fourni
+        setLoadingTrack(true); // Affiche le popup de chargement
+        // Simule le chargement du tracé GPX (remplace par ta logique réelle)
+        setTimeout(() => {
+          setLoadingTrack(false); // Masque le popup une fois le tracé chargé
+        }, 1500);
+      }}
+    >
       <Text style={styles.raceTitle}>{item.name}</Text>
       <Text style={styles.raceInfo}>
         📅 Début : {item.startDate} à {item.startTime}
@@ -99,6 +113,12 @@ const UserRacesList: React.FC<{ user: User }> = ({ user }) => {
 
   return (
     <View style={styles.container}>
+      {loadingTrack && (
+        <View style={styles.trackLoadingPopup}>
+          <Text style={styles.trackLoadingText}>Chargement du tracé...</Text>
+        </View>
+      )}
+
       {error && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{error}</Text>
@@ -181,6 +201,26 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 20,
+  },
+  trackLoadingPopup: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: "rgba(0,0,0,0.3)",
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+  },
+  trackLoadingText: {
+    backgroundColor: "white",
+    padding: 20,
+    borderRadius: 10,
+    fontSize: 18,
+    color: "#333",
+    textAlign: "center",
+    elevation: 2,
   },
 });
 

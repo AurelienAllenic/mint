@@ -1,6 +1,8 @@
 import * as FileSystem from "expo-file-system";
+import * as Location from "expo-location";
 import React, { useEffect, useRef, useState } from "react";
 import { Button, StyleSheet, Text, View } from "react-native";
+
 import MapView, {
   Callout,
   Marker,
@@ -9,9 +11,9 @@ import MapView, {
 } from "react-native-maps";
 import { calculateGPXRegion } from "../../utils/gpxParser";
 
-const FILE_PATH = FileSystem.documentDirectory + "/locations.json";
+const FILE_PATH = FileSystem.documentDirectory + "locations.json"; // Pas besoin de '/' avant locations.json car documentDirectory termine déjà par '/'
+const pointerImg = require("../../assets/images/pointer.png");
 
-// Types pour la sécurité et la correction des erreurs
 interface UserLocation {
   user: string;
   lat: number;
@@ -24,7 +26,7 @@ interface LatLng {
 
 interface MapProps {
   user: { email?: string };
-  gpxCoordinates: { latitude: number; longitude: number }[];
+  gpxCoordinates: LatLng[];
   region?: {
     latitude: number;
     longitude: number;
@@ -34,27 +36,23 @@ interface MapProps {
 }
 
 const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
-  const [location] = useState<LatLng | null>(null);
+  const [location, setLocation] = useState<LatLng | null>(null);
   const [locations, setLocations] = useState<UserLocation[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [loading] = useState(false);
+  const [loading, setLoading] = useState(false); // Pour gérer le loading, mieux avec setLoading
+  const [hasCentered, setHasCentered] = useState(false);
   const mapRef = useRef<MapView>(null);
 
-  // Ajuster la vue quand le GPX change
   useEffect(() => {
-    if (gpxCoordinates && gpxCoordinates.length > 0 && mapRef.current) {
-      const region = calculateGPXRegion(gpxCoordinates);
-      // On annule toute animation précédente avant de centrer sur le nouveau tracé
-      mapRef.current.animateToRegion(region, 1000);
+    if (gpxCoordinates?.length && mapRef.current) {
+      const regionCalculated = calculateGPXRegion(gpxCoordinates);
+      mapRef.current.animateToRegion(regionCalculated, 1000);
     }
   }, [gpxCoordinates]);
 
   useEffect(() => {
-    console.log("User prop:", user);
-  }, [user]);
-
-  useEffect(() => {
     (async () => {
+      setLoading(true);
       try {
         const fileInfo = await FileSystem.getInfoAsync(FILE_PATH);
         if (!fileInfo.exists) {
@@ -62,19 +60,64 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
           await FileSystem.writeAsStringAsync(FILE_PATH, JSON.stringify([]));
         }
         const content = await FileSystem.readAsStringAsync(FILE_PATH);
-        const parsed = JSON.parse(content);
+        const parsed: UserLocation[] = JSON.parse(content);
         setLocations(parsed);
         console.log("Données chargées :", parsed);
+        setError(null);
       } catch (err: any) {
         setError(
           "Erreur lors du chargement du fichier: " + (err?.message || err)
         );
         console.error("Lecture fichier erreur :", err);
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
 
-  const DOWNSAMPLE_STEP = 10; // Garde 1 point sur 15
+  useEffect(() => {
+    let subscription: Location.LocationSubscription | null = null;
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        setError("Permission de localisation refusée");
+        return;
+      }
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2000,
+          distanceInterval: 1,
+        },
+        (pos) => {
+          setLocation({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude,
+          });
+        }
+      );
+    })();
+    return () => {
+      subscription?.remove();
+    };
+  }, [user]);
+
+  useEffect(() => {
+    if (location && mapRef.current && !hasCentered) {
+      mapRef.current.animateToRegion(
+        {
+          latitude: location.latitude,
+          longitude: location.longitude,
+          latitudeDelta: 0.07,
+          longitudeDelta: 0.07,
+        },
+        500
+      );
+      setHasCentered(true);
+    }
+  }, [location, hasCentered]);
+
+  const DOWNSAMPLE_STEP = 10;
   function downsampleCoordinates(
     coords: LatLng[],
     step: number = DOWNSAMPLE_STEP
@@ -104,28 +147,34 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
         ref={mapRef}
         provider={PROVIDER_GOOGLE}
         style={styles.map}
-        region={region}
-        customMapStyle={darkMapStyle}
+        initialRegion={region}
+        customMapStyle={[
+          ...darkMapStyle,
+          {
+            featureType: "poi",
+            elementType: "labels.icon",
+            stylers: [{ visibility: "off" }],
+          },
+        ]}
       >
-        {/* Affichage du tracé GPX : un seul tracé à la fois, pas de superposition */}
         {gpxCoordinates && gpxCoordinates.length > 1 && (
           <Polyline
-            coordinates={downsampleCoordinates(gpxCoordinates)}
+            coordinates={gpxCoordinates}
             strokeColor="#A1F763"
             strokeWidth={4}
             lineDashPattern={[1]}
           />
         )}
         {location && (
-          <Marker coordinate={location}>
+          <Marker coordinate={location} image={pointerImg}>
             <Callout>
               <Text>
                 Position actuelle:{"\n"}
-                Latitude: {location.latitude}
+                Latitude: {location.latitude.toFixed(6)}
                 {"\n"}
-                Longitude: {location.longitude}
+                Longitude: {location.longitude.toFixed(6)}
                 {"\n"}
-                Email: {user?.email || "test@example.com"}
+                Email: {user?.email ?? "test@example.com"}
               </Text>
             </Callout>
           </Marker>
@@ -139,27 +188,14 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
               <Text>
                 Email: {loc.user}
                 {"\n"}
-                Latitude: {loc.lat}
+                Latitude: {loc.lat.toFixed(6)}
                 {"\n"}
-                Longitude: {loc.long}
+                Longitude: {loc.long.toFixed(6)}
               </Text>
             </Callout>
           </Marker>
         ))}
       </MapView>
-
-      {/* <View style={styles.buttonContainer}>
-        <Button
-          title="Ajouter un marqueur"
-          onPress={getLocation}
-          disabled={loading}
-        />
-        <Button
-          title="Vider les données locales"
-          onPress={clearStorage}
-          color="red"
-        />
-      </View> */}
     </View>
   );
 };
@@ -171,20 +207,14 @@ const styles = StyleSheet.create({
     top: 10,
     width: "100%",
     alignItems: "center",
-    zIndex: 1,
+    zIndex: 10,
   },
   loadingContainer: {
     position: "absolute",
     top: 10,
     width: "100%",
     alignItems: "center",
-    zIndex: 1,
-  },
-  buttonContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    width: "100%",
-    padding: 10,
+    zIndex: 10,
   },
   map: {
     width: "100%",
@@ -207,11 +237,10 @@ const styles = StyleSheet.create({
   },
 });
 
-// Ajout du style dark officiel Google Maps
 const darkMapStyle = [
   { elementType: "geometry", stylers: [{ color: "#212121" }] },
   { elementType: "labels.icon", stylers: [{ visibility: "off" }] },
-  { elementType: "labels.text.fill", stylers: [{ color: "#757575" }] },
+  { elementType: "labels.text.fill", stylers: [{ color: "#A1F763" }] },
   { elementType: "labels.text.stroke", stylers: [{ color: "#212121" }] },
   {
     featureType: "administrative",

@@ -1,6 +1,5 @@
 import Map from "@/components/Map/Map";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
-import * as DocumentPicker from "expo-document-picker";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -15,23 +14,23 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+import { BlurView } from "expo-blur";
 import { useAuth } from "../../context/auth";
-import { GPXPoint, parseGPXFile, parseGpx } from "../../utils/gpxParser";
+import { GPXPoint, parseGpx } from "../../utils/gpxParser";
 
 export default function HomeScreen() {
   const { user, logout, token } = useAuth();
   const router = useRouter();
-  const [gpxCoordinates, setGpxCoordinates] = useState<GPXPoint[]>([]);
+  const [gpxCoordinates] = useState<GPXPoint[]>([]);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showRaceMenu, setShowRaceMenu] = useState(false);
-  const [races, setRaces] = useState<{ id: string; name: string }[]>([]);
+  const [races, setRaces] = useState<
+    { id: string; name: string; distance?: number }[]
+  >([]);
   const [loadingRaces, setLoadingRaces] = useState(false);
   const [selectedRaceRoute, setSelectedRaceRoute] = useState<
     { latitude: number; longitude: number }[] | null
   >(null);
-  const [raceDistances, setRaceDistances] = useState<{ [id: string]: number }>(
-    {}
-  );
   const raceMenuAnim = useState(new Animated.Value(0))[0];
 
   // Fonction pour gérer la déconnexion
@@ -44,66 +43,6 @@ export default function HomeScreen() {
   // Fonction pour basculer l'affichage du menu profil
   const toggleProfileMenu = () => {
     setShowProfileMenu(!showProfileMenu);
-  };
-
-  // Fonction pour importer un fichier GPX
-  const handleImportGPX = async () => {
-    try {
-      const result = await DocumentPicker.getDocumentAsync({
-        type: ["application/gpx+xml", "*/*"], // Accepter plus de types au cas où
-        copyToCacheDirectory: true,
-        multiple: false,
-      });
-
-      if (result.assets && result.assets.length > 0) {
-        const gpxUri = result.assets[0].uri;
-
-        // Parser le GPX et l'afficher sur la carte
-        const coordinates = await parseGPXFile(gpxUri);
-        setGpxCoordinates(coordinates);
-
-        Alert.alert(
-          "GPX importé avec succès",
-          `${coordinates.length} points chargés sur la carte`,
-          [
-            {
-              text: "Voir sur la carte",
-              style: "default",
-            },
-            {
-              text: "Créer une course",
-              onPress: () =>
-                router.push({
-                  pathname: "/create-race",
-                  params: { gpxUri },
-                }),
-            },
-          ]
-        );
-      }
-    } catch (error) {
-      Alert.alert("Erreur", "Impossible de charger le fichier GPX");
-      console.error("Erreur import GPX:", error);
-    }
-  };
-
-  const createOrganisation = () => {
-    router.push({
-      pathname: "/create-organisation",
-    });
-  };
-
-  const seeOrganisation = () => {
-    router.push({
-      pathname: "/see-organisations",
-    });
-  };
-
-  const seeRaces = () => {
-    router.push({
-      pathname: "/see-races",
-      params: { user: JSON.stringify(user) },
-    });
   };
 
   // Fetch des courses
@@ -182,7 +121,7 @@ export default function HomeScreen() {
         useNativeDriver: true,
       }).start();
     }
-  }, [showRaceMenu]);
+  }, [showRaceMenu, raceMenuAnim]);
 
   function calculateDistance(
     coords: { latitude: number; longitude: number }[]
@@ -217,44 +156,37 @@ export default function HomeScreen() {
       }}
     >
       <View style={styles.container}>
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.welcome}>Bienvenue !</Text>
-            <Text style={styles.username}>{user?.name || "Utilisateur"}</Text>
-          </View>
-          <View style={styles.profileContainer}>
-            <TouchableOpacity onPress={toggleProfileMenu}>
-              <Image
-                source={require("@/assets/images/pp.png")}
-                style={styles.avatar}
-              />
-            </TouchableOpacity>
-
-            {/* Menu dropdown */}
-            {showProfileMenu && (
-              <View style={styles.profileMenu}>
-                <TouchableOpacity
-                  style={styles.menuItem}
-                  onPress={handleLogout}
-                >
-                  <Icon name="logout" size={20} color="#fff" />
-                  <Text style={styles.menuText}>Se déconnecter</Text>
+        <View style={styles.headerContainer}>
+          <BlurView style={styles.header} intensity={40} tint="dark">
+            <View style={styles.headerContent}>
+              <View>
+                <Text style={styles.welcome}>Bienvenue !</Text>
+                <Text style={styles.username}>
+                  {user?.lastname || "Utilisateur"}
+                </Text>
+              </View>
+              <View style={styles.profileContainer}>
+                <TouchableOpacity onPress={toggleProfileMenu}>
+                  <Image
+                    source={require("@/assets/images/pp.png")}
+                    style={styles.avatar}
+                  />
                 </TouchableOpacity>
               </View>
-            )}
-          </View>
+            </View>
+          </BlurView>
+
+          {/* Menu dropdown déplacé à l'extérieur du BlurView */}
+          {showProfileMenu && (
+            <View style={styles.profileMenu}>
+              <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
+                <Icon name="logout" size={20} color="#fff" />
+                <Text style={styles.menuText}>Se déconnecter</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
-        <View style={styles.mapContainer}>
-          <Map
-            user={{ email: user?.email }}
-            gpxCoordinates={selectedRaceRoute || gpxCoordinates}
-            region={
-              selectedRaceRoute
-                ? getRegionFromCoordinates(selectedRaceRoute)
-                : undefined
-            }
-          />
-        </View>
+
         {/* Menu déroulant des courses */}
         {showRaceMenu && (
           <Animated.View
@@ -367,12 +299,13 @@ export default function HomeScreen() {
                                       i % step === 0
                                   );
                                 }
-                                // Calculer et stocker la distance
+                                // Calculer la distance
                                 const dist = calculateDistance(gpxCoordinates);
-                                setRaceDistances((prev) => ({
-                                  ...prev,
-                                  [race.id]: dist,
-                                }));
+                                console.log(
+                                  `Distance calculée pour ${
+                                    race.name
+                                  }: ${dist.toFixed(2)} km`
+                                );
                               } else {
                                 gpxError = true;
                               }
@@ -404,7 +337,7 @@ export default function HomeScreen() {
                           <Text style={styles.raceName}>{race.name}</Text>
                           <Text style={styles.raceDistance}>
                             {race.distance
-                              ? `${race.distance} km`
+                              ? `${race.distance} m`
                               : "Distance inconnue"}
                           </Text>
                         </TouchableOpacity>
@@ -426,12 +359,26 @@ export default function HomeScreen() {
           </View>
         )}
         <View style={styles.container__btns}>
-          <TouchableOpacity
-            style={styles.mainButton}
-            onPress={() => router.push("/create-race")}
-          >
-            <Text style={styles.mainButtonText}>Créer une course</Text>
-          </TouchableOpacity>
+          <View style={styles.mainButtonsContainer}>
+            <TouchableOpacity
+              style={styles.joinButton}
+              onPress={() => router.push("/create-race")}
+            >
+              <BlurView
+                style={styles.joinButtonBlur}
+                intensity={40}
+                tint="dark"
+              >
+                <Text style={styles.joinButtonText}>CRÉER</Text>
+              </BlurView>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.mainButton}
+              onPress={() => router.push("/rejoindre")}
+            >
+              <Text style={styles.mainButtonText}>REJOINDRE</Text>
+            </TouchableOpacity>
+          </View>
           {/* <TouchableOpacity
             style={[
               styles.mainButton,
@@ -445,16 +392,34 @@ export default function HomeScreen() {
           </TouchableOpacity> */}
           <View style={styles.bottomButtons}>
             <TouchableOpacity style={styles.roundButton}>
-              <Icon name="account-group" size={32} color="#000" />
+              <BlurView
+                style={styles.roundButtonBlur}
+                intensity={40}
+                tint="dark"
+              >
+                <Icon name="account-group" size={32} color="#fff" />
+              </BlurView>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.roundButtonCenter}>
-              <Icon name="account" size={32} color="#000" />
+            <TouchableOpacity style={styles.roundButton}>
+              <BlurView
+                style={styles.roundButtonBlur}
+                intensity={40}
+                tint="dark"
+              >
+                <Icon name="account" size={32} color="#fff" />
+              </BlurView>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.roundButton}
               onPress={() => setShowRaceMenu((v) => !v)}
             >
-              <Icon name="map-outline" size={32} color="#000" />
+              <BlurView
+                style={styles.roundButtonBlur}
+                intensity={40}
+                tint="dark"
+              >
+                <Icon name="cog" size={32} color="#fff" />
+              </BlurView>
             </TouchableOpacity>
 
             {/* <TouchableOpacity style={homeStyles.button} onPress={createOrganisation}>
@@ -471,6 +436,23 @@ export default function HomeScreen() {
       </TouchableOpacity> */}
           </View>
         </View>
+
+        <View style={styles.mapContainer}>
+          <Map
+            user={{ email: user?.email }}
+            gpxCoordinates={selectedRaceRoute || gpxCoordinates}
+            region={
+              selectedRaceRoute
+                ? getRegionFromCoordinates(selectedRaceRoute)
+                : undefined
+            }
+          />
+          <Image
+            source={require("@/assets/images/radial-gradient.png")}
+            style={styles.radialGradient}
+            resizeMode="cover"
+          />
+        </View>
       </View>
     </TouchableWithoutFeedback>
   );
@@ -484,22 +466,41 @@ const styles = StyleSheet.create({
     margin: 0, // S'assurer qu'il n'y a pas de marge
     padding: 0,
   },
+  headerContainer: {
+    position: "absolute",
+    top: 60,
+    left: 20,
+    right: 20,
+    borderRadius: 20,
+    zIndex: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 5,
+  },
   header: {
+    borderRadius: 20,
+    backgroundColor: "rgba(105, 105, 105, 0.18)",
+    overflow: "hidden",
+  },
+  headerContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 60,
-    marginHorizontal: 24,
-    padding: 16, // Ajout de padding pour espacer le contenu
+    padding: 16,
   },
   welcome: {
     color: "#A1F763",
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: "600",
   },
   username: {
     color: "#fff",
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: "bold",
   },
   avatar: {
@@ -518,26 +519,80 @@ const styles = StyleSheet.create({
     height: "100%",
     zIndex: -1,
   },
+  radialGradient: {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    width: "130%",
+    height: "130%",
+    transform: [{ translateX: "-50%" }, { translateY: "-50%" }],
+    zIndex: 1,
+    pointerEvents: "none", // Permet aux interactions de passer à travers
+  },
   container__btns: {
+    position: "absolute",
+    bottom: 20,
+    left: 20,
+    right: 20,
+    zIndex: 5,
+  },
+  mainButtonsContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 15,
+  },
+  joinButton: {
+    backgroundColor: "rgba(105, 105, 105, 0.18)",
+    borderRadius: 15,
     flex: 1,
-    justifyContent: "flex-end", // Aligner les boutons en bas
-    marginBottom: 20, // Espace en bas
-    padding: 30,
+    height: 85,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 5,
+    overflow: "hidden",
+  },
+  joinButtonBlur: {
+    borderRadius: 15,
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  joinButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 18,
+    letterSpacing: 1,
+    textTransform: "uppercase",
   },
   mainButton: {
     backgroundColor: "#A1F763",
-    borderRadius: 16,
-    width: "100%",
-    paddingVertical: 24,
+    borderRadius: 15,
+    flex: 1,
+    height: 85,
     alignItems: "center",
-    shadowColor: "#8EFF00",
+    justifyContent: "center",
+    shadowColor: "#000",
     shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 2,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 5,
+    overflow: "hidden",
   },
   mainButtonText: {
-    color: "#181818",
-    fontWeight: "bold",
+    color: "#3B3B3B",
+    fontWeight: "900",
     fontSize: 18,
     letterSpacing: 1,
     textTransform: "uppercase",
@@ -546,33 +601,34 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 15,
+    marginTop: 0,
     marginBottom: 30,
-    gap: 1,
+    gap: 15,
   },
   roundButton: {
-    backgroundColor: "#A1F763", // Vert clair
-    borderRadius: 20, // Plus arrondi
-    width: 125,
-    height: 75,
+    backgroundColor: "rgba(105, 105, 105, 0.18)",
+    borderRadius: 15,
+    flex: 1,
+    height: 55,
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#8EFF00",
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 5,
+    overflow: "hidden",
   },
-  roundButtonCenter: {
-    backgroundColor: "#fff", // Bouton central blanc
-    borderRadius: 20,
-    width: 88,
-    height: 75,
+  roundButtonBlur: {
+    borderRadius: 15,
+    width: "100%",
+    height: "100%",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#8EFF00",
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 2,
+    overflow: "hidden",
   },
   profileContainer: {
     position: "relative",
@@ -585,8 +641,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 8,
     shadowColor: "#000",
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
     elevation: 5,
     zIndex: 1000,
   },

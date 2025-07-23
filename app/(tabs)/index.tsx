@@ -397,7 +397,7 @@ export default function HomeScreen() {
                 intensity={40}
                 tint="dark"
               >
-                <Icon name="account-group" size={32} color="#fff" />
+                <Icon name="account-group" size={24} color="#fff" />
               </BlurView>
             </TouchableOpacity>
             <TouchableOpacity style={styles.roundButton}>
@@ -406,19 +406,19 @@ export default function HomeScreen() {
                 intensity={40}
                 tint="dark"
               >
-                <Icon name="account" size={32} color="#fff" />
+                <Icon name="chart-line" size={24} color="#fff" />
               </BlurView>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.roundButton}
-              onPress={() => setShowRaceMenu((v) => !v)}
+              // onPress={() => setShowRaceMenu((v) => !v)}
             >
               <BlurView
                 style={styles.roundButtonBlur}
                 intensity={40}
                 tint="dark"
               >
-                <Icon name="cog" size={32} color="#fff" />
+                <Icon name="cog" size={24} color="#fff" />
               </BlurView>
             </TouchableOpacity>
 

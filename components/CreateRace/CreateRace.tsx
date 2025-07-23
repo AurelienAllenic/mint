@@ -70,6 +70,10 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [selectedOrganization, setSelectedOrganization] = useState<
     number | null
   >(null);
+  const [showCreateOrganization, setShowCreateOrganization] = useState(false);
+  const [newOrganizationName, setNewOrganizationName] = useState("");
+  const [newOrganizationDescription, setNewOrganizationDescription] = useState("");
+  const [creatingOrganization, setCreatingOrganization] = useState(false);
   const [gpxFileUri, setGpxFileUri] = useState<string | null>(
     initialGpxUri || null
   );
@@ -166,6 +170,59 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
     } catch (err) {
       console.error("Erreur lors de la sélection du fichier:", err);
       setError("Erreur lors de la sélection du fichier GPX");
+    }
+  };
+
+  const createOrganization = async () => {
+    if (!newOrganizationName.trim()) {
+      setError("Le nom de l'organisation est requis");
+      return;
+    }
+
+    setCreatingOrganization(true);
+    setError(null);
+
+    try {
+      const authHeader = token?.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
+
+      const response = await fetch(`${API_URL}/organizations`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({
+          name: newOrganizationName.trim(),
+          description: newOrganizationDescription.trim() || undefined,
+        }),
+      });
+
+      if (response.ok) {
+        const newOrg = await response.json();
+        
+        // Ajouter la nouvelle organisation à la liste
+        setOrganizations(prev => [...prev, newOrg]);
+        
+        // Sélectionner automatiquement la nouvelle organisation
+        setSelectedOrganization(newOrg.id);
+        
+        // Réinitialiser le formulaire de création
+        setNewOrganizationName("");
+        setNewOrganizationDescription("");
+        setShowCreateOrganization(false);
+        
+        Alert.alert("Succès", "Organisation créée avec succès !");
+      } else {
+        const errorText = await response.text();
+        setError(`Erreur lors de la création de l'organisation: ${errorText}`);
+      }
+    } catch (err) {
+      console.error("Erreur lors de la création de l'organisation:", err);
+      setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setCreatingOrganization(false);
     }
   };
 
@@ -477,54 +534,116 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
               </View>
 
               {/* Organisation */}
-              {organizations.length > 0 && (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Organisation (optionnel)</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.optionButtons}>
-                      <TouchableOpacity
-                        style={[
-                          styles.optionButton,
-                          selectedOrganization === null &&
-                            styles.optionButtonSelected,
-                        ]}
-                        onPress={() => setSelectedOrganization(null)}
-                      >
-                        <Text
-                          style={[
-                            styles.optionButtonText,
-                            selectedOrganization === null &&
-                              styles.optionButtonTextSelected,
-                          ]}
-                        >
-                          Aucune
-                        </Text>
-                      </TouchableOpacity>
-                      {organizations.map((org) => (
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Organisation (optionnel)</Text>
+                
+                {!showCreateOrganization ? (
+                  <>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      <View style={styles.optionButtons}>
                         <TouchableOpacity
-                          key={org.id}
                           style={[
                             styles.optionButton,
-                            selectedOrganization === org.id &&
+                            selectedOrganization === null &&
                               styles.optionButtonSelected,
                           ]}
-                          onPress={() => setSelectedOrganization(org.id)}
+                          onPress={() => setSelectedOrganization(null)}
                         >
                           <Text
                             style={[
                               styles.optionButtonText,
-                              selectedOrganization === org.id &&
+                              selectedOrganization === null &&
                                 styles.optionButtonTextSelected,
                             ]}
                           >
-                            {org.name}
+                            Aucune
                           </Text>
                         </TouchableOpacity>
-                      ))}
+                        {organizations.map((org) => (
+                          <TouchableOpacity
+                            key={org.id}
+                            style={[
+                              styles.optionButton,
+                              selectedOrganization === org.id &&
+                                styles.optionButtonSelected,
+                            ]}
+                            onPress={() => setSelectedOrganization(org.id)}
+                          >
+                            <Text
+                              style={[
+                                styles.optionButtonText,
+                                selectedOrganization === org.id &&
+                                  styles.optionButtonTextSelected,
+                              ]}
+                            >
+                              {org.name}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                        <TouchableOpacity
+                          style={styles.createOrgButton}
+                          onPress={() => setShowCreateOrganization(true)}
+                        >
+                          <Icon name="plus" size={16} color="#A1F763" />
+                          <Text style={styles.createOrgButtonText}>
+                            Créer une organisation
+                          </Text>
+                        </TouchableOpacity>
+                      </View>
+                    </ScrollView>
+                  </>
+                ) : (
+                  <View style={styles.createOrgForm}>
+                    <Text style={styles.subLabel}>Nouvelle organisation :</Text>
+                    
+                    <TextInput
+                      style={styles.input}
+                      placeholder="Nom de l'organisation"
+                      placeholderTextColor="#888"
+                      value={newOrganizationName}
+                      onChangeText={setNewOrganizationName}
+                    />
+                    
+                    <TextInput
+                      style={[styles.input, styles.textArea]}
+                      placeholder="Description (optionnel)"
+                      placeholderTextColor="#888"
+                      value={newOrganizationDescription}
+                      onChangeText={setNewOrganizationDescription}
+                      multiline
+                      numberOfLines={3}
+                    />
+                    
+                    <View style={styles.createOrgActions}>
+                      <TouchableOpacity
+                        style={styles.cancelOrgButton}
+                        onPress={() => {
+                          setShowCreateOrganization(false);
+                          setNewOrganizationName("");
+                          setNewOrganizationDescription("");
+                        }}
+                      >
+                        <Text style={styles.cancelOrgButtonText}>Annuler</Text>
+                      </TouchableOpacity>
+                      
+                      <TouchableOpacity
+                        style={[
+                          styles.saveOrgButton,
+                          creatingOrganization && styles.saveOrgButtonDisabled,
+                        ]}
+                        onPress={createOrganization}
+                        disabled={creatingOrganization}
+                      >
+                        {creatingOrganization ? (
+                          <ActivityIndicator size="small" color="#3B3B3B" />
+                        ) : (
+                          <Text style={styles.saveOrgButtonText}>Créer</Text>
+                        )}
+                      </TouchableOpacity>
                     </View>
-                  </ScrollView>
-                </View>
-              )}
+                  </View>
+                )}
+              </View>
 
               {/* Discipline */}
               {raceDisciplines.length > 0 && (
@@ -912,6 +1031,63 @@ const styles = StyleSheet.create({
     fontSize: 18,
     letterSpacing: 1,
     textTransform: "uppercase",
+  },
+  createOrgButton: {
+    backgroundColor: "rgba(161, 247, 99, 0.2)",
+    borderRadius: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#A1F763",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  createOrgButtonText: {
+    fontSize: 14,
+    color: "#A1F763",
+    fontWeight: "500",
+  },
+  createOrgForm: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(161, 247, 99, 0.3)",
+  },
+  textArea: {
+    height: 80,
+    textAlignVertical: "top",
+  },
+  createOrgActions: {
+    flexDirection: "row",
+    gap: 12,
+    marginTop: 12,
+  },
+  cancelOrgButton: {
+    flex: 1,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+  },
+  cancelOrgButtonText: {
+    color: "#fff",
+    fontWeight: "500",
+  },
+  saveOrgButton: {
+    flex: 1,
+    backgroundColor: "#A1F763",
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+  },
+  saveOrgButtonDisabled: {
+    opacity: 0.6,
+  },
+  saveOrgButtonText: {
+    color: "#3B3B3B",
+    fontWeight: "600",
   },
 });
 

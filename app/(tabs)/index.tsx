@@ -1,5 +1,6 @@
 import Map from "@/components/Map/Map";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
+import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -14,7 +15,6 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
-import { BlurView } from "expo-blur";
 import { useAuth } from "../../context/auth";
 import { GPXPoint, parseGpx } from "../../utils/gpxParser";
 
@@ -162,7 +162,7 @@ export default function HomeScreen() {
               <View>
                 <Text style={styles.welcome}>Bienvenue !</Text>
                 <Text style={styles.username}>
-                  {user?.lastname || "Utilisateur"}
+                  {user?.name || "Utilisateur"}
                 </Text>
               </View>
               <View style={styles.profileContainer}>
@@ -427,9 +427,6 @@ export default function HomeScreen() {
       </TouchableOpacity>
       <TouchableOpacity style={homeStyles.button} onPress={seeOrganisation}>
         <Text style={homeStyles.buttonText}>Voir les organisations</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={homeStyles.button} onPress={createRace}>
-        <Text style={homeStyles.buttonText}>Créer une course</Text>
       </TouchableOpacity>
       <TouchableOpacity style={homeStyles.button} onPress={seeRaces}>
         <Text style={homeStyles.buttonText}>Voir les courses disponibles</Text>

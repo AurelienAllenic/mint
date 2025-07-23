@@ -7,7 +7,8 @@ import { useAuth } from "../context/auth";
 import { loginStyles } from "../style/login.styles";
 
 export default function SignupScreen() {
-  const [name, setName] = useState("");
+  const [firstname, setFirstname] = useState("");
+  const [lastname, setLastname] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -16,7 +17,8 @@ export default function SignupScreen() {
   const { login } = useAuth();
 
   const disabled =
-    !name ||
+    !firstname ||
+    !lastname ||
     !email ||
     !password ||
     !confirmPassword ||
@@ -24,45 +26,35 @@ export default function SignupScreen() {
 
   const handleSignup = async () => {
     const API_URL = process.env.EXPO_PUBLIC_API_URL;
+    setError(""); // Reset error
 
-    const emailExists = await fetch(`${API_URL}/auth/email-exists`, {
-      method: "POST",
-      body: JSON.stringify({ email: email }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
+    try {
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: "POST",
+        body: JSON.stringify({
+          email: email,
+          firstname: firstname,
+          lastname: lastname,
+          password: password,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      });
 
-    console.log("Response:", emailExists);
+      console.log("Response:", res);
 
-    if (emailExists.ok) {
-      const data = await emailExists.json();
-      if (data.exists) {
-        setError("User already exists");
+      if (!res.ok) {
+        const errorData = await res.json();
+        setError(errorData.message || "Une erreur est survenue");
+        return;
+      } else {
+        // Inscription réussie, redirection vers la page de connexion
+        router.replace("/login");
       }
-      return;
-    }
-
-    const res = await fetch(`${API_URL}/auth/register`, {
-      method: "POST",
-      body: JSON.stringify({
-        email: email,
-        lastname: name,
-        password: password,
-      }),
-      headers: {
-        "Content-Type": "application/json",
-      },
-    });
-
-    console.log("Response:", res);
-
-    if (!res.ok) {
-      const errorData = await res.json();
-      setError(errorData.message || "Une erreur est survenue");
-      return;
-    } else {
-      router.replace("/login");
+    } catch (error) {
+      console.error("Erreur lors de l'inscription:", error);
+      setError("Erreur de connexion au serveur");
     }
   };
 
@@ -80,12 +72,22 @@ export default function SignupScreen() {
       <View style={loginStyles.inputSection}>
         <TextInput
           style={loginStyles.input}
+          placeholder="Prénom"
+          placeholderTextColor="#A1A1A1"
+          value={firstname}
+          onChangeText={setFirstname}
+          autoCapitalize="words"
+          onFocus={() => setFocusedInput("firstname")}
+          onBlur={() => setFocusedInput(null)}
+        />
+        <TextInput
+          style={loginStyles.input}
           placeholder="Nom"
           placeholderTextColor="#A1A1A1"
-          value={name}
-          onChangeText={setName}
+          value={lastname}
+          onChangeText={setLastname}
           autoCapitalize="words"
-          onFocus={() => setFocusedInput("name")}
+          onFocus={() => setFocusedInput("lastname")}
           onBlur={() => setFocusedInput(null)}
         />
         <TextInput

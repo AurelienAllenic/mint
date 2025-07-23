@@ -1,6 +1,6 @@
 "use client";
 
-import { router } from "expo-router";
+import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useAuth } from "../context/auth";
@@ -13,24 +13,42 @@ export default function LoginScreen() {
   const [error, setError] = useState("");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const { login } = useAuth();
+  const router = useRouter();
 
-  const handleLogin = async () => {
+  const handleLogin = async (isVisitor: boolean) => {
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL;
-      console.log("API_URL:", API_URL);
+      let response: Response = new Response();
+      let data: any = {};
+      if (!isVisitor) {
+        const API_URL = process.env.EXPO_PUBLIC_API_URL;
+        console.log("API_URL:", API_URL);
 
-      const response = await fetch(`${API_URL}/auth/login`, {
-        method: "POST",
-        body: JSON.stringify({ email, password }),
-        headers: { "Content-Type": "application/json" },
-      });
+        response = await fetch(`${API_URL}/auth/login`, {
+          method: "POST",
+          body: JSON.stringify({ email, password }),
+          headers: { "Content-Type": "application/json" },
+        });
 
-      console.log("Response status:", response.status);
-      const data = await response.json();
-      console.log("Response JSON:", data);
+        console.log("Response status:", response.status);
+        data = await response.json();
+        console.log("Response JSON:", data);
+      }
 
-      if (response.ok) {
-        login({ email: data.email, name: data.name, token: data.access_token });
+      if (response.ok && !isVisitor) {
+        login({
+          email: data.technicalUser.email,
+          name: `${data.userProfile.firstname} ${data.userProfile.lastname}`,
+          token: data.access_token,
+          isConnected: !isVisitor,
+        });
+        router.replace("/");
+      } else if (isVisitor) {
+        login({
+          email: "visitor@example.com",
+          name: "Visiteur",
+          token: "visitor-token",
+          isConnected: !isVisitor,
+        });
         router.replace("/");
       } else {
         setError(data.message || "Email ou mot de passe incorrect");
@@ -81,7 +99,10 @@ export default function LoginScreen() {
 
       {error !== "" && <Text style={loginStyles.errorText}>{error}</Text>}
 
-      <TouchableOpacity style={loginStyles.button} onPress={handleLogin}>
+      <TouchableOpacity
+        style={loginStyles.button}
+        onPress={() => handleLogin(false)}
+      >
         <Text style={loginStyles.buttonText}>Se connecter</Text>
       </TouchableOpacity>
 
@@ -129,6 +150,15 @@ export default function LoginScreen() {
           Inscrivez-vous
         </Text>
       </Text>
+      <View style={{ alignItems: "center", marginTop: 24 }}>
+        <Text style={loginStyles.termsText}>Vous êtes un visiteur ?</Text>
+        <TouchableOpacity
+          style={[loginStyles.button, { marginTop: 8 }]}
+          onPress={() => handleLogin(true)}
+        >
+          <Text style={loginStyles.buttonText}>Accèder aux courses</Text>
+        </TouchableOpacity>
+      </View>
     </View>
   );
 }

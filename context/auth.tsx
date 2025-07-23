@@ -6,12 +6,18 @@ type User = {
   id?: number;
   firstname?: string | null;
   lastname?: string | null;
+  isConnected: boolean;
 } | null;
 
 type AuthContextType = {
   user: User;
   token: string | null;
-  login: (userData: { email: string; name: string; token: string }) => void;
+  login: (userData: {
+    email: string;
+    name: string;
+    token: string;
+    isConnected: boolean;
+  }) => void;
   logout: () => void;
 };
 
@@ -29,7 +35,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     firstname?: string | null;
     lastname?: string | null;
   }) => {
-    setUser({ email: userData.email, name: userData.name });
+    setUser({
+      email: userData.email,
+      name: userData.name,
+      id: userData.id,
+      firstname: userData.firstname ?? null,
+      lastname: userData.lastname ?? null,
+      isConnected: true,
+    });
     setToken(userData.token);
   };
 

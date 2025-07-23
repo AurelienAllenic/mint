@@ -195,6 +195,7 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
             lineCap="round"
             miterLimit={10}
             geodesic={true}
+            lineDashPattern={[1]}
           />
         )}
         {location && (

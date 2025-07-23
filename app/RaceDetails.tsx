@@ -5,7 +5,6 @@ import { useEffect, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   Image,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -15,16 +14,21 @@ import { BlurView } from "expo-blur";
 import { useAuth } from "../context/auth";
 
 interface RaceDetails {
-  id: string;
+  id: number;
   name: string;
-  distance?: number;
+  start_date: string;
+  distance: number;
+  standard_distance?: {
+    id: number;
+    name: string;
+    distance: string;
+  };
   location?: string;
   date?: string;
   participants?: number;
   maxParticipants?: number;
   category?: string;
   description?: string;
-  start_date?: string;
   end_date?: string;
   positive_elevation?: number;
 }
@@ -193,20 +197,60 @@ export default function RaceDetailsScreen() {
     return total;
   }, [trackCoordinates]);
 
+  // Fonction pour gérer l'inscription à la course
+  const handleJoinRace = async () => {
+    if (!race?.id) return;
+
+    try {
+      // Ici vous pouvez ajouter la logique d'inscription à la course
+      console.log(
+        `Tentative d'inscription à la course ${race.id}: ${race.name}`
+      );
+
+      // Pour l'instant, on affiche juste une alerte
+      alert(`Inscription demandée pour "${race.name}"`);
+    } catch (error) {
+      console.error("Erreur lors de l'inscription:", error);
+      alert("Erreur lors de l'inscription à la course");
+    }
+  };
+
+  // Fonction pour formater la date
+  const formatDate = (dateString: string) => {
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString("fr-FR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+      });
+    } catch {
+      return dateString;
+    }
+  };
+
+  // Fonction pour formater la distance
+  const formatDistance = (distanceInMeters: number) => {
+    if (distanceInMeters >= 1000) {
+      return `${(distanceInMeters / 1000).toFixed(1)} km`;
+    }
+    return `${distanceInMeters} m`;
+  };
+
   if (loading) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#A1F763" />
           <Text style={styles.loadingText}>Chargement...</Text>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   if (error) {
     return (
-      <SafeAreaView style={styles.container}>
+      <View style={styles.container}>
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity
@@ -216,13 +260,13 @@ export default function RaceDetailsScreen() {
             <Text style={styles.backButtonText}>Retour</Text>
           </TouchableOpacity>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header avec design similaire à home */}
+    <View style={styles.container}>
+      {/* Header avec design identique à home */}
       <View style={styles.headerContainer}>
         <BlurView style={styles.header} intensity={40} tint="dark">
           <View style={styles.headerContent}>
@@ -242,55 +286,69 @@ export default function RaceDetailsScreen() {
         </BlurView>
       </View>
 
-      {/* Informations de la course */}
+      {/* Informations de la course avec le style home */}
       <View style={styles.raceInfoContainer}>
-        <BlurView style={styles.raceInfoBlur} intensity={20} tint="dark">
+        <BlurView style={styles.raceInfoBlur} intensity={40} tint="dark">
           <View style={styles.raceInfoContent}>
             <Text style={styles.raceName}>{race?.name}</Text>
             <View style={styles.raceDetails}>
-              {calculatedDistance > 0 && (
+              {/* Distance calculée depuis le tracé ou distance de l'API */}
+              {(calculatedDistance > 0 || race?.distance) && (
                 <View style={styles.detailItem}>
-                  <Icon name="map-marker-distance" size={16} color="#A1F763" />
+                  <Icon name="map-marker-distance" size={18} color="#A1F763" />
                   <Text style={styles.detailText}>
-                    {calculatedDistance.toFixed(2)} km
+                    {calculatedDistance > 0
+                      ? `${calculatedDistance.toFixed(2)} km`
+                      : race?.distance
+                      ? formatDistance(race.distance)
+                      : "Distance inconnue"}
                   </Text>
                 </View>
               )}
+
+              {/* Date de début */}
+              {race?.start_date && (
+                <View style={styles.detailItem}>
+                  <Icon name="calendar-start" size={18} color="#A1F763" />
+                  <Text style={styles.detailText}>
+                    {formatDate(race.start_date)}
+                  </Text>
+                </View>
+              )}
+
+              {/* Catégorie standard */}
+              {race?.standard_distance && (
+                <View style={styles.detailItem}>
+                  <Icon name="trophy" size={18} color="#A1F763" />
+                  <Text style={styles.detailText}>
+                    {race.standard_distance.name}
+                  </Text>
+                </View>
+              )}
+
+              {/* Informations additionnelles si disponibles */}
               {race?.location && (
                 <View style={styles.detailItem}>
-                  <Icon name="map-marker" size={16} color="#A1F763" />
+                  <Icon name="map-marker" size={18} color="#A1F763" />
                   <Text style={styles.detailText}>{race.location}</Text>
                 </View>
               )}
-              {race?.date && (
-                <View style={styles.detailItem}>
-                  <Icon name="calendar" size={16} color="#A1F763" />
-                  <Text style={styles.detailText}>{race.date}</Text>
-                </View>
-              )}
-              {race?.participants && race?.maxParticipants && (
-                <View style={styles.detailItem}>
-                  <Icon name="account-group" size={16} color="#A1F763" />
-                  <Text style={styles.detailText}>
-                    {race.participants}/{race.maxParticipants} participants
-                  </Text>
-                </View>
-              )}
+
               {race?.positive_elevation && (
                 <View style={styles.detailItem}>
-                  <Icon name="trending-up" size={16} color="#A1F763" />
+                  <Icon name="trending-up" size={18} color="#A1F763" />
                   <Text style={styles.detailText}>
                     {race.positive_elevation}m D+
                   </Text>
                 </View>
               )}
-              {race?.category && (
-                <View style={styles.detailItem}>
-                  <Icon name="tag" size={16} color="#A1F763" />
-                  <Text style={styles.detailText}>{race.category}</Text>
-                </View>
-              )}
             </View>
+
+            {race?.description && (
+              <View style={styles.descriptionContainer}>
+                <Text style={styles.descriptionText}>{race.description}</Text>
+              </View>
+            )}
           </View>
         </BlurView>
       </View>
@@ -309,13 +367,46 @@ export default function RaceDetailsScreen() {
         />
       </View>
 
-      {/* Bouton d'action */}
-      <View style={styles.actionContainer}>
-        <TouchableOpacity style={styles.joinButton}>
-          <Text style={styles.joinButtonText}>REJOINDRE</Text>
-        </TouchableOpacity>
+      {/* Boutons d'action avec le style home */}
+      <View style={styles.container__btns}>
+        <View style={styles.mainButtonsContainer}>
+          <TouchableOpacity
+            style={styles.joinButton}
+            onPress={handleJoinRace}
+            activeOpacity={0.8}
+          >
+            <BlurView style={styles.joinButtonBlur} intensity={40} tint="dark">
+              <Text style={styles.joinButtonText}>REJOINDRE</Text>
+            </BlurView>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.mainButton}
+            onPress={() => router.back()}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.mainButtonText}>RETOUR</Text>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.bottomButtons}>
+          <TouchableOpacity style={styles.roundButton}>
+            <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
+              <Icon name="share" size={28} color="#fff" />
+            </BlurView>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.roundButton}>
+            <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
+              <Icon name="heart-outline" size={28} color="#fff" />
+            </BlurView>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.roundButton}>
+            <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
+              <Icon name="information-outline" size={28} color="#fff" />
+            </BlurView>
+          </TouchableOpacity>
+        </View>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -442,12 +533,12 @@ const styles = StyleSheet.create({
   detailItem: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 12,
   },
   detailText: {
     color: "#fff",
     fontSize: 16,
-    opacity: 0.9,
+    fontWeight: "500",
   },
   mapContainer: {
     position: "absolute",
@@ -469,16 +560,22 @@ const styles = StyleSheet.create({
     zIndex: 1,
     pointerEvents: "none",
   },
-  actionContainer: {
+  container__btns: {
     position: "absolute",
     bottom: 20,
     left: 20,
     right: 20,
     zIndex: 5,
   },
+  mainButtonsContainer: {
+    flexDirection: "row",
+    gap: 12,
+    marginBottom: 15,
+  },
   joinButton: {
-    backgroundColor: "#A1F763",
+    backgroundColor: "rgba(105, 105, 105, 0.18)",
     borderRadius: 15,
+    flex: 1,
     height: 85,
     alignItems: "center",
     justifyContent: "center",
@@ -490,6 +587,7 @@ const styles = StyleSheet.create({
       height: 4,
     },
     elevation: 5,
+    overflow: "hidden",
   },
   joinButtonBlur: {
     borderRadius: 15,
@@ -500,10 +598,81 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   joinButtonText: {
+    color: "#FFFFFF",
+    fontWeight: "900",
+    fontSize: 18,
+    letterSpacing: 1,
+    textTransform: "uppercase",
+  },
+  mainButton: {
+    backgroundColor: "#A1F763",
+    borderRadius: 15,
+    flex: 1,
+    height: 85,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 5,
+    overflow: "hidden",
+  },
+  mainButtonText: {
     color: "#3B3B3B",
     fontWeight: "900",
     fontSize: 18,
     letterSpacing: 1,
     textTransform: "uppercase",
+  },
+  bottomButtons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginTop: 0,
+    marginBottom: 30,
+    gap: 15,
+  },
+  roundButton: {
+    backgroundColor: "rgba(105, 105, 105, 0.18)",
+    borderRadius: 15,
+    flex: 1,
+    height: 55,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 5,
+    overflow: "hidden",
+  },
+  roundButtonBlur: {
+    borderRadius: 15,
+    width: "100%",
+    height: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    overflow: "hidden",
+  },
+  descriptionContainer: {
+    marginTop: 16,
+    padding: 12,
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: "#A1F763",
+  },
+  descriptionText: {
+    color: "#fff",
+    fontSize: 14,
+    lineHeight: 20,
+    fontWeight: "400",
   },
 });

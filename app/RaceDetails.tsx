@@ -1,7 +1,7 @@
 import Map from "@/components/Map/Map";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -96,16 +96,43 @@ export default function RaceDetailsScreen() {
               })
             );
 
-            // Optimisation si trop de points
+            // Optimisation ultra-agressive pour les performances
             let optimizedCoords = coordinates;
-            if (coordinates.length > 200) {
-              const step = Math.ceil(coordinates.length / 200);
-              optimizedCoords = coordinates.filter(
-                (_, i) =>
-                  i === 0 || i === coordinates.length - 1 || i % step === 0
+
+            if (coordinates.length > 20) {
+              // Stratégie en 3 étapes :
+              // 1. On garde toujours début et fin
+              // 2. On prend quelques points clés au milieu (max 15 points intermédiaires)
+              // 3. Le composant Map fera le rendu vectoriel
+
+              const maxPoints = 15;
+              const step = Math.max(
+                1,
+                Math.floor((coordinates.length - 2) / maxPoints)
               );
+
+              optimizedCoords = [
+                coordinates[0], // Premier point obligatoire
+                ...coordinates.slice(1, -1).filter((_, i) => i % step === 0),
+                coordinates[coordinates.length - 1], // Dernier point obligatoire
+              ];
+
+              // S'assurer qu'on ne dépasse jamais 20 points au total
+              if (optimizedCoords.length > 20) {
+                const newStep = Math.ceil(optimizedCoords.length / 18);
+                optimizedCoords = [
+                  optimizedCoords[0],
+                  ...optimizedCoords
+                    .slice(1, -1)
+                    .filter((_, i) => i % newStep === 0),
+                  optimizedCoords[optimizedCoords.length - 1],
+                ];
+              }
             }
 
+            console.log(
+              `Tracé optimisé: ${coordinates.length} → ${optimizedCoords.length} points`
+            );
             setTrackCoordinates(optimizedCoords);
           }
         } else {
@@ -122,14 +149,12 @@ export default function RaceDetailsScreen() {
     fetchRaceData();
   }, [raceId, token]);
 
-  // Calculer la région pour centrer la carte sur le tracé
-  const getRegionFromCoordinates = (
-    coords: { latitude: number; longitude: number }[]
-  ) => {
-    if (!coords || coords.length === 0) return undefined;
+  // Calculer la région pour centrer la carte sur le tracé (mémorisé)
+  const mapRegion = useMemo(() => {
+    if (!trackCoordinates || trackCoordinates.length === 0) return undefined;
 
-    const latitudes = coords.map((c) => c.latitude);
-    const longitudes = coords.map((c) => c.longitude);
+    const latitudes = trackCoordinates.map((c) => c.latitude);
+    const longitudes = trackCoordinates.map((c) => c.longitude);
     const minLat = Math.min(...latitudes);
     const maxLat = Math.max(...latitudes);
     const minLng = Math.min(...longitudes);
@@ -141,17 +166,16 @@ export default function RaceDetailsScreen() {
       latitudeDelta: Math.max(0.01, (maxLat - minLat) * 1.2),
       longitudeDelta: Math.max(0.01, (maxLng - minLng) * 1.2),
     };
-  };
+  }, [trackCoordinates]);
 
-  // Calculer la distance du tracé
-  const calculateDistance = (
-    coords: { latitude: number; longitude: number }[]
-  ): number => {
-    if (!coords || coords.length < 2) return 0;
+  // Calculer la distance du tracé (mémorisé)
+  const calculatedDistance = useMemo(() => {
+    if (!trackCoordinates || trackCoordinates.length < 2) return 0;
+
     let total = 0;
-    for (let i = 1; i < coords.length; i++) {
-      const prev = coords[i - 1];
-      const curr = coords[i];
+    for (let i = 1; i < trackCoordinates.length; i++) {
+      const prev = trackCoordinates[i - 1];
+      const curr = trackCoordinates[i];
       const R = 6371; // Rayon de la Terre en km
       const dLat = ((curr.latitude - prev.latitude) * Math.PI) / 180;
       const dLon = ((curr.longitude - prev.longitude) * Math.PI) / 180;
@@ -167,7 +191,7 @@ export default function RaceDetailsScreen() {
       total += R * c;
     }
     return total;
-  };
+  }, [trackCoordinates]);
 
   if (loading) {
     return (
@@ -195,8 +219,6 @@ export default function RaceDetailsScreen() {
       </SafeAreaView>
     );
   }
-
-  const calculatedDistance = calculateDistance(trackCoordinates);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -278,11 +300,7 @@ export default function RaceDetailsScreen() {
         <Map
           user={{ email: user?.email }}
           gpxCoordinates={trackCoordinates}
-          region={
-            trackCoordinates.length > 0
-              ? getRegionFromCoordinates(trackCoordinates)
-              : undefined
-          }
+          region={mapRegion}
         />
         <Image
           source={require("@/assets/images/radial-gradient.png")}

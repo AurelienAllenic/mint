@@ -131,14 +131,29 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
     }
   }, [location, hasCentered, gpxCoordinates]);
 
-  const DOWNSAMPLE_STEP = 10;
-  function downsampleCoordinates(
-    coords: LatLng[],
-    step: number = DOWNSAMPLE_STEP
-  ) {
-    if (!coords || coords.length <= step) return coords;
-    return coords.filter((_, i) => i % step === 0);
-  }
+  // Fonction d'optimisation intelligente du tracé
+  const optimizeTrack = (coords: LatLng[]) => {
+    if (!coords || coords.length <= 30) return coords;
+
+    // Algorithme de simplification Douglas-Peucker simplifié
+    const simplified = [];
+    const step = Math.max(1, Math.floor(coords.length / 25)); // Maximum 25 points
+
+    // Toujours garder le premier point
+    simplified.push(coords[0]);
+
+    // Ajouter des points intermédiaires avec un pas adaptatif
+    for (let i = step; i < coords.length - step; i += step) {
+      simplified.push(coords[i]);
+    }
+
+    // Toujours garder le dernier point
+    if (coords.length > 1) {
+      simplified.push(coords[coords.length - 1]);
+    }
+
+    return simplified;
+  };
 
   return (
     <View style={styles.container}>
@@ -173,10 +188,13 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
       >
         {gpxCoordinates && gpxCoordinates.length > 1 && (
           <Polyline
-            coordinates={gpxCoordinates}
+            coordinates={optimizeTrack(gpxCoordinates)}
             strokeColor="#A1F763"
             strokeWidth={4}
-            lineDashPattern={[1]}
+            lineJoin="round"
+            lineCap="round"
+            miterLimit={10}
+            geodesic={true}
           />
         )}
         {location && (

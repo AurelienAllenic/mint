@@ -290,7 +290,6 @@ export default function RaceDetailsScreen() {
       <View style={styles.raceInfoContainer}>
         <BlurView style={styles.raceInfoBlur} intensity={40} tint="dark">
           <View style={styles.raceInfoContent}>
-            <Text style={styles.raceName}>{race?.name}</Text>
             <View style={styles.raceDetails}>
               {/* Distance calculée depuis le tracé ou distance de l'API */}
               {(calculatedDistance > 0 || race?.distance) && (

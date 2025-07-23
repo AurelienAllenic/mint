@@ -191,6 +191,16 @@ export default function HomeScreen() {
           {/* Menu dropdown déplacé à l'extérieur du BlurView */}
           {showProfileMenu && (
             <View style={styles.profileMenu}>
+              <TouchableOpacity 
+                style={styles.menuItem} 
+                onPress={() => {
+                  setShowProfileMenu(false);
+                  router.push("/profile");
+                }}
+              >
+                <Icon name="account" size={20} color="#fff" />
+                <Text style={styles.menuText}>Mon Profil</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.menuItem} onPress={handleLogout}>
                 <Icon name="logout" size={20} color="#fff" />
                 <Text style={styles.menuText}>Se déconnecter</Text>

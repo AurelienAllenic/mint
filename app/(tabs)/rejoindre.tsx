@@ -8,11 +8,20 @@ import {
   SafeAreaView,
   ActivityIndicator,
   Alert,
+  FlatList,
+  Image,
+  Animated,
+  Dimensions,
 } from "react-native";
 import { useRouter } from "expo-router";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
+import { LinearGradient } from "expo-linear-gradient";
 import { BlurView } from "expo-blur";
 import { useAuth } from "../../context/auth";
+
+const { width } = Dimensions.get("window");
+const CARD_WIDTH = width * 0.8;
+const CARD_MARGIN = width * 0.05;
 
 interface Race {
   id: string;
@@ -23,6 +32,7 @@ interface Race {
   participants?: number;
   maxParticipants?: number;
   category?: string;
+  image?: string;
 }
 
 export default function RejoindreScreen() {
@@ -32,8 +42,20 @@ export default function RejoindreScreen() {
   const [mesRaces, setMesRaces] = useState<Race[]>([]);
   const [racesProches, setRacesProches] = useState<Race[]>([]);
   const [racesSponsos, setRacesSponsos] = useState<Race[]>([]);
+  const scrollY = new Animated.Value(0);
 
-  // Simulation de données pour l'exemple
+  const headerOpacity = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [1, 0.8],
+    extrapolate: "clamp",
+  });
+
+  const headerTranslateY = scrollY.interpolate({
+    inputRange: [0, 100],
+    outputRange: [0, -20],
+    extrapolate: "clamp",
+  });
+
   useEffect(() => {
     const fetchRaces = async () => {
       setLoading(true);
@@ -45,7 +67,6 @@ export default function RejoindreScreen() {
           ? token
           : `Bearer ${token}`;
 
-        // Récupérer toutes les courses
         const response = await fetch(`${API_URL}/races`, {
           method: "GET",
           headers: {
@@ -56,14 +77,49 @@ export default function RejoindreScreen() {
 
         if (response.ok) {
           const data = await response.json();
-          if (Array.isArray(data)) {
-            // Pour l'exemple, on catégorise les courses
-            setMesRaces(data.slice(0, 3)); // Premières 3 courses comme "mes courses"
-            setRacesProches(data.slice(3, 8)); // Suivantes comme "proches"
-            setRacesSponsos(data.slice(8)); // Reste comme "sponsos"
-          }
+          const trailImages = [
+            "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
+            "https://mesinfos.fr/content/articles/968/A151968/image-827110557111684162009034.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-317964533121684162009039.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-496377705131684162009042.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-729770848141684162009046.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-973913459151684162009048.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-555232024161684162009055.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-216753066181684162009079.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-219702519171684162009064.png",
+            "https://www.latransju.com/wp-content/uploads/2022/12/cv-lilian-menetrier-transju_trail-2022-dimanche-hd-52-date-jj-min-2048x1365.jpg",
+          ];
+
+          const getRandomImage = () => {
+            return trailImages[Math.floor(Math.random() * trailImages.length)];
+          };
+
+          const coursesAvecImages = data.map((race: Race) => ({
+            ...race,
+            image: race.image || getRandomImage(),
+          }));
+
+          setMesRaces(coursesAvecImages.slice(0, 3));
+          setRacesProches(coursesAvecImages.slice(3, 8));
+          setRacesSponsos(coursesAvecImages.slice(8));
         } else {
-          // Données factices pour la démonstration avec plus d'informations
+          const trailImages = [
+            "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
+            "https://mesinfos.fr/content/articles/968/A151968/image-827110557111684162009034.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-317964533121684162009039.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-496377705131684162009042.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-729770848141684162009046.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-973913459151684162009048.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-555232024161684162009055.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-216753066181684162009079.png",
+            "https://mesinfos.fr/content/articles/968/A151968/image-219702519171684162009064.png",
+            "https://www.latransju.com/wp-content/uploads/2022/12/cv-lilian-menetrier-transju_trail-2022-dimanche-hd-52-date-jj-min-2048x1365.jpg",
+          ];
+
+          const getRandomImage = () => {
+            return trailImages[Math.floor(Math.random() * trailImages.length)];
+          };
+
           const fakeData: Race[] = [
             {
               id: "1",
@@ -74,6 +130,7 @@ export default function RejoindreScreen() {
               participants: 2500,
               maxParticipants: 3000,
               category: "Marathon",
+              image: getRandomImage(),
             },
             {
               id: "2",
@@ -84,6 +141,7 @@ export default function RejoindreScreen() {
               participants: 150,
               maxParticipants: 200,
               category: "Trail",
+              image: getRandomImage(),
             },
             {
               id: "3",
@@ -94,6 +152,7 @@ export default function RejoindreScreen() {
               participants: 45,
               maxParticipants: 100,
               category: "Course caritative",
+              image: getRandomImage(),
             },
             {
               id: "4",
@@ -104,6 +163,7 @@ export default function RejoindreScreen() {
               participants: 800,
               maxParticipants: 1000,
               category: "Semi-Marathon",
+              image: getRandomImage(),
             },
             {
               id: "5",
@@ -114,6 +174,7 @@ export default function RejoindreScreen() {
               participants: 300,
               maxParticipants: 500,
               category: "10km",
+              image: getRandomImage(),
             },
             {
               id: "6",
@@ -124,12 +185,13 @@ export default function RejoindreScreen() {
               participants: 120,
               maxParticipants: 250,
               category: "Course écologique",
+              image: getRandomImage(),
             },
           ];
 
-          setMesRaces(fakeData.slice(0, 2)); // Marathon de Paris + Trail du Mont Blanc
-          setRacesProches(fakeData.slice(2, 5)); // Course Solidaire + Semi-Marathon + 10km
-          setRacesSponsos(fakeData.slice(5)); // Run For The Ocean
+          setMesRaces(fakeData.slice(0, 2));
+          setRacesProches(fakeData.slice(2, 5));
+          setRacesSponsos(fakeData.slice(5));
         }
       } catch (error) {
         console.error("Erreur lors du chargement des courses:", error);
@@ -142,41 +204,101 @@ export default function RejoindreScreen() {
     fetchRaces();
   }, [token]);
 
-  const RaceCard = ({ race }: { race: Race }) => (
-    <TouchableOpacity
-      style={styles.raceCard}
-      onPress={() => {
-        // Navigation vers les détails de la course
-        router.push({
-          pathname: "/RaceDetails",
-          params: { raceId: race.id },
-        });
-      }}
-    >
-      <BlurView style={styles.raceCardBlur} intensity={20} tint="dark">
-        <View style={styles.raceCardContent}>
-          <View style={styles.raceHeader}>
-            <Text style={styles.raceName}>{race.name}</Text>
-            <Icon name="chevron-right" size={24} color="#A1F763" />
+  const RaceCard = ({ race }: { race: Race }) => {
+    const scaleValue = new Animated.Value(1);
+
+    const onPressIn = () => {
+      Animated.spring(scaleValue, {
+        toValue: 0.95,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    const onPressOut = () => {
+      Animated.spring(scaleValue, {
+        toValue: 1,
+        useNativeDriver: true,
+      }).start();
+    };
+
+    return (
+      <Animated.View style={{ transform: [{ scale: scaleValue }] }}>
+        <TouchableOpacity
+          activeOpacity={0.9}
+          onPressIn={onPressIn}
+          onPressOut={onPressOut}
+          onPress={() => {
+            router.push({
+              pathname: "/RaceDetails",
+              params: { raceId: race.id },
+            });
+          }}
+        >
+          <View style={styles.raceCard}>
+            {race.image ? (
+              <Image
+                source={{ uri: race.image }}
+                style={styles.raceImage}
+                resizeMode="cover"
+              />
+            ) : (
+              <View style={styles.raceImagePlaceholder}>
+                <Icon name="image-off" size={40} color="#A1F763" />
+              </View>
+            )}
+            <LinearGradient
+              colors={["transparent", "rgba(0,0,0,0.9)"]}
+              style={styles.raceGradient}
+            />
+            <View style={styles.raceCardContent}>
+              <View style={styles.raceHeader}>
+                <Text style={styles.raceName} numberOfLines={2}>
+                  {race.name}
+                </Text>
+                <Icon name="chevron-right" size={24} color="#A1F763" />
+              </View>
+              <View style={styles.raceInfo}>
+                {race.distance && (
+                  <View style={styles.raceDetail}>
+                    <Icon
+                      name="map-marker-distance"
+                      size={14}
+                      color="#A1F763"
+                    />
+                    <Text style={styles.raceDetailText}>
+                      {race.distance} km
+                    </Text>
+                  </View>
+                )}
+                {race.location && (
+                  <View style={styles.raceDetail}>
+                    <Icon name="map-marker" size={14} color="#A1F763" />
+                    <Text style={styles.raceDetailText} numberOfLines={1}>
+                      {race.location}
+                    </Text>
+                  </View>
+                )}
+                {race.participants && race.maxParticipants && (
+                  <View style={styles.raceDetail}>
+                    <Icon name="account-group" size={14} color="#A1F763" />
+                    <Text style={styles.raceDetailText}>
+                      {race.participants}/{race.maxParticipants}
+                    </Text>
+                  </View>
+                )}
+                {race.date && (
+                  <View style={styles.raceDetail}>
+                    <Icon name="calendar" size={14} color="#A1F763" />
+                    <Text style={styles.raceDetailText}>{race.date}</Text>
+                  </View>
+                )}
+              </View>
+            </View>
           </View>
-          <View style={styles.raceInfo}>
-            {race.distance && (
-              <Text style={styles.raceDetail}>📍 {race.distance} km</Text>
-            )}
-            {race.location && (
-              <Text style={styles.raceDetail}>🌍 {race.location}</Text>
-            )}
-            {race.participants && race.maxParticipants && (
-              <Text style={styles.raceDetail}>
-                👥 {race.participants}/{race.maxParticipants}
-              </Text>
-            )}
-            {race.date && <Text style={styles.raceDetail}>📅 {race.date}</Text>}
-          </View>
-        </View>
-      </BlurView>
-    </TouchableOpacity>
-  );
+        </TouchableOpacity>
+      </Animated.View>
+    );
+  };
 
   const CategorySection = ({
     title,
@@ -189,20 +311,45 @@ export default function RejoindreScreen() {
   }) => (
     <View style={styles.categorySection}>
       <View style={styles.categoryHeader}>
-        <Icon name={icon as any} size={24} color="#A1F763" />
+        <LinearGradient
+          colors={["#A1F763", "#5D9C3E"]}
+          style={styles.categoryIconContainer}
+        >
+          <Icon name={icon as any} size={20} color="#212121" />
+        </LinearGradient>
         <Text style={styles.categoryTitle}>{title}</Text>
       </View>
       {races.length === 0 ? (
-        <Text style={styles.emptyText}>Aucune course disponible</Text>
+        <View style={styles.emptyContainer}>
+          <Icon name="alert-circle-outline" size={40} color="#888" />
+          <Text style={styles.emptyText}>Aucune course disponible</Text>
+        </View>
       ) : (
-        races.map((race) => <RaceCard key={race.id} race={race} />)
+        <FlatList
+          data={races}
+          renderItem={({ item }) => <RaceCard race={item} />}
+          keyExtractor={(item) => item.id}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.horizontalScrollContent}
+          snapToInterval={CARD_WIDTH + CARD_MARGIN * 2}
+          decelerationRate="fast"
+        />
       )}
     </View>
   );
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
+      <Animated.View
+        style={[
+          styles.header,
+          {
+            opacity: headerOpacity,
+            transform: [{ translateY: headerTranslateY }],
+          },
+        ]}
+      >
         <TouchableOpacity
           style={styles.backButton}
           onPress={() => router.back()}
@@ -211,7 +358,7 @@ export default function RejoindreScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Rejoindre une course</Text>
         <View style={styles.placeholder} />
-      </View>
+      </Animated.View>
 
       {loading ? (
         <View style={styles.loadingContainer}>
@@ -219,10 +366,15 @@ export default function RejoindreScreen() {
           <Text style={styles.loadingText}>Chargement des courses...</Text>
         </View>
       ) : (
-        <ScrollView
+        <Animated.ScrollView
           style={styles.scrollContainer}
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+            { useNativeDriver: true }
+          )}
+          scrollEventThrottle={16}
         >
           <CategorySection
             title="Mes courses"
@@ -241,7 +393,7 @@ export default function RejoindreScreen() {
             races={racesSponsos}
             icon="star"
           />
-        </ScrollView>
+        </Animated.ScrollView>
       )}
     </SafeAreaView>
   );
@@ -250,7 +402,7 @@ export default function RejoindreScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#181818",
+    backgroundColor: "#0A0A0A",
   },
   header: {
     flexDirection: "row",
@@ -258,16 +410,21 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingHorizontal: 20,
     paddingVertical: 16,
+    backgroundColor: "#0A0A0A",
     borderBottomWidth: 1,
-    borderBottomColor: "#A1F763",
+    borderBottomColor: "rgba(161, 247, 99, 0.2)",
+    zIndex: 100,
   },
   backButton: {
     padding: 8,
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    borderRadius: 10,
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: "bold",
     color: "#A1F763",
+    fontFamily: "HelveticaNowMicroBold",
   },
   placeholder: {
     width: 40,
@@ -276,17 +433,20 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#0A0A0A",
   },
   loadingText: {
     color: "#fff",
     fontSize: 16,
     marginTop: 16,
+    fontFamily: "HelveticaNowMicroRegular",
   },
   scrollContainer: {
     flex: 1,
+    backgroundColor: "#0A0A0A",
   },
   scrollContent: {
-    padding: 20,
+    paddingTop: 20,
     paddingBottom: 40,
   },
   categorySection: {
@@ -295,58 +455,106 @@ const styles = StyleSheet.create({
   categoryHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 16,
+    marginBottom: 20,
+    paddingHorizontal: 20,
+  },
+  categoryIconContainer: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
   },
   categoryTitle: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: "bold",
     color: "#fff",
-    marginLeft: 12,
+    fontFamily: "HelveticaNowMicroBold",
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 40,
   },
   emptyText: {
     color: "#888",
     fontSize: 16,
-    textAlign: "center",
-    padding: 20,
-    fontStyle: "italic",
+    marginTop: 10,
+    fontFamily: "HelveticaNowMicroRegular",
+  },
+  horizontalScrollContent: {
+    paddingLeft: 20,
+    paddingRight: 20,
   },
   raceCard: {
-    marginBottom: 12,
+    width: CARD_WIDTH,
+    height: CARD_WIDTH * 0.8,
+    marginRight: CARD_MARGIN,
     borderRadius: 16,
     overflow: "hidden",
-    shadowColor: "#000",
+    backgroundColor: "#1E1E1E",
+    shadowColor: "#A1F763",
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    elevation: 3,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 5,
   },
-  raceCardBlur: {
-    backgroundColor: "rgba(105, 105, 105, 0.18)",
+  raceImage: {
+    width: "100%",
+    height: "100%",
+    position: "absolute",
+  },
+  raceImagePlaceholder: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#1E1E1E",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  raceGradient: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: "70%",
   },
   raceCardContent: {
+    position: "absolute",
+    bottom: 0,
+    left: 0,
+    right: 0,
     padding: 16,
   },
   raceHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
+    marginBottom: 12,
   },
   raceName: {
     fontSize: 18,
     fontWeight: "bold",
-    color: "#A1F763",
+    color: "#fff",
     flex: 1,
+    marginRight: 8,
+    fontFamily: "HelveticaNowMicroBold",
+    textShadowColor: "rgba(0, 0, 0, 0.5)",
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 2,
   },
   raceInfo: {
-    gap: 4,
+    gap: 8,
   },
   raceDetail: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  raceDetailText: {
     fontSize: 14,
     color: "#fff",
-    opacity: 0.8,
+    opacity: 0.9,
+    fontFamily: "HelveticaNowMicroRegular",
   },
 });

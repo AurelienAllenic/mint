@@ -56,20 +56,30 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   });
   const [customDistance, setCustomDistance] = useState("21.1");
   const [positiveElevation, setPositiveElevation] = useState("150");
-  const [standardDistances, setStandardDistances] = useState<StandardDistance[]>([]);
-  const [selectedStandardDistance, setSelectedStandardDistance] = useState<number | null>(null);
+  const [standardDistances, setStandardDistances] = useState<
+    StandardDistance[]
+  >([]);
+  const [selectedStandardDistance, setSelectedStandardDistance] = useState<
+    number | null
+  >(null);
   const [raceDisciplines, setRaceDisciplines] = useState<RaceDiscipline[]>([]);
-  const [selectedDiscipline, setSelectedDiscipline] = useState<number | null>(null);
+  const [selectedDiscipline, setSelectedDiscipline] = useState<number | null>(
+    null
+  );
   const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrganization, setSelectedOrganization] = useState<number | null>(null);
-  const [gpxFileUri, setGpxFileUri] = useState<string | null>(initialGpxUri || null);
+  const [selectedOrganization, setSelectedOrganization] = useState<
+    number | null
+  >(null);
+  const [gpxFileUri, setGpxFileUri] = useState<string | null>(
+    initialGpxUri || null
+  );
   const [gpxFileName, setGpxFileName] = useState<string | null>(null);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  
+
   const router = useRouter();
   const { token } = useAuth();
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
@@ -79,13 +89,18 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
     const loadReferenceData = async () => {
       setLoadingData(true);
       try {
-        const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
-        
+        const authHeader = token?.startsWith("Bearer ")
+          ? token
+          : `Bearer ${token}`;
+
         // Charger les distances standards
         try {
-          const standardDistancesResponse = await fetch(`${API_URL}/standard-distances`, {
-            headers: { Authorization: authHeader },
-          });
+          const standardDistancesResponse = await fetch(
+            `${API_URL}/standard-distances`,
+            {
+              headers: { Authorization: authHeader },
+            }
+          );
           if (standardDistancesResponse.ok) {
             const distances = await standardDistancesResponse.json();
             setStandardDistances(distances);
@@ -96,9 +111,12 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
         // Charger les disciplines (si endpoint disponible)
         try {
-          const disciplinesResponse = await fetch(`${API_URL}/race-disciplines`, {
-            headers: { Authorization: authHeader },
-          });
+          const disciplinesResponse = await fetch(
+            `${API_URL}/race-disciplines`,
+            {
+              headers: { Authorization: authHeader },
+            }
+          );
           if (disciplinesResponse.ok) {
             const disciplines = await disciplinesResponse.json();
             setRaceDisciplines(disciplines);
@@ -109,9 +127,12 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
         // Charger les organisations (si endpoint disponible)
         try {
-          const organizationsResponse = await fetch(`${API_URL}/organizations`, {
-            headers: { Authorization: authHeader },
-          });
+          const organizationsResponse = await fetch(
+            `${API_URL}/organizations`,
+            {
+              headers: { Authorization: authHeader },
+            }
+          );
           if (organizationsResponse.ok) {
             const orgs = await organizationsResponse.json();
             setOrganizations(orgs);
@@ -119,7 +140,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         } catch (e) {
           console.log("Erreur chargement organisations:", e);
         }
-
       } catch (err) {
         console.error("Erreur lors du chargement des données:", err);
       } finally {
@@ -172,7 +192,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
     // Validation distance : soit standard soit custom
     if (!selectedStandardDistance && !customDistance.trim()) {
-      setError("Veuillez sélectionner une distance standard ou saisir une distance personnalisée");
+      setError(
+        "Veuillez sélectionner une distance standard ou saisir une distance personnalisée"
+      );
       return false;
     }
 
@@ -194,7 +216,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
       // Créer FormData pour l'upload multipart
       const formData = new FormData();
-      
+
       formData.append("name", raceName.trim());
       formData.append("start_date", startDate.toISOString());
       formData.append("end_date", endDate.toISOString());
@@ -202,7 +224,10 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
       // Distance : soit standard soit custom
       if (selectedStandardDistance) {
-        formData.append("standard_distance_id", selectedStandardDistance.toString());
+        formData.append(
+          "standard_distance_id",
+          selectedStandardDistance.toString()
+        );
       } else if (customDistance.trim()) {
         // Convertir en mètres si nécessaire
         const distanceInMeters = parseFloat(customDistance) * 1000; // Supposant que l'utilisateur saisit en km
@@ -233,40 +258,38 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         method: "POST",
         headers: {
           "Content-Type": "multipart/form-data",
-          Authorization: token.startsWith("Bearer ") ? token : `Bearer ${token}`,
+          Authorization: token.startsWith("Bearer ")
+            ? token
+            : `Bearer ${token}`,
         },
         body: formData,
       });
 
       if (response.ok) {
         const newRace = await response.json();
-        Alert.alert(
-          "Succès",
-          "Course créée avec succès !",
-          [
-            {
-              text: "Voir la course",
-              onPress: () => router.push(`/RaceDetails?raceId=${newRace.id}`),
-            },
-            {
-              text: "Retour",
-              onPress: () => router.back(),
-            },
-          ]
-        );
-        
+        Alert.alert("Succès", "Course créée avec succès !", [
+          {
+            text: "Voir la course",
+            onPress: () => router.push(`/RaceDetails?raceId=${newRace.id}`),
+          },
+          {
+            text: "Retour",
+            onPress: () => router.back(),
+          },
+        ]);
+
         // Reset du formulaire avec valeurs par défaut
         setRaceName("Course du Lac de Paris");
         const newStartDate = new Date();
         newStartDate.setDate(newStartDate.getDate() + 7);
         newStartDate.setHours(9, 0, 0, 0);
         setStartDate(newStartDate);
-        
+
         const newEndDate = new Date();
         newEndDate.setDate(newEndDate.getDate() + 7);
         newEndDate.setHours(12, 0, 0, 0);
         setEndDate(newEndDate);
-        
+
         setCustomDistance("21.1");
         setPositiveElevation("150");
         setSelectedStandardDistance(null);
@@ -274,7 +297,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         setSelectedOrganization(null);
         setGpxFileUri(null);
         setGpxFileName(null);
-        
       } else {
         const errorText = await response.text();
         console.log("Erreur API:", response.status, errorText);
@@ -335,7 +357,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       />
 
       {/* Content */}
-      <ScrollView 
+      <ScrollView
         style={styles.scrollContainer}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
@@ -343,7 +365,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         <View style={styles.formContainer}>
           <BlurView style={styles.formBlur} intensity={40} tint="dark">
             <View style={styles.formContent}>
-              
               {/* Nom de la course */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Nom de la course *</Text>
@@ -365,9 +386,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     onPress={() => setShowStartDatePicker(true)}
                   >
                     <Icon name="calendar" size={20} color="#A1F763" />
-                    <Text style={styles.dateText}>
-                      {formatDate(startDate)}
-                    </Text>
+                    <Text style={styles.dateText}>{formatDate(startDate)}</Text>
                   </TouchableOpacity>
                 </View>
 
@@ -378,9 +397,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     onPress={() => setShowEndDatePicker(true)}
                   >
                     <Icon name="calendar" size={20} color="#A1F763" />
-                    <Text style={styles.dateText}>
-                      {formatDate(endDate)}
-                    </Text>
+                    <Text style={styles.dateText}>{formatDate(endDate)}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -388,29 +405,36 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
               {/* Distance */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Distance</Text>
-                
+
                 {/* Distance standard */}
                 {standardDistances.length > 0 && (
                   <View style={styles.distanceOptions}>
                     <Text style={styles.subLabel}>Distance standard :</Text>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                    >
                       <View style={styles.distanceButtons}>
                         {standardDistances.map((distance) => (
                           <TouchableOpacity
                             key={distance.id}
                             style={[
                               styles.distanceButton,
-                              selectedStandardDistance === distance.id && styles.distanceButtonSelected
+                              selectedStandardDistance === distance.id &&
+                                styles.distanceButtonSelected,
                             ]}
                             onPress={() => {
                               setSelectedStandardDistance(distance.id);
                               setCustomDistance(""); // Reset custom distance
                             }}
                           >
-                            <Text style={[
-                              styles.distanceButtonText,
-                              selectedStandardDistance === distance.id && styles.distanceButtonTextSelected
-                            ]}>
+                            <Text
+                              style={[
+                                styles.distanceButtonText,
+                                selectedStandardDistance === distance.id &&
+                                  styles.distanceButtonTextSelected,
+                              ]}
+                            >
                               {distance.name}
                             </Text>
                           </TouchableOpacity>
@@ -422,7 +446,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
                 {/* Distance personnalisée */}
                 <View style={styles.customDistanceContainer}>
-                  <Text style={styles.subLabel}>Distance personnalisée (km) :</Text>
+                  <Text style={styles.subLabel}>
+                    Distance personnalisée (km) :
+                  </Text>
                   <TextInput
                     style={styles.input}
                     placeholder="21.1"
@@ -459,14 +485,18 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                       <TouchableOpacity
                         style={[
                           styles.optionButton,
-                          selectedOrganization === null && styles.optionButtonSelected
+                          selectedOrganization === null &&
+                            styles.optionButtonSelected,
                         ]}
                         onPress={() => setSelectedOrganization(null)}
                       >
-                        <Text style={[
-                          styles.optionButtonText,
-                          selectedOrganization === null && styles.optionButtonTextSelected
-                        ]}>
+                        <Text
+                          style={[
+                            styles.optionButtonText,
+                            selectedOrganization === null &&
+                              styles.optionButtonTextSelected,
+                          ]}
+                        >
                           Aucune
                         </Text>
                       </TouchableOpacity>
@@ -475,14 +505,18 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                           key={org.id}
                           style={[
                             styles.optionButton,
-                            selectedOrganization === org.id && styles.optionButtonSelected
+                            selectedOrganization === org.id &&
+                              styles.optionButtonSelected,
                           ]}
                           onPress={() => setSelectedOrganization(org.id)}
                         >
-                          <Text style={[
-                            styles.optionButtonText,
-                            selectedOrganization === org.id && styles.optionButtonTextSelected
-                          ]}>
+                          <Text
+                            style={[
+                              styles.optionButtonText,
+                              selectedOrganization === org.id &&
+                                styles.optionButtonTextSelected,
+                            ]}
+                          >
                             {org.name}
                           </Text>
                         </TouchableOpacity>
@@ -501,14 +535,18 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                       <TouchableOpacity
                         style={[
                           styles.optionButton,
-                          selectedDiscipline === null && styles.optionButtonSelected
+                          selectedDiscipline === null &&
+                            styles.optionButtonSelected,
                         ]}
                         onPress={() => setSelectedDiscipline(null)}
                       >
-                        <Text style={[
-                          styles.optionButtonText,
-                          selectedDiscipline === null && styles.optionButtonTextSelected
-                        ]}>
+                        <Text
+                          style={[
+                            styles.optionButtonText,
+                            selectedDiscipline === null &&
+                              styles.optionButtonTextSelected,
+                          ]}
+                        >
                           Aucune
                         </Text>
                       </TouchableOpacity>
@@ -517,14 +555,18 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                           key={discipline.id}
                           style={[
                             styles.optionButton,
-                            selectedDiscipline === discipline.id && styles.optionButtonSelected
+                            selectedDiscipline === discipline.id &&
+                              styles.optionButtonSelected,
                           ]}
                           onPress={() => setSelectedDiscipline(discipline.id)}
                         >
-                          <Text style={[
-                            styles.optionButtonText,
-                            selectedDiscipline === discipline.id && styles.optionButtonTextSelected
-                          ]}>
+                          <Text
+                            style={[
+                              styles.optionButtonText,
+                              selectedDiscipline === discipline.id &&
+                                styles.optionButtonTextSelected,
+                            ]}
+                          >
                             {discipline.name}
                           </Text>
                         </TouchableOpacity>
@@ -537,7 +579,10 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
               {/* Fichier GPX */}
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Fichier GPX *</Text>
-                <TouchableOpacity style={styles.fileButton} onPress={pickGpxFile}>
+                <TouchableOpacity
+                  style={styles.fileButton}
+                  onPress={pickGpxFile}
+                >
                   <Icon name="file-upload" size={24} color="#A1F763" />
                   <Text style={styles.fileButtonText}>
                     {gpxFileName ? gpxFileName : "Choisir un fichier GPX"}
@@ -546,7 +591,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                 {gpxFileName && (
                   <View style={styles.fileSelected}>
                     <Icon name="check-circle" size={16} color="#A1F763" />
-                    <Text style={styles.fileSelectedText}>Fichier sélectionné</Text>
+                    <Text style={styles.fileSelectedText}>
+                      Fichier sélectionné
+                    </Text>
                   </View>
                 )}
               </View>
@@ -558,7 +605,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                   <Text style={styles.errorText}>{error}</Text>
                 </View>
               )}
-
             </View>
           </BlurView>
         </View>

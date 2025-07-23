@@ -14,10 +14,21 @@ import { BlurView } from "expo-blur";
 import { useAuth } from "../context/auth";
 
 interface RaceDetails {
-  id: number;
+  _id: string;
+  id?: string;
   name: string;
-  start_date: string;
-  distance: number;
+  startDate: string;
+  endDate?: string;
+  organization?: {
+    _id: string;
+    name: string;
+  };
+  runners?: any[];
+  gpxFile?: string;
+  owner?: any;
+  // Champs pour compatibilité avec l'ancien format
+  start_date?: string;
+  distance?: number;
   standard_distance?: {
     id: number;
     name: string;
@@ -33,11 +44,6 @@ interface RaceDetails {
   positive_elevation?: number;
 }
 
-interface TrackData {
-  type: string;
-  coordinates: [number, number, number?][];
-}
-
 export default function RaceDetailsScreen() {
   const { raceId } = useLocalSearchParams<{ raceId: string }>();
   const router = useRouter();
@@ -51,19 +57,26 @@ export default function RaceDetailsScreen() {
 
   useEffect(() => {
     const fetchRaceData = async () => {
-      if (!raceId) return;
+      if (!raceId) {
+        console.log("❌ Pas de raceId fourni");
+        return;
+      }
 
+      console.log("🚀 Début de fetchRaceData pour raceId:", raceId);
       setLoading(true);
       try {
         const API_URL =
           process.env.EXPO_PUBLIC_API_URL ||
-          "http://mint-dev.charles-chrismann.fr/api";
+          "https://back-mint-node.vercel.app";
         const authHeader = token?.startsWith("Bearer ")
           ? token
           : `Bearer ${token}`;
 
+        console.log("📡 Appel API:", `${API_URL}/race/${raceId}`);
+        console.log("🔑 En-tête auth:", authHeader?.substring(0, 20) + "...");
+
         // Récupérer les informations de la course
-        const raceResponse = await fetch(`${API_URL}/races/${raceId}`, {
+        const raceResponse = await fetch(`${API_URL}/race/${raceId}`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -71,76 +84,105 @@ export default function RaceDetailsScreen() {
           },
         });
 
+        console.log("📥 Statut de la réponse:", raceResponse.status);
+        console.log("✅ Réponse OK:", raceResponse.ok);
+
         if (raceResponse.ok) {
           const raceData = await raceResponse.json();
-          setRace(raceData);
-        } else {
-          throw new Error("Impossible de récupérer les données de la course");
-        }
+          
+          // Log détaillé des données de la course reçues
+          console.log("=== DONNÉES RACE REÇUES ===");
+          console.log("Race ID:", raceId);
+          console.log("Race complète:", JSON.stringify(raceData, null, 2));
+          console.log("gpxFile:", raceData.gpxFile);
+          console.log("Type de gpxFile:", typeof raceData.gpxFile);
+          console.log("gpxFile existe:", !!raceData.gpxFile);
+          console.log("gpxFile est null:", raceData.gpxFile === null);
+          console.log("gpxFile est undefined:", raceData.gpxFile === undefined);
+          console.log("gpxFile est vide:", raceData.gpxFile === "");
+          console.log("============================");
+          
+          // Adapter les données pour l'affichage
+          const adaptedRace: RaceDetails = {
+            ...raceData,
+            // Compatibilité avec l'ancien format
+            start_date: raceData.startDate,
+            end_date: raceData.endDate,
+            location: raceData.organization?.name,
+            participants: raceData.runners?.length || 0,
+            maxParticipants: 100, // Valeur par défaut
+            category: "Course",
+          };
+          setRace(adaptedRace);
 
-        // Récupérer le tracé de la course
-        const trackResponse = await fetch(`${API_URL}/races/${raceId}/track`, {
-          method: "GET",
-          headers: {
-            Authorization: authHeader,
-          },
-        });
+          // Récupérer le tracé depuis le contenu GPX de la course
+          if (raceData.gpxFile && raceData.gpxFile.trim() !== "") {
+            try {
+              console.log("Traitement du contenu GPX de la course...");
+              console.log("Taille du contenu GPX:", raceData.gpxFile.length);
 
-        if (trackResponse.ok) {
-          const trackData: TrackData = await trackResponse.json();
+              // Parser directement le contenu GPX stocké en base
+              const { parseGpx } = await import("@/utils/gpxParser");
+              const coordinates = parseGpx(raceData.gpxFile);
 
-          if (
-            trackData.type === "LineString" &&
-            Array.isArray(trackData.coordinates)
-          ) {
-            const coordinates = trackData.coordinates.map(
-              (coord: [number, number, number?]) => ({
-                latitude: coord[1],
-                longitude: coord[0],
-              })
-            );
+              if (coordinates.length > 0) {
+                console.log(
+                  `${coordinates.length} coordonnées extraites du GPX`
+                );
 
-            // Optimisation ultra-agressive pour les performances
-            let optimizedCoords = coordinates;
+                // Optimisation pour les performances
+                let optimizedCoords = coordinates;
 
-            if (coordinates.length > 20) {
-              // Stratégie en 3 étapes :
-              // 1. On garde toujours début et fin
-              // 2. On prend quelques points clés au milieu (max 15 points intermédiaires)
-              // 3. Le composant Map fera le rendu vectoriel
+                if (coordinates.length > 20) {
+                  const maxPoints = 15;
+                  const step = Math.max(
+                    1,
+                    Math.floor((coordinates.length - 2) / maxPoints)
+                  );
 
-              const maxPoints = 15;
-              const step = Math.max(
-                1,
-                Math.floor((coordinates.length - 2) / maxPoints)
-              );
+                  optimizedCoords = [
+                    coordinates[0], // Premier point obligatoire
+                    ...coordinates
+                      .slice(1, -1)
+                      .filter((_, i) => i % step === 0),
+                    coordinates[coordinates.length - 1], // Dernier point obligatoire
+                  ];
 
-              optimizedCoords = [
-                coordinates[0], // Premier point obligatoire
-                ...coordinates.slice(1, -1).filter((_, i) => i % step === 0),
-                coordinates[coordinates.length - 1], // Dernier point obligatoire
-              ];
+                  // S'assurer qu'on ne dépasse jamais 20 points au total
+                  if (optimizedCoords.length > 20) {
+                    const newStep = Math.ceil(optimizedCoords.length / 18);
+                    optimizedCoords = [
+                      optimizedCoords[0],
+                      ...optimizedCoords
+                        .slice(1, -1)
+                        .filter((_, i) => i % newStep === 0),
+                      optimizedCoords[optimizedCoords.length - 1],
+                    ];
+                  }
+                }
 
-              // S'assurer qu'on ne dépasse jamais 20 points au total
-              if (optimizedCoords.length > 20) {
-                const newStep = Math.ceil(optimizedCoords.length / 18);
-                optimizedCoords = [
-                  optimizedCoords[0],
-                  ...optimizedCoords
-                    .slice(1, -1)
-                    .filter((_, i) => i % newStep === 0),
-                  optimizedCoords[optimizedCoords.length - 1],
-                ];
+                console.log(
+                  `Tracé optimisé: ${coordinates.length} → ${optimizedCoords.length} points`
+                );
+                console.log(
+                  "Coordonnées finales pour la carte:",
+                  optimizedCoords
+                );
+                setTrackCoordinates(optimizedCoords);
+              } else {
+                console.warn("Aucune coordonnée trouvée dans le contenu GPX");
               }
+            } catch (gpxError) {
+              console.warn(
+                "Erreur lors du traitement du contenu GPX:",
+                gpxError
+              );
             }
-
-            console.log(
-              `Tracé optimisé: ${coordinates.length} → ${optimizedCoords.length} points`
-            );
-            setTrackCoordinates(optimizedCoords);
+          } else {
+            console.warn("Aucun contenu GPX associé à cette course");
           }
         } else {
-          console.warn("Impossible de récupérer le tracé de la course");
+          throw new Error("Impossible de récupérer les données de la course");
         }
       } catch (err) {
         console.error("Erreur lors du chargement des données:", err);
@@ -155,7 +197,10 @@ export default function RaceDetailsScreen() {
 
   // Calculer la région pour centrer la carte sur le tracé (mémorisé)
   const mapRegion = useMemo(() => {
-    if (!trackCoordinates || trackCoordinates.length === 0) return undefined;
+    if (!trackCoordinates || trackCoordinates.length === 0) {
+      console.log("Aucune coordonnée de tracé, pas de région calculée");
+      return undefined;
+    }
 
     const latitudes = trackCoordinates.map((c) => c.latitude);
     const longitudes = trackCoordinates.map((c) => c.longitude);
@@ -164,12 +209,17 @@ export default function RaceDetailsScreen() {
     const minLng = Math.min(...longitudes);
     const maxLng = Math.max(...longitudes);
 
-    return {
+    const region = {
       latitude: (minLat + maxLat) / 2,
       longitude: (minLng + maxLng) / 2,
       latitudeDelta: Math.max(0.01, (maxLat - minLat) * 1.2),
       longitudeDelta: Math.max(0.01, (maxLng - minLng) * 1.2),
     };
+
+    console.log("Région calculée pour le tracé:", region);
+    console.log("Coordonnées utilisées:", { minLat, maxLat, minLng, maxLng });
+
+    return region;
   }, [trackCoordinates]);
 
   // Calculer la distance du tracé (mémorisé)
@@ -199,12 +249,13 @@ export default function RaceDetailsScreen() {
 
   // Fonction pour gérer l'inscription à la course
   const handleJoinRace = async () => {
-    if (!race?.id) return;
+    if (!race?._id && !race?.id) return;
 
     try {
+      const raceIdToUse = race._id || race.id;
       // Ici vous pouvez ajouter la logique d'inscription à la course
       console.log(
-        `Tentative d'inscription à la course ${race.id}: ${race.name}`
+        `Tentative d'inscription à la course ${raceIdToUse}: ${race.name}`
       );
 
       // Pour l'instant, on affiche juste une alerte
@@ -306,11 +357,42 @@ export default function RaceDetailsScreen() {
               )}
 
               {/* Date de début */}
-              {race?.start_date && (
+              {(race?.startDate || race?.start_date) && (
                 <View style={styles.detailItem}>
                   <Icon name="calendar-start" size={18} color="#A1F763" />
                   <Text style={styles.detailText}>
-                    {formatDate(race.start_date)}
+                    {formatDate(race.startDate || race.start_date!)}
+                  </Text>
+                </View>
+              )}
+
+              {/* Date de fin */}
+              {(race?.endDate || race?.end_date) && (
+                <View style={styles.detailItem}>
+                  <Icon name="calendar-end" size={18} color="#A1F763" />
+                  <Text style={styles.detailText}>
+                    Fin: {formatDate(race.endDate || race.end_date!)}
+                  </Text>
+                </View>
+              )}
+
+              {/* Organisation */}
+              {race?.organization?.name && (
+                <View style={styles.detailItem}>
+                  <Icon name="domain" size={18} color="#A1F763" />
+                  <Text style={styles.detailText}>
+                    {race.organization.name}
+                  </Text>
+                </View>
+              )}
+
+              {/* Nombre de participants */}
+              {race?.runners && (
+                <View style={styles.detailItem}>
+                  <Icon name="account-group" size={18} color="#A1F763" />
+                  <Text style={styles.detailText}>
+                    {race.runners.length} participant
+                    {race.runners.length > 1 ? "s" : ""}
                   </Text>
                 </View>
               )}
@@ -358,6 +440,7 @@ export default function RaceDetailsScreen() {
           user={{ email: user?.email }}
           gpxCoordinates={trackCoordinates}
           region={mapRegion}
+          forceTrackCentering={true}
         />
         <Image
           source={require("@/assets/images/radial-gradient.png")}

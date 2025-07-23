@@ -33,9 +33,10 @@ interface MapProps {
     latitudeDelta: number;
     longitudeDelta: number;
   };
+  forceTrackCentering?: boolean; // Nouvelle prop pour forcer le centrage sur le tracé
 }
 
-const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
+const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region, forceTrackCentering = false }) => {
   const [location, setLocation] = useState<LatLng | null>(null);
   const [locations, setLocations] = useState<UserLocation[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -56,8 +57,15 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
         mapRef.current?.animateToRegion(regionCalculated, 2000);
         setHasCentered(true); // Empêcher le centrage sur la position utilisateur
       }, 500);
+    } else if (region && mapRef.current) {
+      // Si une région est fournie en prop (par exemple depuis RaceDetails), l'utiliser
+      console.log("Centrage sur la région fournie:", region);
+      setTimeout(() => {
+        mapRef.current?.animateToRegion(region, 2000);
+        setHasCentered(true);
+      }, 500);
     }
-  }, [gpxCoordinates]);
+  }, [gpxCoordinates, region]);
 
   useEffect(() => {
     (async () => {
@@ -116,8 +124,14 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
       location &&
       mapRef.current &&
       !hasCentered &&
-      (!gpxCoordinates || gpxCoordinates.length === 0)
+      (!gpxCoordinates || gpxCoordinates.length === 0) &&
+      !region &&
+      !forceTrackCentering
     ) {
+      // Ne centrer sur la position utilisateur que si :
+      // - Il n'y a pas de tracé GPX
+      // - Il n'y a pas de région fournie
+      // - On ne force pas le centrage sur le tracé
       mapRef.current.animateToRegion(
         {
           latitude: location.latitude,
@@ -129,7 +143,7 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
       );
       setHasCentered(true);
     }
-  }, [location, hasCentered, gpxCoordinates]);
+  }, [location, hasCentered, gpxCoordinates, region, forceTrackCentering]);
 
   // Fonction d'optimisation intelligente du tracé
   const optimizeTrack = (coords: LatLng[]) => {

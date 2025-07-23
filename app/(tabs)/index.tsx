@@ -191,8 +191,8 @@ export default function HomeScreen() {
           {/* Menu dropdown déplacé à l'extérieur du BlurView */}
           {showProfileMenu && (
             <View style={styles.profileMenu}>
-              <TouchableOpacity 
-                style={styles.menuItem} 
+              <TouchableOpacity
+                style={styles.menuItem}
                 onPress={() => {
                   setShowProfileMenu(false);
                   router.push("/profile");

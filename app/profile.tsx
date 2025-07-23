@@ -15,7 +15,7 @@ import { useAuth } from "../context/auth";
 export default function ProfileScreen() {
   const { user, logout } = useAuth();
   const router = useRouter();
-  
+
   const [isEditing, setIsEditing] = useState(false);
   const [firstname, setFirstname] = useState(user?.firstname || "");
   const [lastname, setLastname] = useState(user?.lastname || "");
@@ -28,21 +28,17 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    Alert.alert(
-      "Déconnexion",
-      "Êtes-vous sûr de vouloir vous déconnecter ?",
-      [
-        { text: "Annuler", style: "cancel" },
-        {
-          text: "Déconnexion",
-          style: "destructive",
-          onPress: () => {
-            logout();
-            router.replace("/login");
-          },
+    Alert.alert("Déconnexion", "Êtes-vous sûr de vouloir vous déconnecter ?", [
+      { text: "Annuler", style: "cancel" },
+      {
+        text: "Déconnexion",
+        style: "destructive",
+        onPress: () => {
+          logout();
+          router.replace("/login");
         },
-      ]
-    );
+      },
+    ]);
   };
 
   return (
@@ -86,10 +82,7 @@ export default function ProfileScreen() {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Prénom</Text>
           <TextInput
-            style={[
-              styles.input,
-              !isEditing && styles.inputDisabled,
-            ]}
+            style={[styles.input, !isEditing && styles.inputDisabled]}
             value={firstname}
             onChangeText={setFirstname}
             editable={isEditing}
@@ -101,10 +94,7 @@ export default function ProfileScreen() {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Nom</Text>
           <TextInput
-            style={[
-              styles.input,
-              !isEditing && styles.inputDisabled,
-            ]}
+            style={[styles.input, !isEditing && styles.inputDisabled]}
             value={lastname}
             onChangeText={setLastname}
             editable={isEditing}
@@ -116,10 +106,7 @@ export default function ProfileScreen() {
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Email</Text>
           <TextInput
-            style={[
-              styles.input,
-              !isEditing && styles.inputDisabled,
-            ]}
+            style={[styles.input, !isEditing && styles.inputDisabled]}
             value={email}
             onChangeText={setEmail}
             editable={isEditing}
@@ -156,7 +143,7 @@ export default function ProfileScreen() {
       {/* Section des paramètres */}
       <View style={styles.settingsSection}>
         <Text style={styles.sectionTitle}>Paramètres</Text>
-        
+
         <TouchableOpacity style={styles.settingItem}>
           <Icon name="bell-outline" size={24} color="#fff" />
           <Text style={styles.settingText}>Notifications</Text>
@@ -183,10 +170,7 @@ export default function ProfileScreen() {
       </View>
 
       {/* Bouton de déconnexion */}
-      <TouchableOpacity
-        style={styles.logoutButton}
-        onPress={handleLogout}
-      >
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
         <Icon name="logout" size={24} color="#ff4444" />
         <Text style={styles.logoutButtonText}>Se déconnecter</Text>
       </TouchableOpacity>

@@ -24,8 +24,19 @@ const CARD_WIDTH = width * 0.8;
 const CARD_MARGIN = width * 0.05;
 
 interface Race {
-  id: string;
+  _id?: string;
+  id?: string;
   name: string;
+  startDate?: string;
+  endDate?: string;
+  organization?: {
+    _id: string;
+    name: string;
+  };
+  runners?: any[];
+  gpxFile?: string;
+  owner?: any;
+  // Champs optionnels pour l'affichage
   distance?: number;
   location?: string;
   date?: string;
@@ -67,7 +78,7 @@ export default function RejoindreScreen() {
           ? token
           : `Bearer ${token}`;
 
-        const response = await fetch(`${API_URL}/races`, {
+        const response = await fetch(`${API_URL}/race`, {
           method: "GET",
           headers: {
             "Content-Type": "application/json",
@@ -94,8 +105,29 @@ export default function RejoindreScreen() {
             return trailImages[Math.floor(Math.random() * trailImages.length)];
           };
 
-          const coursesAvecImages = data.map((race: Race) => ({
-            ...race,
+          // Adapter les données de l'API au format attendu
+          const coursesAvecImages = data.map((race: any) => ({
+            _id: race._id,
+            id: race._id, // Pour compatibilité
+            name: race.name,
+            startDate: race.startDate,
+            endDate: race.endDate,
+            organization: race.organization,
+            runners: race.runners,
+            gpxFile: race.gpxFile,
+            owner: race.owner,
+            // Calculer des informations d'affichage
+            date: race.startDate
+              ? new Date(race.startDate).toLocaleDateString("fr-FR", {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })
+              : undefined,
+            participants: race.runners?.length || 0,
+            maxParticipants: 100, // Valeur par défaut
+            location: race.organization?.name || "Lieu non spécifié",
+            category: "Course",
             image: race.image || getRandomImage(),
           }));
 
@@ -122,6 +154,7 @@ export default function RejoindreScreen() {
 
           const fakeData: Race[] = [
             {
+              _id: "1",
               id: "1",
               name: "Marathon de Paris",
               distance: 42.2,
@@ -133,6 +166,7 @@ export default function RejoindreScreen() {
               image: getRandomImage(),
             },
             {
+              _id: "2",
               id: "2",
               name: "Trail du Mont Blanc",
               distance: 21.1,
@@ -144,6 +178,7 @@ export default function RejoindreScreen() {
               image: getRandomImage(),
             },
             {
+              _id: "3",
               id: "3",
               name: "Course Solidaire",
               distance: 10,
@@ -155,6 +190,7 @@ export default function RejoindreScreen() {
               image: getRandomImage(),
             },
             {
+              _id: "4",
               id: "4",
               name: "Semi-Marathon de Bordeaux",
               distance: 21.1,
@@ -166,6 +202,7 @@ export default function RejoindreScreen() {
               image: getRandomImage(),
             },
             {
+              _id: "5",
               id: "5",
               name: "10km de Marseille",
               distance: 10,
@@ -177,6 +214,7 @@ export default function RejoindreScreen() {
               image: getRandomImage(),
             },
             {
+              _id: "6",
               id: "6",
               name: "Run For The Ocean",
               distance: 15,
@@ -230,7 +268,7 @@ export default function RejoindreScreen() {
           onPress={() => {
             router.push({
               pathname: "/RaceDetails",
-              params: { raceId: race.id },
+              params: { raceId: race._id || race.id },
             });
           }}
         >
@@ -328,7 +366,7 @@ export default function RejoindreScreen() {
         <FlatList
           data={races}
           renderItem={({ item }) => <RaceCard race={item} />}
-          keyExtractor={(item) => item.id}
+          keyExtractor={(item) => item._id || item.id || "unknown"}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.horizontalScrollContent}

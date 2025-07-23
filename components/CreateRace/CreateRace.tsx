@@ -19,12 +19,6 @@ import {
 } from "react-native";
 import { useAuth } from "../../context/auth";
 
-interface StandardDistance {
-  id: number;
-  name: string;
-  distance: string;
-}
-
 interface RaceDiscipline {
   id: number;
   name: string;
@@ -33,6 +27,14 @@ interface RaceDiscipline {
 interface Organization {
   id: number;
   name: string;
+}
+
+interface User {
+  _id: string;
+  id?: string; // pour compatibilité si jamais
+  email: string;
+  firstname?: string;
+  lastname?: string;
 }
 
 interface CreateRaceProps {
@@ -54,14 +56,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
     date.setHours(12, 0, 0, 0); // 12h00
     return date;
   });
-  const [customDistance, setCustomDistance] = useState("21.1");
-  const [positiveElevation, setPositiveElevation] = useState("150");
-  const [standardDistances, setStandardDistances] = useState<
-    StandardDistance[]
-  >([]);
-  const [selectedStandardDistance, setSelectedStandardDistance] = useState<
-    number | null
-  >(null);
   const [raceDisciplines, setRaceDisciplines] = useState<RaceDiscipline[]>([]);
   const [selectedDiscipline, setSelectedDiscipline] = useState<number | null>(
     null
@@ -72,12 +66,16 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   >(null);
   const [showCreateOrganization, setShowCreateOrganization] = useState(false);
   const [newOrganizationName, setNewOrganizationName] = useState("");
-  const [newOrganizationDescription, setNewOrganizationDescription] = useState("");
   const [creatingOrganization, setCreatingOrganization] = useState(false);
+  const [users, setUsers] = useState<User[]>([]);
+  const [selectedRunners, setSelectedRunners] = useState<string[]>([]);
+  const [showAddRunners, setShowAddRunners] = useState(false);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [gpxFileUri, setGpxFileUri] = useState<string | null>(
     initialGpxUri || null
   );
   const [gpxFileName, setGpxFileName] = useState<string | null>(null);
+  const [gpxFileContent, setGpxFileContent] = useState<string | null>(null);
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -91,27 +89,17 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   // Charger les données de référence au démarrage
   useEffect(() => {
     const loadReferenceData = async () => {
+      console.log("=== DÉBUT DU CHARGEMENT DES DONNÉES ===");
+      console.log("API_URL:", API_URL);
+      console.log("Token:", token ? "PRÉSENT" : "ABSENT");
+
       setLoadingData(true);
       try {
         const authHeader = token?.startsWith("Bearer ")
           ? token
           : `Bearer ${token}`;
 
-        // Charger les distances standards
-        try {
-          const standardDistancesResponse = await fetch(
-            `${API_URL}/standard-distances`,
-            {
-              headers: { Authorization: authHeader },
-            }
-          );
-          if (standardDistancesResponse.ok) {
-            const distances = await standardDistancesResponse.json();
-            setStandardDistances(distances);
-          }
-        } catch (e) {
-          console.log("Erreur chargement distances standards:", e);
-        }
+        console.log("Auth header créé:", authHeader ? "OK" : "ERREUR");
 
         // Charger les disciplines (si endpoint disponible)
         try {
@@ -144,6 +132,42 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         } catch (e) {
           console.log("Erreur chargement organisations:", e);
         }
+
+        // Charger les utilisateurs pour les runners
+        try {
+          console.log("=== TENTATIVE DE CHARGEMENT DES UTILISATEURS ===");
+          console.log("URL appelée:", `${API_URL}/users`);
+          console.log("Authorization header:", authHeader);
+
+          const usersResponse = await fetch(`${API_URL}/users`, {
+            headers: { Authorization: authHeader },
+          });
+
+          console.log("Status de la réponse users:", usersResponse.status);
+          console.log("Response OK?", usersResponse.ok);
+
+          if (usersResponse.ok) {
+            const usersList = await usersResponse.json();
+            console.log("=== UTILISATEURS CHARGÉS DEPUIS L'API ===");
+            console.log("Type de usersList:", typeof usersList);
+            console.log("Array.isArray(usersList):", Array.isArray(usersList));
+            console.log("Nombre d'utilisateurs:", usersList.length);
+            console.log("Premier utilisateur:", usersList[0]);
+            console.log("Liste complète:", usersList);
+            console.log("=== FIN CHARGEMENT UTILISATEURS ===");
+
+            setUsers(usersList);
+          } else {
+            const errorText = await usersResponse.text();
+            console.log(
+              "ERREUR lors du chargement des utilisateurs:",
+              usersResponse.status,
+              errorText
+            );
+          }
+        } catch (e) {
+          console.log("EXCEPTION lors du chargement des utilisateurs:", e);
+        }
       } catch (err) {
         console.error("Erreur lors du chargement des données:", err);
       } finally {
@@ -157,19 +181,70 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const pickGpxFile = async () => {
     try {
       const result = await DocumentPicker.getDocumentAsync({
-        type: "*/*",
+        type: ["application/gpx+xml", "application/xml", "text/xml", "*/*"],
         copyToCacheDirectory: true,
       });
 
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        const file = result.assets[0];
-        setGpxFileUri(file.uri);
-        setGpxFileName(file.name);
+      if (result.canceled) {
         setError(null);
+        return;
       }
+
+      if (!result.assets || result.assets.length === 0) {
+        setError("Aucun fichier sélectionné");
+        return;
+      }
+
+      const file = result.assets[0];
+      const uri = file.uri;
+      const fileName = file.name || "fichier_gpx";
+      
+      if (!uri) {
+        setError("URI du fichier introuvable");
+        return;
+      }
+
+      // Vérifier que le fichier est bien un GPX
+      if (fileName && !fileName.toLowerCase().includes('.gpx') && !fileName.toLowerCase().includes('.xml')) {
+        console.warn("Le fichier sélectionné ne semble pas être un fichier GPX");
+      }
+
+      try {
+        // Lire le contenu du fichier GPX
+        const gpxContent = await FileSystem.readAsStringAsync(uri);
+        
+        if (!gpxContent || gpxContent.trim().length === 0) {
+          setError("Le fichier GPX est vide");
+          return;
+        }
+
+        // Validation basique du contenu GPX
+        if (!gpxContent.includes('<gpx') && !gpxContent.includes('<trk')) {
+          console.warn("Le fichier ne semble pas contenir de données GPX valides");
+        }
+
+        setGpxFileUri(uri);
+        setGpxFileName(fileName);
+        setGpxFileContent(gpxContent);
+        setError(null);
+
+        console.log("Fichier GPX sélectionné et lu:", {
+          uri,
+          fileName,
+          contentLength: gpxContent.length,
+          size: file.size || "unknown",
+          mimeType: file.mimeType || "unknown"
+        });
+
+      } catch (readError) {
+        console.error("Erreur lors de la lecture du fichier GPX:", readError);
+        setError(`Impossible de lire le fichier GPX: ${readError instanceof Error ? readError.message : String(readError)}`);
+        return;
+      }
+
     } catch (err) {
       console.error("Erreur lors de la sélection du fichier:", err);
-      setError("Erreur lors de la sélection du fichier GPX");
+      setError(`Erreur lors de la sélection du fichier GPX: ${err instanceof Error ? err.message : String(err)}`);
     }
   };
 
@@ -195,24 +270,22 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         },
         body: JSON.stringify({
           name: newOrganizationName.trim(),
-          description: newOrganizationDescription.trim() || undefined,
         }),
       });
 
       if (response.ok) {
         const newOrg = await response.json();
-        
+
         // Ajouter la nouvelle organisation à la liste
-        setOrganizations(prev => [...prev, newOrg]);
-        
+        setOrganizations((prev) => [...prev, newOrg]);
+
         // Sélectionner automatiquement la nouvelle organisation
         setSelectedOrganization(newOrg.id);
-        
+
         // Réinitialiser le formulaire de création
         setNewOrganizationName("");
-        setNewOrganizationDescription("");
         setShowCreateOrganization(false);
-        
+
         Alert.alert("Succès", "Organisation créée avec succès !");
       } else {
         const errorText = await response.text();
@@ -232,26 +305,19 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       return false;
     }
 
-    if (!positiveElevation.trim()) {
-      setError("Le dénivelé positif est requis");
+    if (!selectedOrganization) {
+      setError("Une organisation est requise");
       return false;
     }
 
-    if (!gpxFileUri) {
-      setError("Un fichier GPX est requis");
-      return false;
-    }
+    // Pour l'instant, le fichier GPX n'est plus requis car le backend ne le gère pas encore
+    // if (!gpxFileUri) {
+    //   setError("Un fichier GPX est requis");
+    //   return false;
+    // }
 
     if (startDate >= endDate) {
       setError("La date de fin doit être postérieure à la date de début");
-      return false;
-    }
-
-    // Validation distance : soit standard soit custom
-    if (!selectedStandardDistance && !customDistance.trim()) {
-      setError(
-        "Veuillez sélectionner une distance standard ou saisir une distance personnalisée"
-      );
       return false;
     }
 
@@ -271,55 +337,37 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         return;
       }
 
-      // Créer FormData pour l'upload multipart
-      const formData = new FormData();
+      // Envoyer les données en JSON avec le contenu GPX inclus
+      const raceData = {
+        name: raceName.trim(),
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        organization: selectedOrganization!,
+        runners: selectedRunners,
+        // Inclure le contenu GPX directement dans le JSON si disponible
+        gpxFile: gpxFileContent || "",
+      };
 
-      formData.append("name", raceName.trim());
-      formData.append("start_date", startDate.toISOString());
-      formData.append("end_date", endDate.toISOString());
-      formData.append("positive_elevation", positiveElevation);
+      // Log pour déboguer
+      console.log("=== ENVOI DE LA COURSE EN JSON AVEC GPX ===");
+      console.log("- Nom:", raceName.trim());
+      console.log("- Date début:", startDate.toISOString());
+      console.log("- Date fin:", endDate.toISOString());
+      console.log("- Organisation:", selectedOrganization);
+      console.log("- Runners:", selectedRunners);
+      console.log("- Fichier GPX:", gpxFileName || "Aucun");
+      console.log("- Contenu GPX longueur:", gpxFileContent ? gpxFileContent.length : 0);
+      console.log("Données JSON à envoyer:", { ...raceData, gpxFile: gpxFileContent ? `[${gpxFileContent.length} caractères]` : "" });
 
-      // Distance : soit standard soit custom
-      if (selectedStandardDistance) {
-        formData.append(
-          "standard_distance_id",
-          selectedStandardDistance.toString()
-        );
-      } else if (customDistance.trim()) {
-        // Convertir en mètres si nécessaire
-        const distanceInMeters = parseFloat(customDistance) * 1000; // Supposant que l'utilisateur saisit en km
-        formData.append("distance", distanceInMeters.toString());
-      }
-
-      // Champs optionnels
-      if (selectedOrganization) {
-        formData.append("organization_id", selectedOrganization.toString());
-      }
-      if (selectedDiscipline) {
-        formData.append("race_discipline_id", selectedDiscipline.toString());
-      }
-
-      // Fichier GPX
-      if (gpxFileUri) {
-        const fileInfo = await FileSystem.getInfoAsync(gpxFileUri);
-        if (fileInfo.exists) {
-          formData.append("file", {
-            uri: gpxFileUri,
-            type: "application/gpx+xml",
-            name: gpxFileName || "track.gpx",
-          } as any);
-        }
-      }
-
-      const response = await fetch(`${API_URL}/races`, {
+      const response = await fetch(`${API_URL}/race`, {
         method: "POST",
         headers: {
-          "Content-Type": "multipart/form-data",
+          "Content-Type": "application/json",
           Authorization: token.startsWith("Bearer ")
             ? token
             : `Bearer ${token}`,
         },
-        body: formData,
+        body: JSON.stringify(raceData),
       });
 
       if (response.ok) {
@@ -347,13 +395,11 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         newEndDate.setHours(12, 0, 0, 0);
         setEndDate(newEndDate);
 
-        setCustomDistance("21.1");
-        setPositiveElevation("150");
-        setSelectedStandardDistance(null);
-        setSelectedDiscipline(null);
         setSelectedOrganization(null);
+        setSelectedRunners([]);
         setGpxFileUri(null);
         setGpxFileName(null);
+        setGpxFileContent(null);
       } else {
         const errorText = await response.text();
         console.log("Erreur API:", response.status, errorText);
@@ -459,109 +505,29 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                 </View>
               </View>
 
-              {/* Distance */}
+              {/* Organisation */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Distance</Text>
+                <Text style={styles.label}>Organisation *</Text>
 
-                {/* Distance standard */}
-                {standardDistances.length > 0 && (
-                  <View style={styles.distanceOptions}>
-                    <Text style={styles.subLabel}>Distance standard :</Text>
+                {!showCreateOrganization ? (
+                  <>
                     <ScrollView
                       horizontal
                       showsHorizontalScrollIndicator={false}
                     >
-                      <View style={styles.distanceButtons}>
-                        {standardDistances.map((distance) => (
-                          <TouchableOpacity
-                            key={distance.id}
-                            style={[
-                              styles.distanceButton,
-                              selectedStandardDistance === distance.id &&
-                                styles.distanceButtonSelected,
-                            ]}
-                            onPress={() => {
-                              setSelectedStandardDistance(distance.id);
-                              setCustomDistance(""); // Reset custom distance
-                            }}
-                          >
-                            <Text
-                              style={[
-                                styles.distanceButtonText,
-                                selectedStandardDistance === distance.id &&
-                                  styles.distanceButtonTextSelected,
-                              ]}
-                            >
-                              {distance.name}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </ScrollView>
-                  </View>
-                )}
-
-                {/* Distance personnalisée */}
-                <View style={styles.customDistanceContainer}>
-                  <Text style={styles.subLabel}>
-                    Distance personnalisée (km) :
-                  </Text>
-                  <TextInput
-                    style={styles.input}
-                    placeholder="21.1"
-                    placeholderTextColor="#888"
-                    value={customDistance}
-                    onChangeText={(text) => {
-                      setCustomDistance(text);
-                      setSelectedStandardDistance(null); // Reset standard distance
-                    }}
-                    keyboardType="numeric"
-                  />
-                </View>
-              </View>
-
-              {/* Dénivelé positif */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Dénivelé positif (m) *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="150"
-                  placeholderTextColor="#888"
-                  value={positiveElevation}
-                  onChangeText={setPositiveElevation}
-                  keyboardType="numeric"
-                />
-              </View>
-
-              {/* Organisation */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Organisation (optionnel)</Text>
-                
-                {!showCreateOrganization ? (
-                  <>
-                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                       <View style={styles.optionButtons}>
                         <TouchableOpacity
-                          style={[
-                            styles.optionButton,
-                            selectedOrganization === null &&
-                              styles.optionButtonSelected,
-                          ]}
-                          onPress={() => setSelectedOrganization(null)}
+                          style={styles.createOrgButton}
+                          onPress={() => setShowCreateOrganization(true)}
                         >
-                          <Text
-                            style={[
-                              styles.optionButtonText,
-                              selectedOrganization === null &&
-                                styles.optionButtonTextSelected,
-                            ]}
-                          >
-                            Aucune
+                          <Icon name="plus" size={16} color="#A1F763" />
+                          <Text style={styles.createOrgButtonText}>
+                            Créer une organisation
                           </Text>
                         </TouchableOpacity>
-                        {organizations.map((org) => (
+                        {organizations.map((org, index) => (
                           <TouchableOpacity
-                            key={org.id}
+                            key={org.id || `org-${index}`}
                             style={[
                               styles.optionButton,
                               selectedOrganization === org.id &&
@@ -580,22 +546,13 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                             </Text>
                           </TouchableOpacity>
                         ))}
-                        <TouchableOpacity
-                          style={styles.createOrgButton}
-                          onPress={() => setShowCreateOrganization(true)}
-                        >
-                          <Icon name="plus" size={16} color="#A1F763" />
-                          <Text style={styles.createOrgButtonText}>
-                            Créer une organisation
-                          </Text>
-                        </TouchableOpacity>
                       </View>
                     </ScrollView>
                   </>
                 ) : (
                   <View style={styles.createOrgForm}>
                     <Text style={styles.subLabel}>Nouvelle organisation :</Text>
-                    
+
                     <TextInput
                       style={styles.input}
                       placeholder="Nom de l'organisation"
@@ -603,29 +560,18 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                       value={newOrganizationName}
                       onChangeText={setNewOrganizationName}
                     />
-                    
-                    <TextInput
-                      style={[styles.input, styles.textArea]}
-                      placeholder="Description (optionnel)"
-                      placeholderTextColor="#888"
-                      value={newOrganizationDescription}
-                      onChangeText={setNewOrganizationDescription}
-                      multiline
-                      numberOfLines={3}
-                    />
-                    
+
                     <View style={styles.createOrgActions}>
                       <TouchableOpacity
                         style={styles.cancelOrgButton}
                         onPress={() => {
                           setShowCreateOrganization(false);
                           setNewOrganizationName("");
-                          setNewOrganizationDescription("");
                         }}
                       >
                         <Text style={styles.cancelOrgButtonText}>Annuler</Text>
                       </TouchableOpacity>
-                      
+
                       <TouchableOpacity
                         style={[
                           styles.saveOrgButton,
@@ -645,59 +591,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                 )}
               </View>
 
-              {/* Discipline */}
-              {raceDisciplines.length > 0 && (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Discipline (optionnel)</Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View style={styles.optionButtons}>
-                      <TouchableOpacity
-                        style={[
-                          styles.optionButton,
-                          selectedDiscipline === null &&
-                            styles.optionButtonSelected,
-                        ]}
-                        onPress={() => setSelectedDiscipline(null)}
-                      >
-                        <Text
-                          style={[
-                            styles.optionButtonText,
-                            selectedDiscipline === null &&
-                              styles.optionButtonTextSelected,
-                          ]}
-                        >
-                          Aucune
-                        </Text>
-                      </TouchableOpacity>
-                      {raceDisciplines.map((discipline) => (
-                        <TouchableOpacity
-                          key={discipline.id}
-                          style={[
-                            styles.optionButton,
-                            selectedDiscipline === discipline.id &&
-                              styles.optionButtonSelected,
-                          ]}
-                          onPress={() => setSelectedDiscipline(discipline.id)}
-                        >
-                          <Text
-                            style={[
-                              styles.optionButtonText,
-                              selectedDiscipline === discipline.id &&
-                                styles.optionButtonTextSelected,
-                            ]}
-                          >
-                            {discipline.name}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  </ScrollView>
-                </View>
-              )}
-
               {/* Fichier GPX */}
               <View style={styles.inputGroup}>
-                <Text style={styles.label}>Fichier GPX *</Text>
+                <Text style={styles.label}>Fichier GPX (optionnel)</Text>
                 <TouchableOpacity
                   style={styles.fileButton}
                   onPress={pickGpxFile}
@@ -707,12 +603,134 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     {gpxFileName ? gpxFileName : "Choisir un fichier GPX"}
                   </Text>
                 </TouchableOpacity>
-                {gpxFileName && (
+                {gpxFileName && gpxFileContent && (
                   <View style={styles.fileSelected}>
                     <Icon name="check-circle" size={16} color="#A1F763" />
                     <Text style={styles.fileSelectedText}>
-                      Fichier sélectionné
+                      Fichier sélectionné ({gpxFileContent.length} caractères)
                     </Text>
+                  </View>
+                )}
+              </View>
+
+              {/* Sélection des participants */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Participants</Text>
+                <TouchableOpacity
+                  style={styles.dropdownButton}
+                  onPress={() => setShowUserDropdown(!showUserDropdown)}
+                >
+                  <Icon name="account-multiple" size={20} color="#A1F763" />
+                  <Text style={styles.dropdownButtonText}>
+                    {selectedRunners.length > 0
+                      ? `${selectedRunners.length} participant(s) sélectionné(s)`
+                      : "Sélectionner des participants"}
+                  </Text>
+                  <Icon
+                    name={showUserDropdown ? "chevron-up" : "chevron-down"}
+                    size={20}
+                    color="#A1F763"
+                  />
+                </TouchableOpacity>
+
+                {/* Liste déroulante des utilisateurs */}
+                {showUserDropdown && (
+                  <View style={styles.dropdownContainer}>
+                    <ScrollView
+                      style={styles.dropdownList}
+                      nestedScrollEnabled={true}
+                    >
+                      {users.length > 0 ? (
+                        users.map((user) => {
+                          const userId = user._id || user.id;
+                          if (!userId) return null;
+                          const isSelected = selectedRunners.includes(userId);
+                          return (
+                            <TouchableOpacity
+                              key={userId}
+                              style={[
+                                styles.dropdownItem,
+                                isSelected && styles.dropdownItemSelected,
+                              ]}
+                              onPress={() => {
+                                if (isSelected) {
+                                  setSelectedRunners((prev) =>
+                                    prev.filter((id) => id !== userId)
+                                  );
+                                } else {
+                                  setSelectedRunners((prev) => [
+                                    ...prev,
+                                    userId,
+                                  ]);
+                                }
+                              }}
+                            >
+                              <View style={styles.userInfo}>
+                                <Text
+                                  style={[
+                                    styles.userEmail,
+                                    isSelected && styles.userEmailSelected,
+                                  ]}
+                                >
+                                  {user.email}
+                                </Text>
+                                {(user.firstname || user.lastname) && (
+                                  <Text
+                                    style={[
+                                      styles.userName,
+                                      isSelected && styles.userNameSelected,
+                                    ]}
+                                  >
+                                    {user.firstname} {user.lastname}
+                                  </Text>
+                                )}
+                              </View>
+                              {isSelected && (
+                                <Icon name="check" size={20} color="#A1F763" />
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })
+                      ) : (
+                        <Text style={styles.noUsersText}>
+                          Aucun utilisateur disponible
+                        </Text>
+                      )}
+                    </ScrollView>
+                  </View>
+                )}
+
+                {/* Affichage des participants sélectionnés */}
+                {selectedRunners.length > 0 && (
+                  <View style={styles.selectedUsersContainer}>
+                    <Text style={styles.selectedUsersLabel}>
+                      Participants sélectionnés :
+                    </Text>
+                    <View style={styles.selectedUsersList}>
+                      {selectedRunners.map((userId) => {
+                        const user = users.find(
+                          (u) => (u._id || u.id) === userId
+                        );
+                        if (!user) return null;
+                        return (
+                          <View key={userId} style={styles.selectedUserChip}>
+                            <Text style={styles.selectedUserChipText}>
+                              {user.email}
+                            </Text>
+                            <TouchableOpacity
+                              onPress={() => {
+                                setSelectedRunners((prev) =>
+                                  prev.filter((id) => id !== userId)
+                                );
+                              }}
+                              style={styles.removeUserButton}
+                            >
+                              <Icon name="close" size={16} color="#3B3B3B" />
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                    </View>
                   </View>
                 )}
               </View>
@@ -1088,6 +1106,234 @@ const styles = StyleSheet.create({
   saveOrgButtonText: {
     color: "#3B3B3B",
     fontWeight: "600",
+  },
+  selectedRunners: {
+    marginBottom: 16,
+  },
+  runnersContainer: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  runnerChip: {
+    backgroundColor: "#A1F763",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  runnerChipText: {
+    fontSize: 14,
+    color: "#3B3B3B",
+    fontWeight: "500",
+  },
+  removeRunnerButton: {
+    padding: 2,
+  },
+  addRunnersButton: {
+    backgroundColor: "rgba(161, 247, 99, 0.2)",
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "#A1F763",
+  },
+  addRunnersButtonText: {
+    fontSize: 16,
+    color: "#A1F763",
+    fontWeight: "500",
+  },
+  addRunnersModal: {
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    borderRadius: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: "rgba(161, 247, 99, 0.3)",
+    maxHeight: 400,
+  },
+  addRunnersHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(161, 247, 99, 0.3)",
+  },
+  addRunnersTitle: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#A1F763",
+  },
+  closeAddRunnersButton: {
+    padding: 4,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 8,
+  },
+  runnersList: {
+    flex: 1,
+    height: 300,
+  },
+  runnerItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+  },
+  runnerItemSelected: {
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    borderBottomColor: "rgba(161, 247, 99, 0.3)",
+  },
+  runnerItemInfo: {
+    flex: 1,
+  },
+  runnerItemText: {
+    fontSize: 16,
+    color: "#fff",
+    fontWeight: "500",
+    marginBottom: 2,
+  },
+  runnerItemTextSelected: {
+    color: "#A1F763",
+  },
+  runnerItemEmail: {
+    fontSize: 14,
+    color: "#888",
+  },
+  runnerItemEmailSelected: {
+    color: "#A1F763",
+    opacity: 0.8,
+  },
+  addRunnerIcon: {
+    marginLeft: 12,
+  },
+  addRunnersFooter: {
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(161, 247, 99, 0.3)",
+  },
+  finishSelectionButton: {
+    backgroundColor: "#A1F763",
+    borderRadius: 8,
+    padding: 12,
+    alignItems: "center",
+  },
+  finishSelectionButtonText: {
+    color: "#3B3B3B",
+    fontWeight: "600",
+    fontSize: 16,
+  },
+  noRunnersText: {
+    textAlign: "center",
+    color: "#888",
+    padding: 20,
+    fontStyle: "italic",
+  },
+  // Nouveaux styles pour la liste déroulante des utilisateurs
+  dropdownButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    justifyContent: "space-between",
+  },
+  dropdownButtonText: {
+    fontSize: 16,
+    color: "#fff",
+    flex: 1,
+  },
+  dropdownContainer: {
+    backgroundColor: "rgba(0, 0, 0, 0.9)",
+    borderRadius: 12,
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "rgba(161, 247, 99, 0.3)",
+    maxHeight: 300,
+    overflow: "hidden",
+  },
+  dropdownList: {
+    maxHeight: 280,
+  },
+  dropdownItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
+  },
+  dropdownItemSelected: {
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    borderBottomColor: "rgba(161, 247, 99, 0.3)",
+  },
+  userInfo: {
+    flex: 1,
+  },
+  userEmail: {
+    fontSize: 16,
+    color: "#fff",
+    fontWeight: "500",
+  },
+  userEmailSelected: {
+    color: "#A1F763",
+  },
+  userName: {
+    fontSize: 14,
+    color: "#888",
+    marginTop: 2,
+  },
+  userNameSelected: {
+    color: "#A1F763",
+    opacity: 0.8,
+  },
+  noUsersText: {
+    textAlign: "center",
+    color: "#888",
+    padding: 20,
+    fontStyle: "italic",
+  },
+  selectedUsersContainer: {
+    marginTop: 12,
+    backgroundColor: "rgba(161, 247, 99, 0.05)",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(161, 247, 99, 0.2)",
+  },
+  selectedUsersLabel: {
+    fontSize: 14,
+    color: "#A1F763",
+    fontWeight: "500",
+    marginBottom: 8,
+  },
+  selectedUsersList: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  selectedUserChip: {
+    backgroundColor: "#A1F763",
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  selectedUserChipText: {
+    fontSize: 12,
+    color: "#3B3B3B",
+    fontWeight: "500",
+  },
+  removeUserButton: {
+    padding: 2,
   },
 });
 

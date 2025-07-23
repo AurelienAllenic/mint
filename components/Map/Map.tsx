@@ -45,8 +45,17 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
 
   useEffect(() => {
     if (gpxCoordinates?.length && mapRef.current) {
+      console.log(
+        "Centrage sur le tracé GPX:",
+        gpxCoordinates.length,
+        "points"
+      );
       const regionCalculated = calculateGPXRegion(gpxCoordinates);
-      mapRef.current.animateToRegion(regionCalculated, 1000);
+      console.log("Région calculée:", regionCalculated);
+      setTimeout(() => {
+        mapRef.current?.animateToRegion(regionCalculated, 2000);
+        setHasCentered(true); // Empêcher le centrage sur la position utilisateur
+      }, 500);
     }
   }, [gpxCoordinates]);
 
@@ -103,7 +112,12 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
   }, [user]);
 
   useEffect(() => {
-    if (location && mapRef.current && !hasCentered) {
+    if (
+      location &&
+      mapRef.current &&
+      !hasCentered &&
+      (!gpxCoordinates || gpxCoordinates.length === 0)
+    ) {
       mapRef.current.animateToRegion(
         {
           latitude: location.latitude,
@@ -115,7 +129,7 @@ const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region }) => {
       );
       setHasCentered(true);
     }
-  }, [location, hasCentered]);
+  }, [location, hasCentered, gpxCoordinates]);
 
   const DOWNSAMPLE_STEP = 10;
   function downsampleCoordinates(

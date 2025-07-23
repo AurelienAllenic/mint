@@ -21,6 +21,16 @@ import { GPXPoint, parseGpx } from "../../utils/gpxParser";
 export default function HomeScreen() {
   const { user, logout, token } = useAuth();
   const router = useRouter();
+
+  // Debug logs pour l'objet user
+  console.log("=== DEBUG USER OBJECT ===");
+  console.log("User object:", user);
+  console.log("User firstname:", user?.firstname);
+  console.log("User lastname:", user?.lastname);
+  console.log("User email:", user?.email);
+  console.log("Token:", token);
+  console.log("========================");
+
   const [gpxCoordinates] = useState<GPXPoint[]>([]);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [showRaceMenu, setShowRaceMenu] = useState(false);
@@ -162,7 +172,9 @@ export default function HomeScreen() {
               <View>
                 <Text style={styles.welcome}>Bienvenue !</Text>
                 <Text style={styles.username}>
-                  {user?.name || "Utilisateur"}
+                  {user?.firstname && user?.lastname
+                    ? `${user.firstname} ${user.lastname}`
+                    : "Utilisateur"}
                 </Text>
               </View>
               <View style={styles.profileContainer}>

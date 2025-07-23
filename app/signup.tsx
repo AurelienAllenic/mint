@@ -28,6 +28,16 @@ export default function SignupScreen() {
     const API_URL = process.env.EXPO_PUBLIC_API_URL;
     setError(""); // Reset error
 
+    console.log("=== SIGNUP DATA SENT ===");
+    console.log("API_URL:", API_URL);
+    console.log("Data being sent:", {
+      email: email,
+      firstname: firstname,
+      lastname: lastname,
+      password: password,
+    });
+    console.log("========================");
+
     try {
       const res = await fetch(`${API_URL}/auth/register`, {
         method: "POST",
@@ -42,13 +52,21 @@ export default function SignupScreen() {
         },
       });
 
-      console.log("Response:", res);
+      console.log("Response status:", res.status);
+      console.log("Response ok:", res.ok);
 
       if (!res.ok) {
         const errorData = await res.json();
+        console.log("Error response:", errorData);
         setError(errorData.message || "Une erreur est survenue");
         return;
       } else {
+        // Récupérer les données de la réponse de succès
+        const successData = await res.json();
+        console.log("=== SIGNUP SUCCESS RESPONSE ===");
+        console.log("Success response:", successData);
+        console.log("==============================");
+
         // Inscription réussie, redirection vers la page de connexion
         router.replace("/login");
       }

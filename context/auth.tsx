@@ -14,9 +14,12 @@ type AuthContextType = {
   token: string | null;
   login: (userData: {
     email: string;
-    name: string;
+    name?: string;
     token: string;
     isConnected: boolean;
+    id?: number;
+    firstname?: string | null;
+    lastname?: string | null;
   }) => void;
   logout: () => void;
 };
@@ -29,21 +32,36 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = (userData: {
     email: string;
-    name: string;
+    name?: string;
     token: string;
     id?: number;
     firstname?: string | null;
     lastname?: string | null;
   }) => {
+    console.log("=== AUTH CONTEXT LOGIN ===");
+    console.log("userData received:", userData);
+
     setUser({
       email: userData.email,
-      name: userData.name,
+      name:
+        userData.name ||
+        `${userData.firstname || ""} ${userData.lastname || ""}`.trim(),
       id: userData.id,
       firstname: userData.firstname ?? null,
       lastname: userData.lastname ?? null,
       isConnected: true,
     });
     setToken(userData.token);
+
+    console.log("User set in context:", {
+      email: userData.email,
+      name:
+        userData.name ||
+        `${userData.firstname || ""} ${userData.lastname || ""}`.trim(),
+      firstname: userData.firstname ?? null,
+      lastname: userData.lastname ?? null,
+    });
+    console.log("=========================");
   };
 
   const logout = () => {

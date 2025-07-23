@@ -35,9 +35,13 @@ export default function LoginScreen() {
       }
 
       if (response.ok && !isVisitor) {
+        console.log("=== LOGIN SUCCESS ===");
+        console.log("Backend response data:", data);
+
         login({
           email: data.technicalUser.email,
-          name: `${data.userProfile.firstname} ${data.userProfile.lastname}`,
+          firstname: data.userProfile.firstname,
+          lastname: data.userProfile.lastname,
           token: data.access_token,
           isConnected: !isVisitor,
         });

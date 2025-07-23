@@ -198,29 +198,37 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       const file = result.assets[0];
       const uri = file.uri;
       const fileName = file.name || "fichier_gpx";
-      
+
       if (!uri) {
         setError("URI du fichier introuvable");
         return;
       }
 
       // Vérifier que le fichier est bien un GPX
-      if (fileName && !fileName.toLowerCase().includes('.gpx') && !fileName.toLowerCase().includes('.xml')) {
-        console.warn("Le fichier sélectionné ne semble pas être un fichier GPX");
+      if (
+        fileName &&
+        !fileName.toLowerCase().includes(".gpx") &&
+        !fileName.toLowerCase().includes(".xml")
+      ) {
+        console.warn(
+          "Le fichier sélectionné ne semble pas être un fichier GPX"
+        );
       }
 
       try {
         // Lire le contenu du fichier GPX
         const gpxContent = await FileSystem.readAsStringAsync(uri);
-        
+
         if (!gpxContent || gpxContent.trim().length === 0) {
           setError("Le fichier GPX est vide");
           return;
         }
 
         // Validation basique du contenu GPX
-        if (!gpxContent.includes('<gpx') && !gpxContent.includes('<trk')) {
-          console.warn("Le fichier ne semble pas contenir de données GPX valides");
+        if (!gpxContent.includes("<gpx") && !gpxContent.includes("<trk")) {
+          console.warn(
+            "Le fichier ne semble pas contenir de données GPX valides"
+          );
         }
 
         setGpxFileUri(uri);
@@ -233,18 +241,24 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           fileName,
           contentLength: gpxContent.length,
           size: file.size || "unknown",
-          mimeType: file.mimeType || "unknown"
+          mimeType: file.mimeType || "unknown",
         });
-
       } catch (readError) {
         console.error("Erreur lors de la lecture du fichier GPX:", readError);
-        setError(`Impossible de lire le fichier GPX: ${readError instanceof Error ? readError.message : String(readError)}`);
+        setError(
+          `Impossible de lire le fichier GPX: ${
+            readError instanceof Error ? readError.message : String(readError)
+          }`
+        );
         return;
       }
-
     } catch (err) {
       console.error("Erreur lors de la sélection du fichier:", err);
-      setError(`Erreur lors de la sélection du fichier GPX: ${err instanceof Error ? err.message : String(err)}`);
+      setError(
+        `Erreur lors de la sélection du fichier GPX: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
     }
   };
 
@@ -262,6 +276,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         ? token
         : `Bearer ${token}`;
 
+      // Le backend s'en chargera automatiquement avec req.userId du token JWT
       const response = await fetch(`${API_URL}/organizations`, {
         method: "POST",
         headers: {
@@ -356,8 +371,14 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       console.log("- Organisation:", selectedOrganization);
       console.log("- Runners:", selectedRunners);
       console.log("- Fichier GPX:", gpxFileName || "Aucun");
-      console.log("- Contenu GPX longueur:", gpxFileContent ? gpxFileContent.length : 0);
-      console.log("Données JSON à envoyer:", { ...raceData, gpxFile: gpxFileContent ? `[${gpxFileContent.length} caractères]` : "" });
+      console.log(
+        "- Contenu GPX longueur:",
+        gpxFileContent ? gpxFileContent.length : 0
+      );
+      console.log("Données JSON à envoyer:", {
+        ...raceData,
+        gpxFile: gpxFileContent ? `[${gpxFileContent.length} caractères]` : "",
+      });
 
       const response = await fetch(`${API_URL}/race`, {
         method: "POST",

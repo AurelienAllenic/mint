@@ -89,7 +89,7 @@ export default function RaceDetailsScreen() {
 
         if (raceResponse.ok) {
           const raceData = await raceResponse.json();
-          
+
           // Log détaillé des données de la course reçues
           console.log("=== DONNÉES RACE REÇUES ===");
           console.log("Race ID:", raceId);
@@ -101,7 +101,7 @@ export default function RaceDetailsScreen() {
           console.log("gpxFile est undefined:", raceData.gpxFile === undefined);
           console.log("gpxFile est vide:", raceData.gpxFile === "");
           console.log("============================");
-          
+
           // Adapter les données pour l'affichage
           const adaptedRace: RaceDetails = {
             ...raceData,

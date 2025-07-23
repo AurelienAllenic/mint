@@ -36,7 +36,12 @@ interface MapProps {
   forceTrackCentering?: boolean; // Nouvelle prop pour forcer le centrage sur le tracé
 }
 
-const Map: React.FC<MapProps> = ({ user, gpxCoordinates, region, forceTrackCentering = false }) => {
+const Map: React.FC<MapProps> = ({
+  user,
+  gpxCoordinates,
+  region,
+  forceTrackCentering = false,
+}) => {
   const [location, setLocation] = useState<LatLng | null>(null);
   const [locations, setLocations] = useState<UserLocation[]>([]);
   const [error, setError] = useState<string | null>(null);

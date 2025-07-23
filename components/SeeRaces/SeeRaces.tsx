@@ -1,187 +1,257 @@
-import * as FileSystem from "expo-file-system";
+import { useAuth } from "@/context/auth";
 import React, { useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
+import MapView, { Marker, Polyline } from "react-native-maps";
 
 interface User {
+  _id: string;
   email: string;
-  name: string;
-  role: string;
+  role?: string;
 }
 
 interface Race {
-  id: string;
+  _id: string;
   name: string;
+  runners: string[];
+  startLocation: { latitude: number; longitude: number };
+  endLocation: { latitude: number; longitude: number };
   createdBy: string;
+  route: { latitude: number; longitude: number }[];
   startDate: string;
   endDate: string;
   startTime: string;
   endTime: string;
-  startLocation: { latitude: number; longitude: number };
-  endLocation: { latitude: number; longitude: number };
-  routeLength: number;
-  runnersCount: number;
-  gpxFileName: string;
+  gpxFile?: string;
+  owner?: User;
 }
 
-const DATA_DIR = `${FileSystem.documentDirectory}data/`;
-const RACES_FILE_PATH = `${DATA_DIR}races.json`;
+const parseGpx = (xml: string): { latitude: number; longitude: number }[] => {
+  try {
+    const matches = [
+      ...xml.matchAll(/<trkpt lat="([\d.-]+)" lon="([\d.-]+)"/g),
+    ];
+    const coords = matches.map((m) => ({
+      latitude: parseFloat(m[1]),
+      longitude: parseFloat(m[2]),
+    }));
+    return coords.filter(
+      (coord) => !isNaN(coord.latitude) && !isNaN(coord.longitude)
+    );
+  } catch (err) {
+    console.error("Erreur lors du parsing GPX :", err);
+    return [];
+  }
+};
 
-const UserRacesList: React.FC<{ user: User }> = ({ user }) => {
+const SeeRaces: React.FC = () => {
+  const { token } = useAuth();
   const [races, setRaces] = useState<Race[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Charger les courses au montage du composant
   useEffect(() => {
-    const loadRaces = async () => {
-      setLoading(true);
+    const fetchRaces = async () => {
+      if (!token) {
+        setError("Utilisateur non authentifié.");
+        setLoading(false);
+        return;
+      }
       try {
-        const dirInfo = await FileSystem.getInfoAsync(DATA_DIR);
-        if (!dirInfo.exists) {
-          await FileSystem.makeDirectoryAsync(DATA_DIR, {
-            intermediates: true,
-          });
+        const API_URL = process.env.EXPO_PUBLIC_API_URL;
+        if (!API_URL) throw new Error("API_URL non définie");
+        const response = await fetch(`${API_URL}/race`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        });
+        if (response.status === 401) {
+          throw new Error("Non autorisé : veuillez vous reconnecter.");
         }
-
-        if (!(await FileSystem.getInfoAsync(RACES_FILE_PATH)).exists) {
-          await FileSystem.writeAsStringAsync(RACES_FILE_PATH, "[]");
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Erreur HTTP ${response.status}: ${errorText}`);
         }
-
-        const raw = await FileSystem.readAsStringAsync(RACES_FILE_PATH);
-        const allRaces: Race[] = JSON.parse(raw);
-        // Filtrer les courses créées par l'utilisateur connecté
-        const userRaces = allRaces.filter(
-          (race) => race.createdBy === user.email
+        const data = await response.json();
+        console.log("Réponse API /race:", data);
+        const racesData = Array.isArray(data) ? data : data.races || [];
+        // On parse les GPX si besoin (support URL ou texte)
+        const processedRaces = await Promise.all(
+          racesData.map(async (race: Race) => {
+            let route = race.route || [];
+            if (race.gpxFile && (!route || route.length === 0)) {
+              if (race.gpxFile.startsWith("http")) {
+                try {
+                  const gpxRes = await fetch(race.gpxFile);
+                  const gpxText = await gpxRes.text();
+                  route = parseGpx(gpxText);
+                } catch (e) {
+                  console.error("Erreur fetch GPX:", e);
+                }
+              } else {
+                route = parseGpx(race.gpxFile);
+              }
+            }
+            return {
+              ...race,
+              route,
+              startLocation: route.length > 0 ? route[0] : race.startLocation,
+              endLocation:
+                route.length > 0 ? route[route.length - 1] : race.endLocation,
+            };
+          })
         );
-        setRaces(userRaces);
-      } catch (err) {
-        console.error("Erreur lors du chargement des courses :", err);
-        setError("Impossible de charger les courses");
+        setRaces(processedRaces);
+      } catch (err: any) {
+        setError(err.message || "Erreur inconnue");
       } finally {
         setLoading(false);
       }
     };
+    fetchRaces();
+  }, [token]);
 
-    loadRaces();
-  }, [user.email]);
+  const formatDate = (dateString: string) =>
+    new Date(dateString).toLocaleDateString("fr-FR");
 
-  // Rendu de chaque élément de la liste
-  const renderRaceItem = ({ item }: { item: Race }) => (
-    <TouchableOpacity style={styles.raceCard}>
-      <Text style={styles.raceTitle}>{item.name}</Text>
-      <Text style={styles.raceInfo}>
-        📅 Début : {item.startDate} à {item.startTime}
-      </Text>
-      <Text style={styles.raceInfo}>
-        🏁 Fin : {item.endDate} à {item.endTime}
-      </Text>
-      <Text style={styles.raceInfo}>👥 Coureurs : {item.runnersCount}</Text>
-      <Text style={styles.raceInfo}>
-        📏 Distance : {item.routeLength} points
-      </Text>
-      <Text style={styles.raceInfo}>
-        📍 Départ : ({item.startLocation.latitude.toFixed(4)},{" "}
-        {item.startLocation.longitude.toFixed(4)})
-      </Text>
-      <Text style={styles.raceInfo}>
-        📍 Arrivée : ({item.endLocation.latitude.toFixed(4)},{" "}
-        {item.endLocation.longitude.toFixed(4)})
-      </Text>
-      <Text style={styles.raceInfo}>📄 Fichier GPX : {item.gpxFileName}</Text>
-    </TouchableOpacity>
-  );
+  const getInitialRegion = (
+    coords: { latitude: number; longitude: number }[]
+  ) => {
+    if (!coords || coords.length === 0) {
+      return {
+        latitude: 48.8566,
+        longitude: 2.3522,
+        latitudeDelta: 0.1,
+        longitudeDelta: 0.1,
+      };
+    }
+    const lats = coords.map((c) => c.latitude);
+    const lngs = coords.map((c) => c.longitude);
+    const minLat = Math.min(...lats);
+    const maxLat = Math.max(...lats);
+    const minLng = Math.min(...lngs);
+    const maxLng = Math.max(...lngs);
+    return {
+      latitude: (minLat + maxLat) / 2,
+      longitude: (minLng + maxLng) / 2,
+      latitudeDelta: (maxLat - minLat) * 1.5 || 0.1,
+      longitudeDelta: (maxLng - minLng) * 1.5 || 0.1,
+    };
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" color="#007AFF" />
+        <Text>Chargement des courses...</Text>
+      </View>
+    );
+  }
+  if (error) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.error}>Erreur: {error}</Text>
+      </View>
+    );
+  }
+  if (races.length === 0) {
+    return (
+      <View style={styles.center}>
+        <Text>Aucune course trouvée.</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {error && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{error}</Text>
-          <TouchableOpacity onPress={() => setError(null)}>
-            <Text style={styles.clearError}>Effacer</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {loading ? (
-        <Text style={styles.loadingText}>Chargement des courses...</Text>
-      ) : races.length === 0 ? (
-        <Text style={styles.emptyText}>
-          Aucune course créée pour le moment.
-        </Text>
-      ) : (
-        <FlatList
-          data={races}
-          renderItem={renderRaceItem}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.listContent}
-        />
-      )}
+      <Text style={styles.title}>Liste des courses</Text>
+      <FlatList
+        data={races}
+        keyExtractor={(item) => item._id}
+        renderItem={({ item }) => (
+          <View style={styles.item}>
+            <Text style={styles.name}>{item.name}</Text>
+            <Text>Date de début : {formatDate(item.startDate)}</Text>
+            <Text>Date de fin : {formatDate(item.endDate)}</Text>
+            <Text>Créateur : {item.owner?.email || "Inconnu"}</Text>
+            {console.log("GPX route for", item.name, item.route)}
+            {item.route && item.route.length > 0 ? (
+              <MapView
+                style={styles.map}
+                region={getInitialRegion(item.route)}
+                scrollEnabled={true}
+                zoomEnabled={true}
+              >
+                <Marker
+                  coordinate={item.route[0]}
+                  pinColor="green"
+                  title="Départ"
+                />
+                <Marker
+                  coordinate={item.route[item.route.length - 1]}
+                  pinColor="red"
+                  title="Arrivée"
+                />
+                <Polyline
+                  coordinates={item.route}
+                  strokeColor="#007AFF"
+                  strokeWidth={3}
+                />
+              </MapView>
+            ) : (
+              <Text style={{ color: "red" }}>Aucun tracé GPX</Text>
+            )}
+          </View>
+        )}
+      />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
+    padding: 16,
     flex: 1,
-    padding: 20,
-    backgroundColor: "#fff",
+    backgroundColor: "#f5f5f5",
   },
-  raceCard: {
-    backgroundColor: "#f9f9f9",
-    padding: 15,
-    marginBottom: 10,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: "#ddd",
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
   },
-  raceTitle: {
-    fontSize: 18,
+  title: {
+    fontSize: 20,
     fontWeight: "bold",
-    marginBottom: 8,
-    color: "#333",
+    marginBottom: 12,
   },
-  raceInfo: {
-    fontSize: 14,
-    color: "#555",
+  item: {
+    marginBottom: 24,
+    backgroundColor: "#f4f4f4",
+    padding: 12,
+    borderRadius: 8,
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: "bold",
     marginBottom: 4,
   },
-  errorBox: {
-    backgroundColor: "#ffe6e6",
-    padding: 10,
-    marginBottom: 10,
-    borderRadius: 4,
-    borderColor: "#ff4d4d",
-    borderWidth: 1,
+  error: {
+    color: "red",
   },
-  errorText: {
-    color: "#b00000",
-    marginBottom: 5,
-  },
-  clearError: {
-    color: "#007AFF",
-    textAlign: "center",
-  },
-  loadingText: {
-    fontSize: 16,
-    textAlign: "center",
-    color: "#555",
-    marginTop: 20,
-  },
-  emptyText: {
-    fontSize: 16,
-    textAlign: "center",
-    color: "#888",
-    marginTop: 20,
-  },
-  listContent: {
-    paddingBottom: 20,
+  map: {
+    width: "100%",
+    height: 200,
+    marginTop: 12,
+    borderRadius: 8,
   },
 });
 
-export default UserRacesList;
+export default SeeRaces;

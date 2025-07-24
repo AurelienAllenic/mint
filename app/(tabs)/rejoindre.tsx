@@ -260,7 +260,7 @@ export default function RejoindreScreen() {
                   <View style={styles.raceDetail}>
                     <Icon name="calendar" size={14} color="#A1F763" />
                     <Text style={styles.raceDetailText}>
-                      Début dans : {getTimeUntil(race.startDate)}{" "}
+                      Début dans : {getTimeUntil(race.startDate, race.endDate)}{" "}
                     </Text>
                   </View>
                 )}

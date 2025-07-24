@@ -51,6 +51,9 @@ export default function RejoindreScreen() {
   const [loading, setLoading] = useState(false);
   const [mesRaces, setMesRaces] = useState<Race[]>([]);
   const [mesParticipations, setMesParticipations] = useState<Race[]>([]);
+  const [activeTab, setActiveTab] = useState<"courses" | "participations">(
+    "courses"
+  );
   const scrollY = new Animated.Value(0);
 
   const headerOpacity = scrollY.interpolate({
@@ -86,10 +89,6 @@ export default function RejoindreScreen() {
 
         if (response.ok) {
           const data = await response.json();
-          console.log(
-            "Races récupérées depuis l'API:",
-            JSON.stringify(data, null, 2)
-          );
 
           const trailImages = [
             "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
@@ -139,19 +138,8 @@ export default function RejoindreScreen() {
             image: race.image || getRandomImage(),
           }));
 
-          console.log("Courses formatées avec images:", coursesAvecImages);
-
-          // Log spécifique pour les runners
-          data.forEach((race: any, index: number) => {
-            console.log(`Race ${index + 1} - ${race.name}:`);
-            console.log(`  Runners:`, JSON.stringify(race.runners, null, 2));
-            console.log(`  Nombre de runners:`, race.runners?.length || 0);
-            console.log(`  Owner:`, race.owner);
-          });
-
           // Filtrer les courses selon les critères
           const userId = user?.id;
-          console.log("ID utilisateur connecté:", userId);
 
           // Mes courses : où l'utilisateur est le propriétaire
           const mesCourses = coursesAvecImages.filter(
@@ -170,9 +158,6 @@ export default function RejoindreScreen() {
                 runner === userId
             )
           );
-
-          console.log("Mes courses (propriétaire):", mesCourses);
-          console.log("Mes participations:", mesParticipationsData);
 
           setMesRaces(mesCourses);
           setMesParticipations(mesParticipationsData);
@@ -204,11 +189,9 @@ export default function RejoindreScreen() {
   const RaceCard = ({ race }: { race: Race }) => {
     const scaleValue = new Animated.Value(1);
 
-    const now = new Date();
-
     const onPressIn = () => {
       Animated.spring(scaleValue, {
-        toValue: 0.95,
+        toValue: 0.98,
         useNativeDriver: true,
       }).start();
     };
@@ -221,7 +204,12 @@ export default function RejoindreScreen() {
     };
 
     return (
-      <Animated.View style={{ transform: [{ scale: scaleValue }] }}>
+      <Animated.View
+        style={[
+          styles.raceCardContainer,
+          { transform: [{ scale: scaleValue }] },
+        ]}
+      >
         <TouchableOpacity
           activeOpacity={0.9}
           onPressIn={onPressIn}
@@ -234,41 +222,29 @@ export default function RejoindreScreen() {
           }}
         >
           <View style={styles.raceCard}>
-            {race.image ? (
-              <Image
-                source={{ uri: race.image }}
-                style={styles.raceImage}
-                resizeMode="cover"
-              />
-            ) : (
-              <View style={styles.raceImagePlaceholder}>
-                <Icon name="image-off" size={40} color="#A1F763" />
-              </View>
-            )}
-            <LinearGradient
-              colors={["transparent", "rgba(0,0,0,0.9)"]}
-              style={styles.raceGradient}
-            />
+            <View style={styles.raceImageContainer}>
+              {race.image ? (
+                <Image
+                  source={{ uri: race.image }}
+                  style={styles.raceImage}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.raceImagePlaceholder}>
+                  <Icon name="image-off" size={30} color="#A1F763" />
+                </View>
+              )}
+            </View>
+
             <View style={styles.raceCardContent}>
               <View style={styles.raceHeader}>
                 <Text style={styles.raceName} numberOfLines={2}>
                   {race.name}
                 </Text>
-                <Icon name="chevron-right" size={24} color="#A1F763" />
+                <Icon name="chevron-right" size={20} color="#A1F763" />
               </View>
+
               <View style={styles.raceInfo}>
-                {race.distance && (
-                  <View style={styles.raceDetail}>
-                    <Icon
-                      name="map-marker-distance"
-                      size={14}
-                      color="#A1F763"
-                    />
-                    <Text style={styles.raceDetailText}>
-                      {race.distance} km
-                    </Text>
-                  </View>
-                )}
                 {race.location && (
                   <View style={styles.raceDetail}>
                     <Icon name="map-marker" size={14} color="#A1F763" />
@@ -277,25 +253,20 @@ export default function RejoindreScreen() {
                     </Text>
                   </View>
                 )}
-                {race.participants && race.maxParticipants && (
+                {race.participants !== undefined && (
                   <View style={styles.raceDetail}>
                     <Icon name="account-group" size={14} color="#A1F763" />
                     <Text style={styles.raceDetailText}>
-                      {race.participants}/{race.maxParticipants}
+                      {race.participants} participant
+                      {race.participants > 1 ? "s" : ""}
                     </Text>
                   </View>
                 )}
                 {race.date && (
                   <View style={styles.raceDetail}>
                     <Icon name="calendar" size={14} color="#A1F763" />
-                    <Text style={styles.raceDetailText}>{race.date}</Text>
-                  </View>
-                )}
-                {race.date && (
-                  <View style={styles.raceDetail}>
-                    <Icon name="calendar" size={14} color="#A1F763" />
                     <Text style={styles.raceDetailText}>
-                      Début dans : {getTimeUntil(race.startDate)}{" "}
+                      Début dans : {getTimeUntil(race.startDate)}
                     </Text>
                   </View>
                 )}
@@ -306,6 +277,58 @@ export default function RejoindreScreen() {
       </Animated.View>
     );
   };
+
+  const TabButton = ({
+    title,
+    isActive,
+    onPress,
+    icon,
+  }: {
+    title: string;
+    isActive: boolean;
+    onPress: () => void;
+    icon: string;
+  }) => (
+    <TouchableOpacity
+      style={[styles.tabButton, isActive && styles.activeTabButton]}
+      onPress={onPress}
+    >
+      <Icon
+        name={icon as any}
+        size={18}
+        color={isActive ? "#212121" : "#A1F763"}
+      />
+      <Text
+        style={[styles.tabButtonText, isActive && styles.activeTabButtonText]}
+      >
+        {title}
+      </Text>
+    </TouchableOpacity>
+  );
+
+  const RaceList = ({ races }: { races: Race[] }) => (
+    <View style={styles.raceListContainer}>
+      {races.length === 0 ? (
+        <View style={styles.emptyContainer}>
+          <Icon name="alert-circle-outline" size={60} color="#888" />
+          <Text style={styles.emptyText}>Aucune course disponible</Text>
+          <Text style={styles.emptySubText}>
+            {activeTab === "courses"
+              ? "Vous n'avez créé aucune course pour le moment"
+              : "Vous ne participez à aucune course pour le moment"}
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={races}
+          renderItem={({ item }) => <RaceCard race={item} />}
+          keyExtractor={(item) => item._id || item.id || "unknown"}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.raceListContent}
+        />
+      )}
+    </View>
+  );
 
   const CategorySection = ({
     title,
@@ -383,16 +406,25 @@ export default function RejoindreScreen() {
           )}
           scrollEventThrottle={16}
         >
-          <CategorySection
-            title="Mes courses"
-            races={mesRaces}
-            icon="account-check"
-          />
+          {/* Onglets */}
+          <View style={styles.tabContainer}>
+            <TabButton
+              title="Mes courses"
+              isActive={activeTab === "courses"}
+              onPress={() => setActiveTab("courses")}
+              icon="account-check"
+            />
+            <TabButton
+              title="Mes participations"
+              isActive={activeTab === "participations"}
+              onPress={() => setActiveTab("participations")}
+              icon="run"
+            />
+          </View>
 
-          <CategorySection
-            title="Mes participations"
-            races={mesParticipations}
-            icon="run"
+          {/* Contenu selon l'onglet actif */}
+          <RaceList
+            races={activeTab === "courses" ? mesRaces : mesParticipations}
           />
         </Animated.ScrollView>
       )}
@@ -447,9 +479,137 @@ const styles = StyleSheet.create({
     backgroundColor: "#0A0A0A",
   },
   scrollContent: {
-    paddingTop: 20,
     paddingBottom: 40,
   },
+  // Nouveaux styles pour les onglets
+  tabContainer: {
+    flexDirection: "row",
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+    gap: 12,
+  },
+  tabButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 12,
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(161, 247, 99, 0.3)",
+    gap: 8,
+  },
+  activeTabButton: {
+    backgroundColor: "#A1F763",
+    borderColor: "#A1F763",
+  },
+  tabButtonText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#A1F763",
+    fontFamily: "HelveticaNowMicroBold",
+  },
+  activeTabButtonText: {
+    color: "#212121",
+  },
+  // Nouveaux styles pour la liste de courses
+  raceListContainer: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  raceListContent: {
+    paddingBottom: 20,
+  },
+  raceCardContainer: {
+    marginBottom: 16,
+  },
+  raceCard: {
+    flexDirection: "row",
+    backgroundColor: "#1E1E1E",
+    borderRadius: 12,
+    padding: 16,
+    shadowColor: "#A1F763",
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  raceImageContainer: {
+    width: 80,
+    height: 80,
+    borderRadius: 8,
+    overflow: "hidden",
+    marginRight: 16,
+  },
+  raceImage: {
+    width: "100%",
+    height: "100%",
+  },
+  raceImagePlaceholder: {
+    width: "100%",
+    height: "100%",
+    backgroundColor: "#2A2A2A",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  raceCardContent: {
+    flex: 1,
+    justifyContent: "space-between",
+  },
+  raceHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    marginBottom: 8,
+  },
+  raceName: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#fff",
+    flex: 1,
+    marginRight: 8,
+    fontFamily: "HelveticaNowMicroBold",
+  },
+  raceInfo: {
+    gap: 4,
+  },
+  raceDetail: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  raceDetailText: {
+    fontSize: 12,
+    color: "#fff",
+    opacity: 0.8,
+    fontFamily: "HelveticaNowMicroRegular",
+    flex: 1,
+  },
+  emptyContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 80,
+    paddingHorizontal: 40,
+  },
+  emptyText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginTop: 16,
+    textAlign: "center",
+    fontFamily: "HelveticaNowMicroBold",
+  },
+  emptySubText: {
+    color: "#888",
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+    fontFamily: "HelveticaNowMicroRegular",
+    lineHeight: 20,
+  },
+  // Anciens styles conservés pour compatibilité
   categorySection: {
     marginBottom: 32,
   },
@@ -473,45 +633,9 @@ const styles = StyleSheet.create({
     color: "#fff",
     fontFamily: "HelveticaNowMicroBold",
   },
-  emptyContainer: {
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 40,
-  },
-  emptyText: {
-    color: "#888",
-    fontSize: 16,
-    marginTop: 10,
-    fontFamily: "HelveticaNowMicroRegular",
-  },
   horizontalScrollContent: {
     paddingLeft: 20,
     paddingRight: 20,
-  },
-  raceCard: {
-    width: CARD_WIDTH,
-    height: CARD_WIDTH * 0.8,
-    marginRight: CARD_MARGIN,
-    borderRadius: 16,
-    overflow: "hidden",
-    backgroundColor: "#1E1E1E",
-    shadowColor: "#A1F763",
-    shadowOpacity: 0.1,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 5,
-  },
-  raceImage: {
-    width: "100%",
-    height: "100%",
-    position: "absolute",
-  },
-  raceImagePlaceholder: {
-    width: "100%",
-    height: "100%",
-    backgroundColor: "#1E1E1E",
-    justifyContent: "center",
-    alignItems: "center",
   },
   raceGradient: {
     position: "absolute",
@@ -519,43 +643,5 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     height: "70%",
-  },
-  raceCardContent: {
-    position: "absolute",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: 16,
-  },
-  raceHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  raceName: {
-    fontSize: 18,
-    fontWeight: "bold",
-    color: "#fff",
-    flex: 1,
-    marginRight: 8,
-    fontFamily: "HelveticaNowMicroBold",
-    textShadowColor: "rgba(0, 0, 0, 0.5)",
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
-  },
-  raceInfo: {
-    gap: 8,
-  },
-  raceDetail: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  raceDetailText: {
-    fontSize: 14,
-    color: "#fff",
-    opacity: 0.9,
-    fontFamily: "HelveticaNowMicroRegular",
   },
 });

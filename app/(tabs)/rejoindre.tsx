@@ -47,11 +47,10 @@ interface Race {
 
 export default function RejoindreScreen() {
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [mesRaces, setMesRaces] = useState<Race[]>([]);
-  const [racesProches, setRacesProches] = useState<Race[]>([]);
-  const [racesSponsos, setRacesSponsos] = useState<Race[]>([]);
+  const [mesParticipations, setMesParticipations] = useState<Race[]>([]);
   const scrollY = new Animated.Value(0);
 
   const headerOpacity = scrollY.interpolate({
@@ -65,8 +64,6 @@ export default function RejoindreScreen() {
     outputRange: [0, -20],
     extrapolate: "clamp",
   });
-
-  
 
   useEffect(() => {
     const fetchRaces = async () => {
@@ -89,6 +86,11 @@ export default function RejoindreScreen() {
 
         if (response.ok) {
           const data = await response.json();
+          console.log(
+            "Races récupérées depuis l'API:",
+            JSON.stringify(data, null, 2)
+          );
+
           const trailImages = [
             "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
             "https://mesinfos.fr/content/articles/968/A151968/image-827110557111684162009034.png",
@@ -137,9 +139,43 @@ export default function RejoindreScreen() {
             image: race.image || getRandomImage(),
           }));
 
-          setMesRaces(coursesAvecImages.slice(0, 3));
-          setRacesProches(coursesAvecImages.slice(3, 8));
-          setRacesSponsos(coursesAvecImages.slice(8));
+          console.log("Courses formatées avec images:", coursesAvecImages);
+
+          // Log spécifique pour les runners
+          data.forEach((race: any, index: number) => {
+            console.log(`Race ${index + 1} - ${race.name}:`);
+            console.log(`  Runners:`, JSON.stringify(race.runners, null, 2));
+            console.log(`  Nombre de runners:`, race.runners?.length || 0);
+            console.log(`  Owner:`, race.owner);
+          });
+
+          // Filtrer les courses selon les critères
+          const userId = user?.id;
+          console.log("ID utilisateur connecté:", userId);
+
+          // Mes courses : où l'utilisateur est le propriétaire
+          const mesCourses = coursesAvecImages.filter(
+            (race: any) =>
+              race.owner?._id === userId ||
+              race.owner?.id === userId ||
+              race.owner === userId
+          );
+
+          // Mes participations : où l'utilisateur est dans le tableau runners
+          const mesParticipationsData = coursesAvecImages.filter((race: any) =>
+            race.runners?.some(
+              (runner: any) =>
+                runner._id === userId ||
+                runner.id === userId ||
+                runner === userId
+            )
+          );
+
+          console.log("Mes courses (propriétaire):", mesCourses);
+          console.log("Mes participations:", mesParticipationsData);
+
+          setMesRaces(mesCourses);
+          setMesParticipations(mesParticipationsData);
         } else {
           const trailImages = [
             "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
@@ -153,7 +189,6 @@ export default function RejoindreScreen() {
             "https://mesinfos.fr/content/articles/968/A151968/image-219702519171684162009064.png",
             "https://www.latransju.com/wp-content/uploads/2022/12/cv-lilian-menetrier-transju_trail-2022-dimanche-hd-52-date-jj-min-2048x1365.jpg",
           ];
-
         }
       } catch (error) {
         console.error("Erreur lors du chargement des courses:", error);
@@ -164,7 +199,7 @@ export default function RejoindreScreen() {
     };
 
     fetchRaces();
-  }, [token]);
+  }, [token, user?.id]);
 
   const RaceCard = ({ race }: { race: Race }) => {
     const scaleValue = new Animated.Value(1);
@@ -355,15 +390,9 @@ export default function RejoindreScreen() {
           />
 
           <CategorySection
-            title="Autour de vous"
-            races={racesProches}
-            icon="map-marker-radius"
-          />
-
-          <CategorySection
-            title="Les sponsos"
-            races={racesSponsos}
-            icon="star"
+            title="Mes participations"
+            races={mesParticipations}
+            icon="run"
           />
         </Animated.ScrollView>
       )}

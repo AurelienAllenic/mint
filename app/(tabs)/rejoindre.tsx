@@ -1,21 +1,21 @@
-import React, { useEffect, useState } from "react";
 import { getTimeUntil } from "@/utils/getTimeUntil";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  SafeAreaView,
-  ActivityIndicator,
-  Alert,
-  FlatList,
-  Image,
-  Animated,
-  Dimensions,
-} from "react-native";
-import { useRouter } from "expo-router";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useRouter } from "expo-router";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { useAuth } from "../../context/auth";
 
 const { width } = Dimensions.get("window");
@@ -305,7 +305,7 @@ export default function RejoindreScreen() {
                   <View style={styles.raceDetail}>
                     <Icon name="calendar" size={14} color="#A1F763" />
                     <Text style={styles.raceDetailText}>
-                      Début dans : {getTimeUntil(race.startDate)}
+                      Début dans : {getTimeUntil(race.startDate, race.endDate)}{" "}
                     </Text>
                   </View>
                 )}

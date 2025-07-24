@@ -1,13 +1,13 @@
-export function getTimeUntil(startDate?: string, endDate?: string): string {
+export function getTimeUntil(startDate: string | undefined, endDate: string | undefined): string {
     if (!startDate) return "";
+    if (!endDate) return "";
     const now = new Date();
     const start = new Date(startDate);
-    const end = endDate ? new Date(endDate) : null;
+    const end = new Date(endDate);
     const diffMs = start.getTime() - now.getTime();
-    if (diffMs <= 0 && end && end.getTime() > now.getTime()){
+    if (diffMs <= 0 && (end === null || end.getTime() > now.getTime())) {
       return "En cours";
-    }
-    else if (diffMs <= 0) {
+    } else if (diffMs <= 0) {
       return "Terminé";
     }
 

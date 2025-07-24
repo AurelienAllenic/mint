@@ -825,6 +825,40 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           }}
         />
       )}
+
+      {showStartTimePicker && (
+        <DateTimePicker
+          value={startDate}
+          mode="time"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={(_, selectedTime) => {
+            setShowStartTimePicker(false);
+            if (selectedTime) {
+              const newDate = new Date(startDate);
+              newDate.setHours(selectedTime.getHours());
+              newDate.setMinutes(selectedTime.getMinutes());
+              setStartDate(newDate);
+            }
+          }}
+        />
+      )}
+
+      {showEndTimePicker && (
+        <DateTimePicker
+          value={endDate}
+          mode="time"
+          display={Platform.OS === "ios" ? "spinner" : "default"}
+          onChange={(_, selectedTime) => {
+            setShowEndTimePicker(false);
+            if (selectedTime) {
+              const newDate = new Date(endDate);
+              newDate.setHours(selectedTime.getHours());
+              newDate.setMinutes(selectedTime.getMinutes());
+              setEndDate(newDate);
+            }
+          }}
+        />
+      )}
     </View>
   );
 };

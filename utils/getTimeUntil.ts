@@ -1,5 +1,6 @@
-export function getTimeUntil(startDate: string, endDate: string): string {
+export function getTimeUntil(startDate: string | undefined, endDate: string | undefined): string {
     if (!startDate) return "";
+    if (!endDate) return "";
     const now = new Date();
     const start = new Date(startDate);
     const end = new Date(endDate);

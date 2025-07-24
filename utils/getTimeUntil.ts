@@ -4,10 +4,9 @@ export function getTimeUntil(startDate?: string, endDate?: string): string {
     const start = new Date(startDate);
     const end = endDate ? new Date(endDate) : null;
     const diffMs = start.getTime() - now.getTime();
-    if (diffMs <= 0 && end && end.getTime() > now.getTime()){
+    if (diffMs <= 0 && (end === null || end.getTime() > now.getTime())) {
       return "En cours";
-    }
-    else if (diffMs <= 0) {
+    } else if (diffMs <= 0) {
       return "Terminé";
     }
 

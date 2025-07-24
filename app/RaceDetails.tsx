@@ -58,6 +58,16 @@ export default function RaceDetailsScreen() {
   const [error, setError] = useState<string | null>(null);
   const [showParticipantsModal, setShowParticipantsModal] = useState(false);
   const [showRaceInfo, setShowRaceInfo] = useState(false);
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // Mettre à jour l'heure actuelle chaque seconde pour le compte à rebours
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentTime(new Date());
+    }, 1000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     const fetchRaceData = async () => {
@@ -296,6 +306,63 @@ export default function RaceDetailsScreen() {
     return `${distanceInMeters} m`;
   };
 
+  // Fonction pour déterminer le statut de la course
+  const getRaceStatus = () => {
+    if (!race?.startDate) return { status: 'unknown', color: '#888' };
+    
+    const now = currentTime;
+    const startDate = new Date(race.startDate);
+    const endDate = race.endDate ? new Date(race.endDate) : null;
+    
+    if (now < startDate) {
+      return { status: 'upcoming', color: '#FFB020', label: 'À venir' };
+    } else if (endDate && now > endDate) {
+      return { status: 'finished', color: '#666', label: 'Terminée' };
+    } else {
+      return { status: 'ongoing', color: '#A1F763', label: 'En cours' };
+    }
+  };
+
+  // Fonction pour calculer le temps restant
+  const getTimeRemaining = () => {
+    if (!race?.startDate) return null;
+    
+    const now = currentTime;
+    const startDate = new Date(race.startDate);
+    const endDate = race.endDate ? new Date(race.endDate) : null;
+    const raceStatus = getRaceStatus();
+    
+    let targetDate: Date;
+    let prefix: string;
+    
+    if (raceStatus.status === 'upcoming') {
+      targetDate = startDate;
+      prefix = 'Commence dans';
+    } else if (raceStatus.status === 'ongoing' && endDate) {
+      targetDate = endDate;
+      prefix = 'Se termine dans';
+    } else {
+      return null;
+    }
+    
+    const timeDiff = targetDate.getTime() - now.getTime();
+    
+    if (timeDiff <= 0) return null;
+    
+    const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
+    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+    const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
+    
+    if (days > 0) {
+      return `${prefix} ${days}j ${hours}h ${minutes}m`;
+    } else if (hours > 0) {
+      return `${prefix} ${hours}h ${minutes}m ${seconds}s`;
+    } else {
+      return `${prefix} ${minutes}m ${seconds}s`;
+    }
+  };
+
   // Composant pour afficher un participant
   const ParticipantItem = ({
     participant,
@@ -426,11 +493,43 @@ export default function RaceDetailsScreen() {
               <Text style={styles.headerTitle}>
                 {race?.name || "Détails de la course"}
               </Text>
+              {/* Indicateur de statut de la course */}
+              {race?.startDate && (
+                <View style={styles.statusContainer}>
+                  <View 
+                    style={[
+                      styles.statusIndicator, 
+                      { backgroundColor: getRaceStatus().color }
+                    ]} 
+                  />
+                  <Text style={[styles.statusText, { color: getRaceStatus().color }]}>
+                    {getRaceStatus().label}
+                  </Text>
+                </View>
+              )}
             </View>
             <View style={styles.headerSpacer} />
           </View>
         </BlurView>
       </View>
+
+      {/* Panneau de compte à rebours pour les courses en cours ou à venir */}
+      {getTimeRemaining() && (
+        <View style={styles.countdownContainer}>
+          <BlurView style={styles.countdownBlur} intensity={40} tint="dark">
+            <View style={styles.countdownContent}>
+              <Icon 
+                name={getRaceStatus().status === 'ongoing' ? 'timer' : 'clock-outline'} 
+                size={24} 
+                color={getRaceStatus().color} 
+              />
+              <Text style={[styles.countdownText, { color: getRaceStatus().color }]}>
+                {getTimeRemaining()}
+              </Text>
+            </View>
+          </BlurView>
+        </View>
+      )}
 
       {/* Informations de la course directement sur la page */}
       {showRaceInfo && (
@@ -439,6 +538,25 @@ export default function RaceDetailsScreen() {
             <View style={styles.raceInfoContent}>
               {/* Grille d'informations */}
               <View style={styles.infoGrid}>
+                {/* Statut de la course */}
+                {race?.startDate && (
+                  <View style={[styles.infoCard, getRaceStatus().status === 'ongoing' && styles.ongoingRaceCard]}>
+                    <View style={[styles.infoIconContainer, { backgroundColor: getRaceStatus().color }]}>
+                      <Icon
+                        name={getRaceStatus().status === 'ongoing' ? 'play' : getRaceStatus().status === 'upcoming' ? 'clock-outline' : 'check'}
+                        size={24}
+                        color="#0F0F0F"
+                      />
+                    </View>
+                    <View style={styles.infoTextContainer}>
+                      <Text style={styles.infoLabel}>Statut</Text>
+                      <Text style={[styles.infoValue, { color: getRaceStatus().color }]}>
+                        {getRaceStatus().label}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
                 {/* Distance */}
                 {(calculatedDistance > 0 || race?.distance) && (
                   <View style={styles.infoCard}>
@@ -472,6 +590,21 @@ export default function RaceDetailsScreen() {
                       <Text style={styles.infoLabel}>Début</Text>
                       <Text style={styles.infoValue}>
                         {formatDate(race.startDate || race.start_date!)}
+                      </Text>
+                    </View>
+                  </View>
+                )}
+
+                {/* Date de fin */}
+                {(race?.endDate || race?.end_date) && (
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoIconContainer}>
+                      <Icon name="calendar-end" size={24} color="#0F0F0F" />
+                    </View>
+                    <View style={styles.infoTextContainer}>
+                      <Text style={styles.infoLabel}>Fin</Text>
+                      <Text style={styles.infoValue}>
+                        {formatDate(race.endDate || race.end_date!)}
                       </Text>
                     </View>
                   </View>
@@ -670,12 +803,59 @@ const styles = StyleSheet.create({
     color: "#A1F763",
     textAlign: "center",
   },
+  statusContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 4,
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 6,
+  },
+  statusText: {
+    fontSize: 12,
+    fontWeight: "600",
+  },
   headerSpacer: {
     width: 40,
   },
-  raceInfoContainer: {
+  countdownContainer: {
     position: "absolute",
     top: 140,
+    left: 20,
+    right: 20,
+    borderRadius: 15,
+    zIndex: 10,
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 5,
+  },
+  countdownBlur: {
+    borderRadius: 15,
+    backgroundColor: "rgba(105, 105, 105, 0.18)",
+    overflow: "hidden",
+  },
+  countdownContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 12,
+  },
+  countdownText: {
+    fontSize: 16,
+    fontWeight: "bold",
+    marginLeft: 8,
+  },
+  raceInfoContainer: {
+    position: "absolute",
+    top: 200, // Position ajustée pour laisser de la place au compte à rebours
     left: 20,
     right: 20,
     borderRadius: 20,
@@ -936,6 +1116,15 @@ const styles = StyleSheet.create({
     borderColor: "rgba(42, 42, 42, 0.6)",
     flexDirection: "row",
     alignItems: "center",
+  },
+  ongoingRaceCard: {
+    borderColor: "#A1F763",
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    shadowColor: "#A1F763",
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 5,
   },
   infoIconContainer: {
     width: 40,

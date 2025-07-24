@@ -98,6 +98,23 @@ export default function RejoindreScreen() {
         if (response.ok) {
           const data = await response.json();
 
+          // Logs pour debug
+          console.log("=== DEBUG: Données reçues de l'API ===");
+          console.log("Nombre de courses:", data.length);
+          console.log("Première course (exemple):", data[0]);
+
+          if (data.length > 0) {
+            console.log("Structure de la première course:");
+            console.log("- _id:", data[0]._id);
+            console.log("- name:", data[0].name);
+            console.log("- startDate:", data[0].startDate);
+            console.log("- endDate:", data[0].endDate);
+            console.log("- organization:", data[0].organization);
+            console.log("- runners:", data[0].runners);
+            console.log("- owner:", data[0].owner);
+          }
+          console.log("========================================");
+
           const trailImages = [
             "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
             "https://mesinfos.fr/content/articles/968/A151968/image-827110557111684162009034.png",
@@ -145,6 +162,23 @@ export default function RejoindreScreen() {
             category: "Course",
             image: race.image || getRandomImage(),
           }));
+
+          // Log des données après mapping
+          console.log("=== DEBUG: Données après mapping ===");
+          console.log("Première course mappée:", coursesAvecImages[0]);
+          if (coursesAvecImages[0]) {
+            console.log("startDate mappée:", coursesAvecImages[0].startDate);
+            console.log("endDate mappée:", coursesAvecImages[0].endDate);
+            console.log(
+              "Type de startDate:",
+              typeof coursesAvecImages[0].startDate
+            );
+            console.log(
+              "Type de endDate:",
+              typeof coursesAvecImages[0].endDate
+            );
+          }
+          console.log("=====================================");
 
           // Filtrer les courses selon les critères
           const userId = user?._id;
@@ -242,6 +276,68 @@ export default function RejoindreScreen() {
       }).start();
     };
 
+    // Fonction pour déterminer le statut et le texte à afficher pour la course
+    const getRaceStatusInfo = () => {
+      if (!race.startDate)
+        return { status: "unknown", text: "Date inconnue", color: "#888" };
+
+      // Utiliser getTimeUntil avec startDate et endDate pour une logique cohérente
+      const timeStatus = getTimeUntil(race.startDate, race.endDate);
+
+      // Toutes les dates en UTC pour la comparaison
+      const now = new Date();
+      const startDate = new Date(race.startDate);
+      const endDate = race.endDate ? new Date(race.endDate) : null;
+
+      // Logs pour debug du statut
+      console.log(`=== DEBUG STATUS: ${race.name} ===`);
+      console.log("Date actuelle:", now.toISOString());
+      console.log("Date de début:", startDate.toISOString());
+      console.log(
+        "Date de fin:",
+        endDate ? endDate.toISOString() : "Pas de date de fin"
+      );
+      console.log("Date actuelle (local):", now.toLocaleString("fr-FR"));
+      console.log("Date de début (local):", startDate.toLocaleString("fr-FR"));
+      console.log(
+        "Date de fin (local):",
+        endDate ? endDate.toLocaleString("fr-FR") : "Pas de date de fin"
+      );
+      console.log("Résultat getTimeUntil:", timeStatus);
+      console.log("Maintenant < début ?", now < startDate);
+      console.log(
+        "Maintenant > fin ?",
+        endDate ? now > endDate : "Pas de date de fin"
+      );
+
+      // Utiliser le résultat de getTimeUntil pour déterminer le statut
+      if (timeStatus === "En cours") {
+        console.log("Statut déterminé: en cours (via getTimeUntil)");
+        return {
+          status: "ongoing",
+          text: "En cours",
+          color: "#A1F763",
+        };
+      } else if (timeStatus === "Terminé") {
+        console.log("Statut déterminé: terminée (via getTimeUntil)");
+        return {
+          status: "finished",
+          text: "Terminée",
+          color: "#666",
+        };
+      } else {
+        // Course à venir
+        console.log("Statut déterminé: à venir (via getTimeUntil)");
+        return {
+          status: "upcoming",
+          text: `Début : ${timeStatus}`,
+          color: "#FFB020",
+        };
+      }
+    };
+
+    const statusInfo = getRaceStatusInfo();
+
     return (
       <Animated.View
         style={[
@@ -303,9 +399,38 @@ export default function RejoindreScreen() {
                 )}
                 {race.date && (
                   <View style={styles.raceDetail}>
-                    <Icon name="calendar" size={14} color="#A1F763" />
+                    <Icon
+                      name={
+                        statusInfo.status === "ongoing"
+                          ? "play-circle"
+                          : statusInfo.status === "finished"
+                          ? "check-circle"
+                          : "calendar-start"
+                      }
+                      size={14}
+                      color={statusInfo.color}
+                    />
+                    <Text
+                      style={[
+                        styles.raceDetailText,
+                        { color: statusInfo.color },
+                      ]}
+                    >
+                      {statusInfo.text}
+                    </Text>
+                  </View>
+                )}
+                {race.endDate && (
+                  <View style={styles.raceDetail}>
+                    <Icon name="calendar-end" size={14} color="#A1F763" />
                     <Text style={styles.raceDetailText}>
-                      Début dans : {getTimeUntil(race.startDate, race.endDate)}{" "}
+                      Fin :{" "}
+                      {new Date(race.endDate).toLocaleDateString("fr-FR", {
+                        day: "2-digit",
+                        month: "short",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
                     </Text>
                   </View>
                 )}

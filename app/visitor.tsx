@@ -201,30 +201,31 @@ export default function VisitorScreen() {
   const RaceCard = ({ race }: { race: Race }) => {
     // Fonction pour déterminer le statut et le texte à afficher pour la course
     const getRaceStatusInfo = () => {
-      if (!race.startDate) return { status: 'unknown', text: 'Date inconnue', color: '#888' };
-      
+      if (!race.startDate)
+        return { status: "unknown", text: "Date inconnue", color: "#888" };
+
       // Utiliser getTimeUntil avec startDate et endDate pour une logique cohérente
       const timeStatus = getTimeUntil(race.startDate, race.endDate);
-      
+
       // Utiliser le résultat de getTimeUntil pour déterminer le statut
       if (timeStatus === "En cours") {
-        return { 
-          status: 'ongoing', 
-          text: 'En cours', 
-          color: '#A1F763' 
+        return {
+          status: "ongoing",
+          text: "En cours",
+          color: "#A1F763",
         };
       } else if (timeStatus === "Terminé") {
-        return { 
-          status: 'finished', 
-          text: 'Terminée', 
-          color: '#666' 
+        return {
+          status: "finished",
+          text: "Terminée",
+          color: "#666",
         };
       } else {
         // Course à venir
-        return { 
-          status: 'upcoming', 
-          text: `Début : ${timeStatus}`, 
-          color: '#FFB020' 
+        return {
+          status: "upcoming",
+          text: `Début : ${timeStatus}`,
+          color: "#FFB020",
         };
       }
     };
@@ -283,12 +284,20 @@ export default function VisitorScreen() {
             )}
             {race.date && (
               <View style={styles.raceDetail}>
-                <Icon 
-                  name={statusInfo.status === 'ongoing' ? "play-circle" : statusInfo.status === 'finished' ? "check-circle" : "calendar-start"} 
-                  size={14} 
-                  color={statusInfo.color} 
+                <Icon
+                  name={
+                    statusInfo.status === "ongoing"
+                      ? "play-circle"
+                      : statusInfo.status === "finished"
+                      ? "check-circle"
+                      : "calendar-start"
+                  }
+                  size={14}
+                  color={statusInfo.color}
                 />
-                <Text style={[styles.raceDetailText, { color: statusInfo.color }]}>
+                <Text
+                  style={[styles.raceDetailText, { color: statusInfo.color }]}
+                >
                   {statusInfo.text}
                 </Text>
               </View>
@@ -297,7 +306,8 @@ export default function VisitorScreen() {
               <View style={styles.raceDetail}>
                 <Icon name="calendar-end" size={14} color="#A1F763" />
                 <Text style={styles.raceDetailText}>
-                  Fin : {new Date(race.endDate).toLocaleDateString("fr-FR", {
+                  Fin :{" "}
+                  {new Date(race.endDate).toLocaleDateString("fr-FR", {
                     day: "2-digit",
                     month: "short",
                     hour: "2-digit",

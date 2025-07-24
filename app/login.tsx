@@ -202,9 +202,7 @@ export default function LoginScreen() {
             source={require("@/assets/images/apple.png")}
             style={loginStyles.socialIcon}
           />
-          <Text style={loginStyles.socialButtonText}>
-            Continuer avec Google
-          </Text>
+          <Text style={loginStyles.socialButtonText}>Continuer avec Apple</Text>
         </TouchableOpacity>
       </View>
 

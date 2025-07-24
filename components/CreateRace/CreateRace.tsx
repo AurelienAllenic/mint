@@ -45,15 +45,13 @@ interface CreateRaceProps {
 const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [raceName, setRaceName] = useState("Course du Lac de Paris");
   const [startDate, setStartDate] = useState(() => {
-    const date = new Date();
-    date.setDate(date.getDate() + 7); // Dans 7 jours
-    date.setHours(9, 0, 0, 0); // 9h00
-    return date;
+    // Date actuelle avec l'heure actuelle
+    return new Date();
   });
   const [endDate, setEndDate] = useState(() => {
     const date = new Date();
-    date.setDate(date.getDate() + 7); // Dans 7 jours
-    date.setHours(12, 0, 0, 0); // 12h00
+    // Ajouter 3 heures à l'heure actuelle
+    date.setHours(date.getHours() + 3);
     return date;
   });
   const [raceDisciplines, setRaceDisciplines] = useState<RaceDiscipline[]>([]);
@@ -403,14 +401,13 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
         // Reset du formulaire avec valeurs par défaut
         setRaceName("Course du Lac de Paris");
+        // Date de début : date actuelle avec l'heure actuelle
         const newStartDate = new Date();
-        newStartDate.setDate(newStartDate.getDate() + 7);
-        newStartDate.setHours(9, 0, 0, 0);
         setStartDate(newStartDate);
 
+        // Date de fin : date actuelle + 3 heures
         const newEndDate = new Date();
-        newEndDate.setDate(newEndDate.getDate() + 7);
-        newEndDate.setHours(12, 0, 0, 0);
+        newEndDate.setHours(newEndDate.getHours() + 3);
         setEndDate(newEndDate);
 
         setSelectedOrganization(null);
@@ -509,6 +506,20 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     <Icon name="calendar" size={20} color="#A1F763" />
                     <Text style={styles.dateText}>{formatDate(startDate)}</Text>
                   </TouchableOpacity>
+                  {Platform.OS === "ios" && (
+                    <TouchableOpacity
+                      style={[styles.dateButton, { marginTop: 8 }]}
+                      onPress={() => setShowStartTimePicker(true)}
+                    >
+                      <Icon name="clock" size={20} color="#A1F763" />
+                      <Text style={styles.dateText}>
+                        {startDate.toLocaleTimeString("fr-FR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
 
                 <View style={styles.dateGroup}>
@@ -520,6 +531,20 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     <Icon name="calendar" size={20} color="#A1F763" />
                     <Text style={styles.dateText}>{formatDate(endDate)}</Text>
                   </TouchableOpacity>
+                  {Platform.OS === "ios" && (
+                    <TouchableOpacity
+                      style={[styles.dateButton, { marginTop: 8 }]}
+                      onPress={() => setShowEndTimePicker(true)}
+                    >
+                      <Icon name="clock" size={20} color="#A1F763" />
+                      <Text style={styles.dateText}>
+                        {endDate.toLocaleTimeString("fr-FR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               </View>
 
@@ -797,7 +822,11 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                 setStartDate(newDate);
                 setShowStartTimePicker(true);
               } else {
-                setStartDate(selectedDate);
+                // Sur iOS, on ne modifie que la date et on garde l'heure existante
+                const newDate = new Date(selectedDate);
+                newDate.setHours(startDate.getHours());
+                newDate.setMinutes(startDate.getMinutes());
+                setStartDate(newDate);
               }
             }
           }}
@@ -819,7 +848,11 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                 setEndDate(newDate);
                 setShowEndTimePicker(true);
               } else {
-                setEndDate(selectedDate);
+                // Sur iOS, on ne modifie que la date et on garde l'heure existante
+                const newDate = new Date(selectedDate);
+                newDate.setHours(endDate.getHours());
+                newDate.setMinutes(endDate.getMinutes());
+                setEndDate(newDate);
               }
             }
           }}

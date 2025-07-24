@@ -1,7 +1,8 @@
 import Map from "@/components/Map/Map";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
+import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -10,7 +11,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { BlurView } from "expo-blur";
 import { useAuth } from "../context/auth";
 
 interface RaceDetails {
@@ -270,11 +270,17 @@ export default function RaceDetailsScreen() {
   const formatDate = (dateString: string) => {
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString("fr-FR", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      });
+
+      return (
+        date.toLocaleDateString("fr-FR", {
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        }));
     } catch {
       return dateString;
     }

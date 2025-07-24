@@ -1,3 +1,4 @@
+import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
@@ -10,7 +11,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { useAuth } from "../context/auth";
 import { profileStyles } from "../style/profile.styles";
 
@@ -21,6 +21,7 @@ export default function ProfileScreen() {
 
   // Rediriger les visiteurs vers la page visiteur
   useEffect(() => {
+    console.log("Current user:", user);
     if (user?.isVisitor) {
       router.replace("/visitor");
     } else if (!user) {
@@ -139,12 +140,12 @@ export default function ProfileScreen() {
       <View style={profileStyles.profileImageContainer}>
         <Image
           source={
-            profileImage && profileImage.length > 0
-              ? { uri: profileImage }
+            user?.profileImage && user.profileImage.length > 0
+              ? { uri: user.profileImage }
               : require("@/assets/images/pp.png")
           }
-          style={profileStyles.profileImage}
         />
+
         {isEditing && (
           <TouchableOpacity style={profileStyles.changePhotoButton}>
             <Icon name="camera" size={20} color="#fff" />

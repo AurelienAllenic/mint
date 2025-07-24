@@ -3,7 +3,7 @@ import { createContext, useContext, useState } from "react";
 type User = {
   email: string;
   name: string;
-  id?: number;
+  _id?: string;
   firstname?: string | null;
   lastname?: string | null;
   profileImage?: string | null;
@@ -18,7 +18,7 @@ type AuthContextType = {
     name?: string;
     token: string;
     isConnected: boolean;
-    id?: number;
+    _id?: string;
     firstname?: string | null;
     lastname?: string | null;
     profileImage?: string | null;
@@ -41,7 +41,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     email: string;
     name?: string;
     token: string;
-    id?: number;
+    _id?: string;
     firstname?: string | null;
     lastname?: string | null;
     profileImage?: string | null;
@@ -54,7 +54,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       name:
         userData.name ||
         `${userData.firstname || ""} ${userData.lastname || ""}`.trim(),
-      id: userData.id,
+      _id: userData._id,
       firstname: userData.firstname ?? null,
       lastname: userData.lastname ?? null,
       profileImage: userData.profileImage ?? null,
@@ -67,6 +67,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       name:
         userData.name ||
         `${userData.firstname || ""} ${userData.lastname || ""}`.trim(),
+      _id: userData._id,
       firstname: userData.firstname ?? null,
       lastname: userData.lastname ?? null,
       profileImage: userData.profileImage ?? null,

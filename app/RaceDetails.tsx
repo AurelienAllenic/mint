@@ -11,6 +11,9 @@ import {
   Text,
   TouchableOpacity,
   View,
+  Modal,
+  ScrollView,
+  FlatList,
 } from "react-native";
 import { useAuth } from "../context/auth";
 
@@ -55,6 +58,7 @@ export default function RaceDetailsScreen() {
     { latitude: number; longitude: number }[]
   >([]);
   const [error, setError] = useState<string | null>(null);
+  const [showParticipantsModal, setShowParticipantsModal] = useState(false);
 
   useEffect(() => {
     const fetchRaceData = async () => {
@@ -272,16 +276,15 @@ export default function RaceDetailsScreen() {
     try {
       const date = new Date(dateString);
 
-      return (
-        date.toLocaleDateString("fr-FR", {
-          year: "numeric",
-          month: "long",
-          day: "numeric",
-          hour: "2-digit",
-          minute: "2-digit",
-          second: "2-digit",
-          hour12: false,
-        }));
+      return date.toLocaleDateString("fr-FR", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: false,
+      });
     } catch {
       return dateString;
     }
@@ -294,6 +297,93 @@ export default function RaceDetailsScreen() {
     }
     return `${distanceInMeters} m`;
   };
+
+  // Composant pour afficher un participant
+  const ParticipantItem = ({
+    participant,
+    index,
+  }: {
+    participant: any;
+    index: number;
+  }) => (
+    <View style={styles.participantItem}>
+      <View style={styles.participantAvatar}>
+        <Text style={styles.participantAvatarText}>
+          {participant.firstname?.charAt(0)?.toUpperCase() ||
+            participant.name?.charAt(0)?.toUpperCase() ||
+            participant.email?.charAt(0)?.toUpperCase() ||
+            (index + 1).toString()}
+        </Text>
+      </View>
+      <View style={styles.participantInfo}>
+        <Text style={styles.participantName}>
+          {participant.firstname && participant.lastname
+            ? `${participant.firstname} ${participant.lastname}`
+            : participant.name ||
+              participant.email ||
+              `Participant ${index + 1}`}
+        </Text>
+        {participant.email && (
+          <Text style={styles.participantEmail}>{participant.email}</Text>
+        )}
+      </View>
+      <View style={styles.participantNumber}>
+        <Text style={styles.participantNumberText}>#{index + 1}</Text>
+      </View>
+    </View>
+  );
+
+  // Composant Modal pour les participants
+  const ParticipantsModal = () => (
+    <Modal
+      visible={showParticipantsModal}
+      animationType="slide"
+      presentationStyle="pageSheet"
+      onRequestClose={() => setShowParticipantsModal(false)}
+    >
+      <View style={styles.modalContainer}>
+        <BlurView style={styles.modalHeader} intensity={40} tint="dark">
+          <View style={styles.modalHeaderContent}>
+            <Text style={styles.modalTitle}>
+              Participants ({race?.runners?.length || 0})
+            </Text>
+            <TouchableOpacity
+              style={styles.modalCloseButton}
+              onPress={() => setShowParticipantsModal(false)}
+            >
+              <Icon name="close" size={24} color="#A1F763" />
+            </TouchableOpacity>
+          </View>
+        </BlurView>
+
+        <View style={styles.modalContent}>
+          {!race?.runners || race.runners.length === 0 ? (
+            <View style={styles.emptyParticipants}>
+              <Icon name="account-off" size={60} color="#888" />
+              <Text style={styles.emptyParticipantsText}>
+                Aucun participant
+              </Text>
+              <Text style={styles.emptyParticipantsSubText}>
+                Cette course n'a pas encore de participants inscrits.
+              </Text>
+            </View>
+          ) : (
+            <FlatList
+              data={race.runners}
+              keyExtractor={(item, index) =>
+                item._id || item.id || index.toString()
+              }
+              renderItem={({ item, index }) => (
+                <ParticipantItem participant={item} index={index} />
+              )}
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.participantsList}
+            />
+          )}
+        </View>
+      </View>
+    </Modal>
+  );
 
   if (loading) {
     return (
@@ -493,9 +583,12 @@ export default function RaceDetailsScreen() {
               <Icon name="share" size={28} color="#fff" />
             </BlurView>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.roundButton}>
+          <TouchableOpacity
+            style={styles.roundButton}
+            onPress={() => setShowParticipantsModal(true)}
+          >
             <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
-              <Icon name="heart-outline" size={28} color="#fff" />
+              <Icon name="account-group" size={28} color="#fff" />
             </BlurView>
           </TouchableOpacity>
           <TouchableOpacity style={styles.roundButton}>
@@ -505,6 +598,9 @@ export default function RaceDetailsScreen() {
           </TouchableOpacity>
         </View>
       </View>
+
+      {/* Modal des participants */}
+      <ParticipantsModal />
     </View>
   );
 }
@@ -773,5 +869,111 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
     fontWeight: "400",
+  },
+  // Styles pour la modal des participants
+  modalContainer: {
+    flex: 1,
+    backgroundColor: "#0A0A0A",
+  },
+  modalHeader: {
+    backgroundColor: "rgba(105, 105, 105, 0.18)",
+    paddingTop: 50,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+  },
+  modalHeaderContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#A1F763",
+  },
+  modalCloseButton: {
+    padding: 8,
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    borderRadius: 8,
+  },
+  modalContent: {
+    flex: 1,
+    paddingHorizontal: 20,
+  },
+  emptyParticipants: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    paddingVertical: 80,
+  },
+  emptyParticipantsText: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "bold",
+    marginTop: 16,
+    textAlign: "center",
+  },
+  emptyParticipantsSubText: {
+    color: "#888",
+    fontSize: 14,
+    marginTop: 8,
+    textAlign: "center",
+    lineHeight: 20,
+  },
+  participantsList: {
+    paddingVertical: 20,
+  },
+  participantItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "#1E1E1E",
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: "#A1F763",
+    shadowOpacity: 0.1,
+    shadowRadius: 5,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 3,
+  },
+  participantAvatar: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: "#A1F763",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 16,
+  },
+  participantAvatarText: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#212121",
+  },
+  participantInfo: {
+    flex: 1,
+  },
+  participantName: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+    marginBottom: 4,
+  },
+  participantEmail: {
+    fontSize: 14,
+    color: "#888",
+  },
+  participantNumber: {
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: "rgba(161, 247, 99, 0.3)",
+  },
+  participantNumberText: {
+    fontSize: 12,
+    fontWeight: "bold",
+    color: "#A1F763",
   },
 });

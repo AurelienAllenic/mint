@@ -37,11 +37,39 @@ export default function LoginScreen() {
       if (response.ok && !isVisitor) {
         console.log("=== LOGIN SUCCESS ===");
         console.log("Backend response data:", data);
+        console.log("TechnicalUser:", data.technicalUser);
+        console.log("TechnicalUser _id:", data.technicalUser._id);
+        console.log("TechnicalUser _id type:", typeof data.technicalUser._id);
+
+        // Extraire l'ID depuis l'ObjectId si nécessaire
+        let userId = data.technicalUser._id || data.technicalUser.id;
+        
+        // Si l'ID n'est pas dans la réponse, l'extraire du token JWT
+        if (!userId && data.access_token) {
+          try {
+            const payload = JSON.parse(atob(data.access_token.split('.')[1]));
+            console.log("JWT Payload:", payload);
+            userId = payload.userId || payload.id || payload.sub;
+            console.log("ID extrait du JWT:", userId);
+          } catch (e) {
+            console.log("Erreur lors de l'extraction du JWT:", e);
+          }
+        }
+        
+        // Si c'est un objet ObjectId, extraire la string
+        if (typeof userId === 'object' && userId.$oid) {
+          userId = userId.$oid;
+        } else if (typeof userId === 'object' && userId.toString) {
+          userId = userId.toString();
+        }
+        
+        console.log("User ID final:", userId);
 
         login({
           email: data.technicalUser.email,
           firstname: data.userProfile.firstname,
           lastname: data.userProfile.lastname,
+          _id: userId,
           token: data.access_token,
           isConnected: !isVisitor,
         });

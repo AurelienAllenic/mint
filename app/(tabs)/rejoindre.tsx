@@ -139,25 +139,54 @@ export default function RejoindreScreen() {
           }));
 
           // Filtrer les courses selon les critères
-          const userId = user?.id;
+          const userId = user?._id;
+          console.log("ID utilisateur connecté:", userId);
 
           // Mes courses : où l'utilisateur est le propriétaire
-          const mesCourses = coursesAvecImages.filter(
-            (race: any) =>
+          const mesCourses = coursesAvecImages.filter((race: any) => {
+            const isOwner =
               race.owner?._id === userId ||
               race.owner?.id === userId ||
-              race.owner === userId
-          );
+              race.owner === userId;
+            return isOwner;
+          });
 
           // Mes participations : où l'utilisateur est dans le tableau runners
-          const mesParticipationsData = coursesAvecImages.filter((race: any) =>
-            race.runners?.some(
-              (runner: any) =>
-                runner._id === userId ||
-                runner.id === userId ||
-                runner === userId
-            )
+          const mesParticipationsData = coursesAvecImages.filter(
+            (race: any) => {
+              // Afficher seulement les _id des runners
+              if (race.runners && Array.isArray(race.runners)) {
+                const runnersIds = race.runners.map((runner: any) => runner._id).filter(Boolean);
+                console.log(`Course "${race.name}" - Runners _id:`, runnersIds);
+              }
+
+              if (
+                !race.runners ||
+                !Array.isArray(race.runners) ||
+                race.runners.length === 0
+              ) {
+                return false;
+              }
+
+              const isParticipant = race.runners.some((runner: any) => {
+                let runnerId = null;
+                if (typeof runner === "object" && runner !== null) {
+                  runnerId = runner._id || runner.id;
+                } else {
+                  runnerId = runner;
+                }
+
+                const userIdStr = String(userId);
+                const runnerIdStr = String(runnerId);
+                return runnerIdStr === userIdStr;
+              });
+
+              return isParticipant;
+            }
           );
+
+          // console.log("Mes courses (propriétaire):", mesCourses);
+          // console.log("Mes participations:", mesParticipationsData);
 
           setMesRaces(mesCourses);
           setMesParticipations(mesParticipationsData);
@@ -184,7 +213,7 @@ export default function RejoindreScreen() {
     };
 
     fetchRaces();
-  }, [token, user?.id]);
+  }, [token, user]);
 
   const RaceCard = ({ race }: { race: Race }) => {
     const scaleValue = new Animated.Value(1);
@@ -306,9 +335,9 @@ export default function RejoindreScreen() {
     </TouchableOpacity>
   );
 
-  const RaceList = ({ races }: { races: Race[] }) => (
-    <View style={styles.raceListContainer}>
-      {races.length === 0 ? (
+  const RaceList = ({ races }: { races: Race[] }) => {
+    if (races.length === 0) {
+      return (
         <View style={styles.emptyContainer}>
           <Icon name="alert-circle-outline" size={60} color="#888" />
           <Text style={styles.emptyText}>Aucune course disponible</Text>
@@ -318,17 +347,17 @@ export default function RejoindreScreen() {
               : "Vous ne participez à aucune course pour le moment"}
           </Text>
         </View>
-      ) : (
-        <FlatList
-          data={races}
-          renderItem={({ item }) => <RaceCard race={item} />}
-          keyExtractor={(item) => item._id || item.id || "unknown"}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.raceListContent}
-        />
-      )}
-    </View>
-  );
+      );
+    }
+
+    return (
+      <View style={styles.raceListContainer}>
+        {races.map((race, index) => (
+          <RaceCard key={race._id || race.id || index} race={race} />
+        ))}
+      </View>
+    );
+  };
 
   const CategorySection = ({
     title,
@@ -518,8 +547,6 @@ const styles = StyleSheet.create({
   raceListContainer: {
     flex: 1,
     paddingHorizontal: 20,
-  },
-  raceListContent: {
     paddingBottom: 20,
   },
   raceCardContainer: {

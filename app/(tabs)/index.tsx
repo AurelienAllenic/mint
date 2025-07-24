@@ -25,6 +25,7 @@ export default function HomeScreen() {
   // Debug logs pour l'objet user
   console.log("=== DEBUG USER OBJECT ===");
   console.log("User object:", user);
+  console.log("User _id:", user?._id);
   console.log("User firstname:", user?.firstname);
   console.log("User lastname:", user?.lastname);
   console.log("User email:", user?.email);

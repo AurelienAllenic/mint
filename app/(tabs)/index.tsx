@@ -53,7 +53,7 @@ export default function HomeScreen() {
         if (response.ok) {
           const profileData = await response.json();
           console.log("Fresh profile data loaded:", profileData);
-          
+
           // Mettre à jour le contexte avec les données fraîches
           updateUser({
             firstname: profileData.firstname,
@@ -62,7 +62,10 @@ export default function HomeScreen() {
           });
         }
       } catch (error) {
-        console.error("Erreur lors du chargement du profil utilisateur:", error);
+        console.error(
+          "Erreur lors du chargement du profil utilisateur:",
+          error
+        );
       }
     };
 

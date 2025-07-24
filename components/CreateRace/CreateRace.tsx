@@ -394,12 +394,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       });
 
       if (response.ok) {
-        const newRace = await response.json();
         Alert.alert("Succès", "Course créée avec succès !", [
-          {
-            text: "Voir la course",
-            onPress: () => router.push(`/RaceDetails?raceId=${newRace.id}`),
-          },
           {
             text: "Retour",
             onPress: () => router.back(),

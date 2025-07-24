@@ -50,7 +50,7 @@ export default function ProfileScreen() {
         if (response.ok) {
           const profileData = await response.json();
           console.log("Profile data loaded:", profileData);
-          
+
           // Mettre à jour les états locaux avec les données du serveur
           setFirstname(profileData.firstname || "");
           setLastname(profileData.lastname || "");
@@ -70,7 +70,8 @@ export default function ProfileScreen() {
     };
 
     loadProfile();
-  }, [token, API_URL, user, updateUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, API_URL, user?._id]); // Retirer updateUser et user complet des dépendances
 
   const [isEditing, setIsEditing] = useState(false);
   const [firstname, setFirstname] = useState(user?.firstname || "");

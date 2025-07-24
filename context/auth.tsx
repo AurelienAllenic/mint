@@ -120,7 +120,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (response.ok) {
         const profileData = await response.json();
         console.log("Refreshed user data:", profileData);
-        
+
         // Mettre à jour le contexte avec les données fraîches
         updateUser({
           firstname: profileData.firstname,
@@ -129,7 +129,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         });
       }
     } catch (error) {
-      console.error("Erreur lors du rafraîchissement des données utilisateur:", error);
+      console.error(
+        "Erreur lors du rafraîchissement des données utilisateur:",
+        error
+      );
     }
   };
 
@@ -139,7 +142,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, updateUser, refreshUserData }}>
+    <AuthContext.Provider
+      value={{ user, token, login, logout, updateUser, refreshUserData }}
+    >
       {children}
     </AuthContext.Provider>
   );

@@ -2,7 +2,7 @@ import Map from "@/components/Map/Map";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   ActivityIndicator,
   Image,
@@ -398,57 +398,15 @@ export default function RaceDetailsScreen() {
     </View>
   );
 
-  // Composant Modal pour les participants
-  const ParticipantsModal = () => (
-    <Modal
-      visible={showParticipantsModal}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={() => setShowParticipantsModal(false)}
-    >
-      <View style={styles.modalContainer}>
-        <BlurView style={styles.modalHeader} intensity={40} tint="dark">
-          <View style={styles.modalHeaderContent}>
-            <Text style={styles.modalTitle}>
-              Participants ({race?.runners?.length || 0})
-            </Text>
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setShowParticipantsModal(false)}
-            >
-              <Icon name="close" size={24} color="#A1F763" />
-            </TouchableOpacity>
-          </View>
-        </BlurView>
+  // Fonction pour fermer la modal
+  const closeParticipantsModal = useCallback(() => {
+    setShowParticipantsModal(false);
+  }, []);
 
-        <View style={styles.modalContent}>
-          {!race?.runners || race.runners.length === 0 ? (
-            <View style={styles.emptyParticipants}>
-              <Icon name="account-off" size={60} color="#888" />
-              <Text style={styles.emptyParticipantsText}>
-                Aucun participant
-              </Text>
-              <Text style={styles.emptyParticipantsSubText}>
-                Cette course n&apos;a pas encore de participants inscrits.
-              </Text>
-            </View>
-          ) : (
-            <FlatList
-              data={race.runners}
-              keyExtractor={(item, index) =>
-                item._id || item.id || index.toString()
-              }
-              renderItem={({ item, index }) => (
-                <ParticipantItem participant={item} index={index} />
-              )}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.participantsList}
-            />
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
+  // Fonction pour ouvrir la modal
+  const openParticipantsModal = useCallback(() => {
+    setShowParticipantsModal(true);
+  }, []);
 
   if (loading) {
     return (
@@ -697,7 +655,7 @@ export default function RaceDetailsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.roundButton}
-            onPress={() => setShowParticipantsModal(true)}
+            onPress={openParticipantsModal}
           >
             <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
               <Icon name="account-group" size={28} color="#fff" />
@@ -715,7 +673,54 @@ export default function RaceDetailsScreen() {
       </View>
 
       {/* Modal des participants */}
-      <ParticipantsModal />
+      <Modal
+        visible={showParticipantsModal}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={closeParticipantsModal}
+      >
+        <View style={styles.modalContainer}>
+          <BlurView style={styles.modalHeader} intensity={40} tint="dark">
+            <View style={styles.modalHeaderContent}>
+              <Text style={styles.modalTitle}>
+                Participants ({race?.runners?.length || 0})
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={closeParticipantsModal}
+              >
+                <Icon name="close" size={24} color="#A1F763" />
+              </TouchableOpacity>
+            </View>
+          </BlurView>
+
+          <View style={styles.modalContent}>
+            {!race?.runners || race.runners.length === 0 ? (
+              <View style={styles.emptyParticipants}>
+                <Icon name="account-off" size={60} color="#888" />
+                <Text style={styles.emptyParticipantsText}>
+                  Aucun participant
+                </Text>
+                <Text style={styles.emptyParticipantsSubText}>
+                  Cette course n&apos;a pas encore de participants inscrits.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={race.runners}
+                keyExtractor={(item, index) =>
+                  item._id || item.id || index.toString()
+                }
+                renderItem={({ item, index }) => (
+                  <ParticipantItem participant={item} index={index} />
+                )}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.participantsList}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }

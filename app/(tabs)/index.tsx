@@ -19,7 +19,7 @@ import { useAuth } from "../../context/auth";
 import { GPXPoint, parseGpx } from "../../utils/gpxParser";
 
 export default function HomeScreen() {
-  const { user, logout, token } = useAuth();
+  const { user, logout, token, updateUser } = useAuth();
   const router = useRouter();
 
   // Rediriger les visiteurs vers la page visiteur
@@ -29,15 +29,61 @@ export default function HomeScreen() {
     }
   }, [user, router]);
 
-  // Debug logs pour l'objet user
-  console.log("=== DEBUG USER OBJECT ===");
-  console.log("User object:", user);
-  console.log("User _id:", user?._id);
-  console.log("User firstname:", user?.firstname);
-  console.log("User lastname:", user?.lastname);
-  console.log("User email:", user?.email);
-  console.log("Token:", token);
-  console.log("========================");
+  // Charger les données du profil depuis l'API une seule fois au montage
+  useEffect(() => {
+    const loadUserProfile = async () => {
+      if (!token || !user || user.isVisitor) return;
+
+      try {
+        const API_URL = process.env.EXPO_PUBLIC_API_URL;
+        if (!API_URL) return;
+
+        const authHeader = token?.startsWith("Bearer ")
+          ? token
+          : `Bearer ${token}`;
+
+        const response = await fetch(`${API_URL}/users/profile`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+        });
+
+        if (response.ok) {
+          const profileData = await response.json();
+          console.log("Fresh profile data loaded:", profileData);
+          
+          // Mettre à jour le contexte avec les données fraîches
+          updateUser({
+            firstname: profileData.firstname,
+            lastname: profileData.lastname,
+            profileImage: profileData.profileImage,
+          });
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement du profil utilisateur:", error);
+      }
+    };
+
+    loadUserProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Intentionnellement vide - une seule fois au montage
+
+  // Debug logs pour l'objet user - seulement quand l'utilisateur change
+  useEffect(() => {
+    if (user) {
+      console.log("=== DEBUG USER OBJECT ===");
+      console.log("User object:", user);
+      console.log("User _id:", user?._id);
+      console.log("User firstname:", user?.firstname);
+      console.log("User lastname:", user?.lastname);
+      console.log("User email:", user?.email);
+      console.log("User profileImage:", user?.profileImage);
+      console.log("Token:", token);
+      console.log("========================");
+    }
+  }, [user, token]);
 
   const [gpxCoordinates] = useState<GPXPoint[]>([]);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -188,7 +234,11 @@ export default function HomeScreen() {
               <View style={styles.profileContainer}>
                 <TouchableOpacity onPress={toggleProfileMenu}>
                   <Image
-                    source={require("@/assets/images/pp.png")}
+                    source={
+                      user?.profileImage && user.profileImage.length > 0
+                        ? { uri: user.profileImage }
+                        : require("@/assets/images/pp.png")
+                    }
                     style={styles.avatar}
                   />
                 </TouchableOpacity>

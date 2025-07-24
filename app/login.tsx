@@ -93,6 +93,7 @@ export default function LoginScreen() {
           email: data.technicalUser.email,
           firstname: data.userProfile.firstname,
           lastname: data.userProfile.lastname,
+          profileImage: data.userProfile.profileImage || data.profileImage,
           _id: userId,
           token: data.access_token,
           isConnected: !isVisitor,

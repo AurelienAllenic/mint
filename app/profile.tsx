@@ -29,12 +29,65 @@ export default function ProfileScreen() {
     }
   }, [user, router]);
 
+  // Charger les données du profil depuis l'API
+  useEffect(() => {
+    const loadProfile = async () => {
+      if (!token || !API_URL || user?.isVisitor || !user) return;
+
+      try {
+        const authHeader = token?.startsWith("Bearer ")
+          ? token
+          : `Bearer ${token}`;
+
+        const response = await fetch(`${API_URL}/users/profile`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+        });
+
+        if (response.ok) {
+          const profileData = await response.json();
+          console.log("Profile data loaded:", profileData);
+          
+          // Mettre à jour les états locaux avec les données du serveur
+          setFirstname(profileData.firstname || "");
+          setLastname(profileData.lastname || "");
+          setEmail(profileData.email || "");
+          setProfileImage(profileData.profileImage || "");
+
+          // Mettre à jour le contexte avec les données fraîches
+          updateUser({
+            firstname: profileData.firstname,
+            lastname: profileData.lastname,
+            profileImage: profileData.profileImage,
+          });
+        }
+      } catch (error) {
+        console.error("Erreur lors du chargement du profil:", error);
+      }
+    };
+
+    loadProfile();
+  }, [token, API_URL, user, updateUser]);
+
   const [isEditing, setIsEditing] = useState(false);
   const [firstname, setFirstname] = useState(user?.firstname || "");
   const [lastname, setLastname] = useState(user?.lastname || "");
   const [email, setEmail] = useState(user?.email || "");
   const [profileImage, setProfileImage] = useState(user?.profileImage || "");
   const [isLoading, setIsLoading] = useState(false);
+
+  // Mettre à jour les états locaux quand l'utilisateur change
+  useEffect(() => {
+    if (user) {
+      setFirstname(user.firstname || "");
+      setLastname(user.lastname || "");
+      setEmail(user.email || "");
+      setProfileImage(user.profileImage || "");
+    }
+  }, [user]);
 
   const handleSave = async () => {
     if (!token) {
@@ -144,6 +197,7 @@ export default function ProfileScreen() {
               ? { uri: user.profileImage }
               : require("@/assets/images/pp.png")
           }
+          style={profileStyles.profileImage}
         />
 
         {isEditing && (

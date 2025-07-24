@@ -31,6 +31,7 @@ type AuthContextType = {
     lastname?: string | null;
     profileImage?: string | null;
   }) => void;
+  refreshUserData: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -97,13 +98,48 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setUser(updatedUser);
   };
 
+  const refreshUserData = async () => {
+    if (!token || !user || user.isVisitor) return;
+
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      if (!API_URL) return;
+
+      const authHeader = token?.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
+
+      const response = await fetch(`${API_URL}/users/profile`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+      });
+
+      if (response.ok) {
+        const profileData = await response.json();
+        console.log("Refreshed user data:", profileData);
+        
+        // Mettre à jour le contexte avec les données fraîches
+        updateUser({
+          firstname: profileData.firstname,
+          lastname: profileData.lastname,
+          profileImage: profileData.profileImage,
+        });
+      }
+    } catch (error) {
+      console.error("Erreur lors du rafraîchissement des données utilisateur:", error);
+    }
+  };
+
   const logout = () => {
     setUser(null);
     setToken(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout, updateUser }}>
+    <AuthContext.Provider value={{ user, token, login, logout, updateUser, refreshUserData }}>
       {children}
     </AuthContext.Provider>
   );

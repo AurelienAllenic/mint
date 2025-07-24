@@ -198,68 +198,119 @@ export default function VisitorScreen() {
     router.replace("/login");
   };
 
-  const RaceCard = ({ race }: { race: Race }) => (
-    <TouchableOpacity
-      style={styles.raceCard}
-      onPress={() => {
-        router.push({
-          pathname: "/RaceDetails",
-          params: { raceId: race._id || race.id },
-        });
-      }}
-    >
-      <View style={styles.raceImageContainer}>
-        {race.image ? (
-          <Image
-            source={{ uri: race.image }}
-            style={styles.raceImage}
-            resizeMode="cover"
-          />
-        ) : (
-          <View style={styles.raceImagePlaceholder}>
-            <Icon name="image-off" size={30} color="#A1F763" />
+  const RaceCard = ({ race }: { race: Race }) => {
+    // Fonction pour déterminer le statut et le texte à afficher pour la course
+    const getRaceStatusInfo = () => {
+      if (!race.startDate) return { status: 'unknown', text: 'Date inconnue', color: '#888' };
+      
+      // Utiliser getTimeUntil avec startDate et endDate pour une logique cohérente
+      const timeStatus = getTimeUntil(race.startDate, race.endDate);
+      
+      // Utiliser le résultat de getTimeUntil pour déterminer le statut
+      if (timeStatus === "En cours") {
+        return { 
+          status: 'ongoing', 
+          text: 'En cours', 
+          color: '#A1F763' 
+        };
+      } else if (timeStatus === "Terminé") {
+        return { 
+          status: 'finished', 
+          text: 'Terminée', 
+          color: '#666' 
+        };
+      } else {
+        // Course à venir
+        return { 
+          status: 'upcoming', 
+          text: `Début : ${timeStatus}`, 
+          color: '#FFB020' 
+        };
+      }
+    };
+
+    const statusInfo = getRaceStatusInfo();
+
+    return (
+      <TouchableOpacity
+        style={styles.raceCard}
+        onPress={() => {
+          router.push({
+            pathname: "/RaceDetails",
+            params: { raceId: race._id || race.id },
+          });
+        }}
+      >
+        <View style={styles.raceImageContainer}>
+          {race.image ? (
+            <Image
+              source={{ uri: race.image }}
+              style={styles.raceImage}
+              resizeMode="cover"
+            />
+          ) : (
+            <View style={styles.raceImagePlaceholder}>
+              <Icon name="image-off" size={30} color="#A1F763" />
+            </View>
+          )}
+        </View>
+
+        <View style={styles.raceCardContent}>
+          <View style={styles.raceHeader}>
+            <Text style={styles.raceName} numberOfLines={2}>
+              {race.name}
+            </Text>
+            <Icon name="chevron-right" size={20} color="#A1F763" />
           </View>
-        )}
-      </View>
 
-      <View style={styles.raceCardContent}>
-        <View style={styles.raceHeader}>
-          <Text style={styles.raceName} numberOfLines={2}>
-            {race.name}
-          </Text>
-          <Icon name="chevron-right" size={20} color="#A1F763" />
+          <View style={styles.raceInfo}>
+            {race.location && (
+              <View style={styles.raceDetail}>
+                <Icon name="map-marker" size={14} color="#A1F763" />
+                <Text style={styles.raceDetailText} numberOfLines={1}>
+                  {race.location}
+                </Text>
+              </View>
+            )}
+            {race.participants !== undefined && (
+              <View style={styles.raceDetail}>
+                <Icon name="account-group" size={14} color="#A1F763" />
+                <Text style={styles.raceDetailText}>
+                  {race.participants} participant
+                  {race.participants > 1 ? "s" : ""}
+                </Text>
+              </View>
+            )}
+            {race.date && (
+              <View style={styles.raceDetail}>
+                <Icon 
+                  name={statusInfo.status === 'ongoing' ? "play-circle" : statusInfo.status === 'finished' ? "check-circle" : "calendar-start"} 
+                  size={14} 
+                  color={statusInfo.color} 
+                />
+                <Text style={[styles.raceDetailText, { color: statusInfo.color }]}>
+                  {statusInfo.text}
+                </Text>
+              </View>
+            )}
+            {race.endDate && (
+              <View style={styles.raceDetail}>
+                <Icon name="calendar-end" size={14} color="#A1F763" />
+                <Text style={styles.raceDetailText}>
+                  Fin : {new Date(race.endDate).toLocaleDateString("fr-FR", {
+                    day: "2-digit",
+                    month: "short",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </Text>
+              </View>
+            )}
+          </View>
         </View>
-
-        <View style={styles.raceInfo}>
-          {race.location && (
-            <View style={styles.raceDetail}>
-              <Icon name="map-marker" size={14} color="#A1F763" />
-              <Text style={styles.raceDetailText} numberOfLines={1}>
-                {race.location}
-              </Text>
-            </View>
-          )}
-          {race.participants !== undefined && (
-            <View style={styles.raceDetail}>
-              <Icon name="account-group" size={14} color="#A1F763" />
-              <Text style={styles.raceDetailText}>
-                {race.participants} participant
-                {race.participants > 1 ? "s" : ""}
-              </Text>
-            </View>
-          )}
-          {race.date && (
-            <View style={styles.raceDetail}>
-              <Icon name="calendar" size={14} color="#A1F763" />
-              <Text style={styles.raceDetailText}>
-                Début dans : {getTimeUntil(race.startDate)}
-              </Text>
-            </View>
-          )}
-        </View>
-      </View>
-    </TouchableOpacity>
-  );
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>

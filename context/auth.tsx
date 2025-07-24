@@ -6,6 +6,7 @@ type User = {
   id?: number;
   firstname?: string | null;
   lastname?: string | null;
+  profileImage?: string | null;
   isConnected: boolean;
 } | null;
 
@@ -20,8 +21,14 @@ type AuthContextType = {
     id?: number;
     firstname?: string | null;
     lastname?: string | null;
+    profileImage?: string | null;
   }) => void;
   logout: () => void;
+  updateUser: (userData: {
+    firstname?: string | null;
+    lastname?: string | null;
+    profileImage?: string | null;
+  }) => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -37,6 +44,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     id?: number;
     firstname?: string | null;
     lastname?: string | null;
+    profileImage?: string | null;
   }) => {
     console.log("=== AUTH CONTEXT LOGIN ===");
     console.log("userData received:", userData);
@@ -49,6 +57,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       id: userData.id,
       firstname: userData.firstname ?? null,
       lastname: userData.lastname ?? null,
+      profileImage: userData.profileImage ?? null,
       isConnected: true,
     });
     setToken(userData.token);
@@ -60,8 +69,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         `${userData.firstname || ""} ${userData.lastname || ""}`.trim(),
       firstname: userData.firstname ?? null,
       lastname: userData.lastname ?? null,
+      profileImage: userData.profileImage ?? null,
     });
     console.log("=========================");
+  };
+
+  const updateUser = (updatedData: {
+    firstname?: string | null;
+    lastname?: string | null;
+    profileImage?: string | null;
+  }) => {
+    if (!user) return;
+
+    const updatedUser = {
+      ...user,
+      ...updatedData,
+      name: `${updatedData.firstname || user.firstname || ""} ${
+        updatedData.lastname || user.lastname || ""
+      }`.trim(),
+    };
+
+    setUser(updatedUser);
   };
 
   const logout = () => {
@@ -70,7 +98,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, logout }}>
+    <AuthContext.Provider value={{ user, token, login, logout, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

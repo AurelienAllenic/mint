@@ -1,0 +1,152 @@
+import { StyleSheet } from "react-native";
+
+export const profileStyles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#000",
+  },
+  header: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    paddingBottom: 20,
+  },
+  backButton: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "bold",
+    color: "#fff",
+  },
+  editButton: {
+    padding: 8,
+    borderRadius: 12,
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+  },
+  profileImageContainer: {
+    alignItems: "center",
+    marginVertical: 20,
+    position: "relative",
+  },
+  profileImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    borderWidth: 3,
+    borderColor: "#A1F763",
+  },
+  changePhotoButton: {
+    position: "absolute",
+    bottom: 0,
+    right: "35%",
+    backgroundColor: "#A1F763",
+    padding: 8,
+    borderRadius: 20,
+  },
+  profileInfo: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  inputGroup: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#fff",
+    marginBottom: 8,
+  },
+  input: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 12,
+    padding: 15,
+    fontSize: 16,
+    color: "#fff",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+  },
+  inputDisabled: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    color: "#888",
+  },
+  helperText: {
+    fontSize: 12,
+    color: "#888",
+    marginTop: 5,
+    fontStyle: "italic",
+  },
+  actionButtons: {
+    flexDirection: "row",
+    gap: 15,
+    marginTop: 20,
+  },
+  button: {
+    flex: 1,
+    padding: 15,
+    borderRadius: 12,
+    alignItems: "center",
+  },
+  cancelButton: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.3)",
+  },
+  saveButton: {
+    backgroundColor: "#A1F763",
+  },
+  cancelButtonText: {
+    color: "#fff",
+    fontWeight: "600",
+  },
+  saveButtonText: {
+    color: "#000",
+    fontWeight: "600",
+  },
+  settingsSection: {
+    paddingHorizontal: 20,
+    marginBottom: 30,
+  },
+  sectionTitle: {
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#fff",
+    marginBottom: 15,
+  },
+  settingItem: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 15,
+    paddingHorizontal: 15,
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderRadius: 12,
+    marginBottom: 10,
+  },
+  settingText: {
+    flex: 1,
+    fontSize: 16,
+    color: "#fff",
+    marginLeft: 15,
+  },
+  logoutButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    margin: 20,
+    padding: 15,
+    backgroundColor: "rgba(255, 68, 68, 0.1)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#ff4444",
+  },
+  logoutButtonText: {
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#ff4444",
+    marginLeft: 10,
+  },
+});

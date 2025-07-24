@@ -81,6 +81,8 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
+  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
   const router = useRouter();
   const { token } = useAuth();
@@ -787,12 +789,21 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       {showStartDatePicker && (
         <DateTimePicker
           value={startDate}
-          mode="datetime"
+          mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(event, selectedDate) => {
+          onChange={(_, selectedDate) => {
             setShowStartDatePicker(false);
             if (selectedDate) {
-              setStartDate(selectedDate);
+              // Sur Android, on affiche ensuite le time picker
+              if (Platform.OS === "android") {
+                const newDate = new Date(selectedDate);
+                newDate.setHours(startDate.getHours());
+                newDate.setMinutes(startDate.getMinutes());
+                setStartDate(newDate);
+                setShowStartTimePicker(true);
+              } else {
+                setStartDate(selectedDate);
+              }
             }
           }}
         />
@@ -801,12 +812,20 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       {showEndDatePicker && (
         <DateTimePicker
           value={endDate}
-          mode="datetime"
+          mode="date"
           display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(event, selectedDate) => {
+          onChange={(_, selectedDate) => {
             setShowEndDatePicker(false);
             if (selectedDate) {
-              setEndDate(selectedDate);
+              if (Platform.OS === "android") {
+                const newDate = new Date(selectedDate);
+                newDate.setHours(endDate.getHours());
+                newDate.setMinutes(endDate.getMinutes());
+                setEndDate(newDate);
+                setShowEndTimePicker(true);
+              } else {
+                setEndDate(selectedDate);
+              }
             }
           }}
         />

@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
+import { getTimeUntil } from "@/utils/getTimeUntil";
 import {
   View,
   Text,
-  ScrollView,
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
@@ -16,7 +16,6 @@ import {
 import { useRouter } from "expo-router";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
-import { BlurView } from "expo-blur";
 import { useAuth } from "../../context/auth";
 
 const { width } = Dimensions.get("window");
@@ -66,6 +65,8 @@ export default function RejoindreScreen() {
     outputRange: [0, -20],
     extrapolate: "clamp",
   });
+
+  
 
   useEffect(() => {
     const fetchRaces = async () => {
@@ -122,8 +123,13 @@ export default function RejoindreScreen() {
                   year: "numeric",
                   month: "long",
                   day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                  hour12: false,
                 })
               : undefined,
+            dateToDateFormat: race.startDate,
             participants: race.runners?.length || 0,
             maxParticipants: 100, // Valeur par défaut
             location: race.organization?.name || "Lieu non spécifié",
@@ -148,88 +154,6 @@ export default function RejoindreScreen() {
             "https://www.latransju.com/wp-content/uploads/2022/12/cv-lilian-menetrier-transju_trail-2022-dimanche-hd-52-date-jj-min-2048x1365.jpg",
           ];
 
-          const getRandomImage = () => {
-            return trailImages[Math.floor(Math.random() * trailImages.length)];
-          };
-
-          const fakeData: Race[] = [
-            {
-              _id: "1",
-              id: "1",
-              name: "Marathon de Paris",
-              distance: 42.2,
-              location: "Paris, France",
-              date: "15 Avril 2025",
-              participants: 2500,
-              maxParticipants: 3000,
-              category: "Marathon",
-              image: getRandomImage(),
-            },
-            {
-              _id: "2",
-              id: "2",
-              name: "Trail du Mont Blanc",
-              distance: 21.1,
-              location: "Chamonix, France",
-              date: "22 Juin 2025",
-              participants: 150,
-              maxParticipants: 200,
-              category: "Trail",
-              image: getRandomImage(),
-            },
-            {
-              _id: "3",
-              id: "3",
-              name: "Course Solidaire",
-              distance: 10,
-              location: "Lyon, France",
-              date: "5 Mai 2025",
-              participants: 45,
-              maxParticipants: 100,
-              category: "Course caritative",
-              image: getRandomImage(),
-            },
-            {
-              _id: "4",
-              id: "4",
-              name: "Semi-Marathon de Bordeaux",
-              distance: 21.1,
-              location: "Bordeaux, France",
-              date: "12 Septembre 2025",
-              participants: 800,
-              maxParticipants: 1000,
-              category: "Semi-Marathon",
-              image: getRandomImage(),
-            },
-            {
-              _id: "5",
-              id: "5",
-              name: "10km de Marseille",
-              distance: 10,
-              location: "Marseille, France",
-              date: "3 Octobre 2025",
-              participants: 300,
-              maxParticipants: 500,
-              category: "10km",
-              image: getRandomImage(),
-            },
-            {
-              _id: "6",
-              id: "6",
-              name: "Run For The Ocean",
-              distance: 15,
-              location: "Nice, France",
-              date: "20 Août 2025",
-              participants: 120,
-              maxParticipants: 250,
-              category: "Course écologique",
-              image: getRandomImage(),
-            },
-          ];
-
-          setMesRaces(fakeData.slice(0, 2));
-          setRacesProches(fakeData.slice(2, 5));
-          setRacesSponsos(fakeData.slice(5));
         }
       } catch (error) {
         console.error("Erreur lors du chargement des courses:", error);
@@ -244,6 +168,8 @@ export default function RejoindreScreen() {
 
   const RaceCard = ({ race }: { race: Race }) => {
     const scaleValue = new Animated.Value(1);
+
+    const now = new Date();
 
     const onPressIn = () => {
       Animated.spring(scaleValue, {
@@ -328,6 +254,14 @@ export default function RejoindreScreen() {
                   <View style={styles.raceDetail}>
                     <Icon name="calendar" size={14} color="#A1F763" />
                     <Text style={styles.raceDetailText}>{race.date}</Text>
+                  </View>
+                )}
+                {race.date && (
+                  <View style={styles.raceDetail}>
+                    <Icon name="calendar" size={14} color="#A1F763" />
+                    <Text style={styles.raceDetailText}>
+                      Début dans : {getTimeUntil(race.startDate)}{" "}
+                    </Text>
                   </View>
                 )}
               </View>

@@ -9,9 +9,9 @@ export default function CreateRacePage() {
   const router = useRouter();
   const { gpxUri } = useLocalSearchParams<{ gpxUri?: string }>();
 
-  // Si l'utilisateur n'est pas connecté, rediriger vers la page de connexion
-  if (!user) {
-    router.replace("/login");
+  // Si l'utilisateur n'est pas connecté ou est un visiteur, rediriger
+  if (!user || user.isVisitor) {
+    router.replace(user?.isVisitor ? "/visitor" : "/login");
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
         <ActivityIndicator size="large" color="#A1F763" />

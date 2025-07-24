@@ -48,6 +48,14 @@ interface Race {
 export default function RejoindreScreen() {
   const router = useRouter();
   const { token, user } = useAuth();
+
+  // Rediriger les visiteurs vers la page visiteur
+  useEffect(() => {
+    if (user?.isVisitor) {
+      router.replace("/visitor");
+    }
+  }, [user, router]);
+
   const [loading, setLoading] = useState(false);
   const [mesRaces, setMesRaces] = useState<Race[]>([]);
   const [mesParticipations, setMesParticipations] = useState<Race[]>([]);
@@ -156,7 +164,9 @@ export default function RejoindreScreen() {
             (race: any) => {
               // Afficher seulement les _id des runners
               if (race.runners && Array.isArray(race.runners)) {
-                const runnersIds = race.runners.map((runner: any) => runner._id).filter(Boolean);
+                const runnersIds = race.runners
+                  .map((runner: any) => runner._id)
+                  .filter(Boolean);
                 console.log(`Course "${race.name}" - Runners _id:`, runnersIds);
               }
 

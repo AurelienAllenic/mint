@@ -8,6 +8,7 @@ type User = {
   lastname?: string | null;
   profileImage?: string | null;
   isConnected: boolean;
+  isVisitor?: boolean;
 } | null;
 
 type AuthContextType = {
@@ -22,6 +23,7 @@ type AuthContextType = {
     firstname?: string | null;
     lastname?: string | null;
     profileImage?: string | null;
+    isVisitor?: boolean;
   }) => void;
   logout: () => void;
   updateUser: (userData: {
@@ -45,6 +47,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     firstname?: string | null;
     lastname?: string | null;
     profileImage?: string | null;
+    isVisitor?: boolean;
   }) => {
     console.log("=== AUTH CONTEXT LOGIN ===");
     console.log("userData received:", userData);
@@ -59,6 +62,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       lastname: userData.lastname ?? null,
       profileImage: userData.profileImage ?? null,
       isConnected: true,
+      isVisitor: userData.isVisitor || false,
     });
     setToken(userData.token);
 

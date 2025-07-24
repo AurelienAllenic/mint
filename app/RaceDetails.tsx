@@ -3,7 +3,6 @@ import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
-import { getTimeUntil } from "@/utils/getTimeUntil";
 import {
   ActivityIndicator,
   Image,
@@ -12,7 +11,6 @@ import {
   TouchableOpacity,
   View,
   Modal,
-  ScrollView,
   FlatList,
 } from "react-native";
 import { useAuth } from "../context/auth";
@@ -59,6 +57,7 @@ export default function RaceDetailsScreen() {
   >([]);
   const [error, setError] = useState<string | null>(null);
   const [showParticipantsModal, setShowParticipantsModal] = useState(false);
+  const [showRaceInfo, setShowRaceInfo] = useState(false);
 
   useEffect(() => {
     const fetchRaceData = async () => {
@@ -277,12 +276,11 @@ export default function RaceDetailsScreen() {
       const date = new Date(dateString);
 
       return date.toLocaleDateString("fr-FR", {
+        day: "2-digit",
+        month: "short",
         year: "numeric",
-        month: "long",
-        day: "numeric",
         hour: "2-digit",
         minute: "2-digit",
-        second: "2-digit",
         hour12: false,
       });
     } catch {
@@ -364,7 +362,7 @@ export default function RaceDetailsScreen() {
                 Aucun participant
               </Text>
               <Text style={styles.emptyParticipantsSubText}>
-                Cette course n'a pas encore de participants inscrits.
+                Cette course n&apos;a pas encore de participants inscrits.
               </Text>
             </View>
           ) : (
@@ -434,112 +432,86 @@ export default function RaceDetailsScreen() {
         </BlurView>
       </View>
 
-      {/* Informations de la course avec le style home */}
-      <View style={styles.raceInfoContainer}>
-        <BlurView style={styles.raceInfoBlur} intensity={40} tint="dark">
-          <View style={styles.raceInfoContent}>
-            <View style={styles.raceDetails}>
-              {/* Distance calculée depuis le tracé ou distance de l'API */}
-              {(calculatedDistance > 0 || race?.distance) && (
-                <View style={styles.detailItem}>
-                  <Icon name="map-marker-distance" size={18} color="#A1F763" />
-                  <Text style={styles.detailText}>
-                    {calculatedDistance > 0
-                      ? `${calculatedDistance.toFixed(2)} km`
-                      : race?.distance
-                      ? formatDistance(race.distance)
-                      : "Distance inconnue"}
-                  </Text>
-                </View>
-              )}
+      {/* Informations de la course directement sur la page */}
+      {showRaceInfo && (
+        <View style={styles.raceInfoContainer}>
+          <BlurView style={styles.raceInfoBlur} intensity={40} tint="dark">
+            <View style={styles.raceInfoContent}>
+              {/* Grille d'informations */}
+              <View style={styles.infoGrid}>
+                {/* Distance */}
+                {(calculatedDistance > 0 || race?.distance) && (
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoIconContainer}>
+                      <Icon
+                        name="map-marker-distance"
+                        size={24}
+                        color="#0F0F0F"
+                      />
+                    </View>
+                    <View style={styles.infoTextContainer}>
+                      <Text style={styles.infoLabel}>Distance</Text>
+                      <Text style={styles.infoValue}>
+                        {calculatedDistance > 0
+                          ? `${calculatedDistance.toFixed(2)} km`
+                          : race?.distance
+                          ? formatDistance(race.distance)
+                          : "Inconnue"}
+                      </Text>
+                    </View>
+                  </View>
+                )}
 
-              {/* Date de début */}
-              {(race?.startDate || race?.start_date) && (
-                <View style={styles.detailItem}>
-                  <Icon name="calendar-start" size={18} color="#A1F763" />
-                  <Text style={styles.detailText}>
-                    {formatDate(race.startDate || race.start_date!)}
-                  </Text>
-                </View>
-              )}
+                {/* Date de début */}
+                {(race?.startDate || race?.start_date) && (
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoIconContainer}>
+                      <Icon name="calendar-start" size={24} color="#0F0F0F" />
+                    </View>
+                    <View style={styles.infoTextContainer}>
+                      <Text style={styles.infoLabel}>Début</Text>
+                      <Text style={styles.infoValue}>
+                        {formatDate(race.startDate || race.start_date!)}
+                      </Text>
+                    </View>
+                  </View>
+                )}
 
-              {/* Date de fin */}
-              {(race?.endDate || race?.end_date) && (
-                <View style={styles.detailItem}>
-                  <Icon name="calendar-end" size={18} color="#A1F763" />
-                  <Text style={styles.detailText}>
-                    Fin: {formatDate(race.endDate || race.end_date!)}
-                  </Text>
-                </View>
-              )}
+                {/* Organisation */}
+                {race?.organization?.name && (
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoIconContainer}>
+                      <Icon name="domain" size={24} color="#0F0F0F" />
+                    </View>
+                    <View style={styles.infoTextContainer}>
+                      <Text style={styles.infoLabel}>Organisation</Text>
+                      <Text style={styles.infoValue}>
+                        {race.organization.name}
+                      </Text>
+                    </View>
+                  </View>
+                )}
 
-              {/* Début dans */}
-              {(race?.endDate || race?.end_date) && (
-                <View style={styles.detailItem}>
-                  <Icon name="timer" size={18} color="#A1F763" />
-                  <Text style={styles.detailText}>
-                    Commence dans : {getTimeUntil(race.startDate, race.endDate)}
-                  </Text>
-                </View>
-              )}
-
-              {/* Organisation */}
-              {race?.organization?.name && (
-                <View style={styles.detailItem}>
-                  <Icon name="domain" size={18} color="#A1F763" />
-                  <Text style={styles.detailText}>
-                    {race.organization.name}
-                  </Text>
-                </View>
-              )}
-
-              {/* Nombre de participants */}
-              {race?.runners && (
-                <View style={styles.detailItem}>
-                  <Icon name="account-group" size={18} color="#A1F763" />
-                  <Text style={styles.detailText}>
-                    {race.runners.length} participant
-                    {race.runners.length > 1 ? "s" : ""}
-                  </Text>
-                </View>
-              )}
-
-              {/* Catégorie standard */}
-              {race?.standard_distance && (
-                <View style={styles.detailItem}>
-                  <Icon name="trophy" size={18} color="#A1F763" />
-                  <Text style={styles.detailText}>
-                    {race.standard_distance.name}
-                  </Text>
-                </View>
-              )}
-
-              {/* Informations additionnelles si disponibles */}
-              {race?.location && (
-                <View style={styles.detailItem}>
-                  <Icon name="map-marker" size={18} color="#A1F763" />
-                  <Text style={styles.detailText}>{race.location}</Text>
-                </View>
-              )}
-
-              {race?.positive_elevation && (
-                <View style={styles.detailItem}>
-                  <Icon name="trending-up" size={18} color="#A1F763" />
-                  <Text style={styles.detailText}>
-                    {race.positive_elevation}m D+
-                  </Text>
-                </View>
-              )}
-            </View>
-
-            {race?.description && (
-              <View style={styles.descriptionContainer}>
-                <Text style={styles.descriptionText}>{race.description}</Text>
+                {/* Participants */}
+                {race?.runners && (
+                  <View style={styles.infoCard}>
+                    <View style={styles.infoIconContainer}>
+                      <Icon name="account-group" size={24} color="#0F0F0F" />
+                    </View>
+                    <View style={styles.infoTextContainer}>
+                      <Text style={styles.infoLabel}>Participants</Text>
+                      <Text style={styles.infoValue}>
+                        {race.runners.length} inscrit
+                        {race.runners.length > 1 ? "s" : ""}
+                      </Text>
+                    </View>
+                  </View>
+                )}
               </View>
-            )}
-          </View>
-        </BlurView>
-      </View>
+            </View>
+          </BlurView>
+        </View>
+      )}
 
       {/* Carte avec le même style que home */}
       <View style={styles.mapContainer}>
@@ -558,24 +530,31 @@ export default function RaceDetailsScreen() {
 
       {/* Boutons d'action avec le style home */}
       <View style={styles.container__btns}>
-        <View style={styles.mainButtonsContainer}>
-          <TouchableOpacity
-            style={styles.joinButton}
-            onPress={handleJoinRace}
-            activeOpacity={0.8}
-          >
-            <BlurView style={styles.joinButtonBlur} intensity={40} tint="dark">
-              <Text style={styles.joinButtonText}>REJOINDRE</Text>
-            </BlurView>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.mainButton}
-            onPress={() => router.back()}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.mainButtonText}>RETOUR</Text>
-          </TouchableOpacity>
-        </View>
+        {!user?.isVisitor && (
+          // Interface pour utilisateur connecté : boutons rejoindre et retour
+          <View style={styles.mainButtonsContainer}>
+            <TouchableOpacity
+              style={styles.joinButton}
+              onPress={handleJoinRace}
+              activeOpacity={0.8}
+            >
+              <BlurView
+                style={styles.joinButtonBlur}
+                intensity={40}
+                tint="dark"
+              >
+                <Text style={styles.joinButtonText}>REJOINDRE</Text>
+              </BlurView>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.mainButton}
+              onPress={() => router.back()}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.mainButtonText}>RETOUR</Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         <View style={styles.bottomButtons}>
           <TouchableOpacity style={styles.roundButton}>
@@ -591,7 +570,10 @@ export default function RaceDetailsScreen() {
               <Icon name="account-group" size={28} color="#fff" />
             </BlurView>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.roundButton}>
+          <TouchableOpacity
+            style={styles.roundButton}
+            onPress={() => setShowRaceInfo(!showRaceInfo)}
+          >
             <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
               <Icon name="information-outline" size={28} color="#fff" />
             </BlurView>
@@ -713,27 +695,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   raceInfoContent: {
-    padding: 20,
-  },
-  raceName: {
-    fontSize: 24,
-    fontWeight: "bold",
-    color: "#A1F763",
-    marginBottom: 16,
-    textAlign: "center",
-  },
-  raceDetails: {
-    gap: 12,
-  },
-  detailItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  detailText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "500",
+    padding: 16,
   },
   mapContainer: {
     position: "absolute",
@@ -856,20 +818,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
-  descriptionContainer: {
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: "rgba(161, 247, 99, 0.1)",
-    borderRadius: 8,
-    borderLeftWidth: 3,
-    borderLeftColor: "#A1F763",
-  },
-  descriptionText: {
-    color: "#fff",
-    fontSize: 14,
-    lineHeight: 20,
-    fontWeight: "400",
-  },
   // Styles pour la modal des participants
   modalContainer: {
     flex: 1,
@@ -975,5 +923,44 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "bold",
     color: "#A1F763",
+  },
+  // Styles pour les informations de course affichées directement
+  infoGrid: {
+    gap: 8,
+  },
+  infoCard: {
+    backgroundColor: "rgba(15, 15, 15, 0.8)",
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: "rgba(42, 42, 42, 0.6)",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  infoIconContainer: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: "#A1F763",
+    justifyContent: "center",
+    alignItems: "center",
+    marginRight: 12,
+  },
+  infoTextContainer: {
+    flex: 1,
+  },
+  infoLabel: {
+    fontSize: 10,
+    color: "#666",
+    fontWeight: "500",
+    marginBottom: 1,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  infoValue: {
+    fontSize: 14,
+    color: "#FFFFFF",
+    fontWeight: "600",
+    lineHeight: 16,
   },
 });

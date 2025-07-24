@@ -22,6 +22,13 @@ export default function HomeScreen() {
   const { user, logout, token } = useAuth();
   const router = useRouter();
 
+  // Rediriger les visiteurs vers la page visiteur
+  useEffect(() => {
+    if (user?.isVisitor) {
+      router.replace("/visitor");
+    }
+  }, [user, router]);
+
   // Debug logs pour l'objet user
   console.log("=== DEBUG USER OBJECT ===");
   console.log("User object:", user);
@@ -175,7 +182,7 @@ export default function HomeScreen() {
                 <Text style={styles.username}>
                   {user?.firstname && user?.lastname
                     ? `${user.firstname} ${user.lastname}`
-                    : "Utilisateur"}
+                    : "Visiteur"}
                 </Text>
               </View>
               <View style={styles.profileContainer}>

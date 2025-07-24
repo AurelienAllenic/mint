@@ -1,5 +1,5 @@
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -18,6 +18,15 @@ export default function ProfileScreen() {
   const { user, logout, token, updateUser } = useAuth();
   const router = useRouter();
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
+
+  // Rediriger les visiteurs vers la page visiteur
+  useEffect(() => {
+    if (user?.isVisitor) {
+      router.replace("/visitor");
+    } else if (!user) {
+      router.replace("/login");
+    }
+  }, [user, router]);
 
   const [isEditing, setIsEditing] = useState(false);
   const [firstname, setFirstname] = useState(user?.firstname || "");

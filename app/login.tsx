@@ -19,7 +19,9 @@ export default function LoginScreen() {
     try {
       let response: Response = new Response();
       let data: any = {};
+
       if (!isVisitor) {
+        // Login normal
         const API_URL = process.env.EXPO_PUBLIC_API_URL;
         console.log("API_URL:", API_URL);
 
@@ -32,6 +34,28 @@ export default function LoginScreen() {
         console.log("Response status:", response.status);
         data = await response.json();
         console.log("Response JSON:", data);
+      } else {
+        // Login invité
+        const API_URL = process.env.EXPO_PUBLIC_API_URL;
+        console.log("API_URL pour invité:", API_URL);
+
+        response = await fetch(`${API_URL}/auth/visitor-token`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+        });
+
+        console.log("Visitor response status:", response.status);
+
+        if (response.ok) {
+          data = await response.json();
+          console.log("Visitor response JSON:", data);
+        } else {
+          console.log("Visitor endpoint failed with status:", response.status);
+          const errorText = await response.text();
+          console.log("Error response text:", errorText);
+          // Utiliser le fallback pour les invités
+          data = null;
+        }
       }
 
       if (response.ok && !isVisitor) {
@@ -43,11 +67,11 @@ export default function LoginScreen() {
 
         // Extraire l'ID depuis l'ObjectId si nécessaire
         let userId = data.technicalUser._id || data.technicalUser.id;
-        
+
         // Si l'ID n'est pas dans la réponse, l'extraire du token JWT
         if (!userId && data.access_token) {
           try {
-            const payload = JSON.parse(atob(data.access_token.split('.')[1]));
+            const payload = JSON.parse(atob(data.access_token.split(".")[1]));
             console.log("JWT Payload:", payload);
             userId = payload.userId || payload.id || payload.sub;
             console.log("ID extrait du JWT:", userId);
@@ -55,14 +79,14 @@ export default function LoginScreen() {
             console.log("Erreur lors de l'extraction du JWT:", e);
           }
         }
-        
+
         // Si c'est un objet ObjectId, extraire la string
-        if (typeof userId === 'object' && userId.$oid) {
+        if (typeof userId === "object" && userId.$oid) {
           userId = userId.$oid;
-        } else if (typeof userId === 'object' && userId.toString) {
+        } else if (typeof userId === "object" && userId.toString) {
           userId = userId.toString();
         }
-        
+
         console.log("User ID final:", userId);
 
         login({
@@ -72,14 +96,36 @@ export default function LoginScreen() {
           _id: userId,
           token: data.access_token,
           isConnected: !isVisitor,
+          isVisitor: false,
         });
         router.replace("/");
-      } else if (isVisitor) {
+      } else if (isVisitor && response.ok && data) {
+        console.log("=== VISITOR LOGIN SUCCESS ===");
+        console.log("Visitor response data:", data);
+
         login({
           email: "visitor@example.com",
           name: "Visiteur",
+          firstname: "Visiteur",
+          lastname: "",
+          _id: data.userId || "visitor-id", // Utiliser l'ID depuis la réponse visitor-token
+          token: data.access_token || data.token,
+          isConnected: false, // Les invités ne sont pas "connectés" au sens strict
+          isVisitor: true,
+        });
+        router.replace("/");
+      } else if (isVisitor) {
+        // Fallback si l'endpoint visitor-token échoue
+        console.log("Visitor token failed, using fallback");
+        login({
+          email: "visitor@example.com",
+          name: "Visiteur",
+          firstname: "Visiteur",
+          lastname: "",
+          _id: "visitor-id",
           token: "visitor-token",
-          isConnected: !isVisitor,
+          isConnected: false,
+          isVisitor: true,
         });
         router.replace("/");
       } else {
@@ -162,14 +208,25 @@ export default function LoginScreen() {
       </View>
 
       <View style={loginStyles.inviteSection}>
-        <Text style={loginStyles.inviteLabel}>J’ai un code invité</Text>
+        <View style={{ alignItems: "center" }}>
+          <Text style={loginStyles.termsText}>ou</Text>
+          <TouchableOpacity
+            style={[loginStyles.button, { marginTop: 8 }]}
+            onPress={() => handleLogin(true)}
+          >
+            <Text style={loginStyles.buttonText}>
+              Accèder en tant qu&apos;invité
+            </Text>
+          </TouchableOpacity>
+        </View>
+        {/* <Text style={loginStyles.inviteLabel}>J’ai un code invité</Text>
         <TextInput
           style={loginStyles.inviteInput}
           placeholder="KTYZPQ"
           placeholderTextColor="#A1A1A1"
           value={inviteCode}
           onChangeText={setInviteCode}
-        />
+        /> */}
       </View>
 
       <Text style={loginStyles.termsText}>
@@ -182,15 +239,6 @@ export default function LoginScreen() {
           Inscrivez-vous
         </Text>
       </Text>
-      <View style={{ alignItems: "center", marginTop: 24 }}>
-        <Text style={loginStyles.termsText}>Vous êtes un visiteur ?</Text>
-        <TouchableOpacity
-          style={[loginStyles.button, { marginTop: 8 }]}
-          onPress={() => handleLogin(true)}
-        >
-          <Text style={loginStyles.buttonText}>Accèder aux courses</Text>
-        </TouchableOpacity>
-      </View>
     </View>
   );
 }

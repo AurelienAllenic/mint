@@ -69,6 +69,7 @@ export const loginStyles = StyleSheet.create({
     backgroundColor: "#A1F763",
     borderRadius: 10,
     paddingVertical: 16,
+    paddingHorizontal: 14,
     alignItems: "center",
     width: "90%",
     marginTop: 12,
@@ -87,7 +88,7 @@ export const loginStyles = StyleSheet.create({
   },
   socialSection: {
     width: "90%",
-    marginBottom: 12,
+    // marginBottom: 12,
   },
   socialButton: {
     flexDirection: "row",
@@ -112,7 +113,7 @@ export const loginStyles = StyleSheet.create({
   inviteSection: {
     width: "90%",
     marginTop: 30,
-    marginBottom: 12,
+    marginBottom: 30,
     alignItems: "center",
   },
   inviteLabel: {

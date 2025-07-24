@@ -3,6 +3,7 @@ import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { BlurView } from "expo-blur";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
+import { getTimeUntil } from "@/utils/getTimeUntil";
 import {
   ActivityIndicator,
   Image,
@@ -378,6 +379,16 @@ export default function RaceDetailsScreen() {
                   <Icon name="calendar-end" size={18} color="#A1F763" />
                   <Text style={styles.detailText}>
                     Fin: {formatDate(race.endDate || race.end_date!)}
+                  </Text>
+                </View>
+              )}
+
+              {/* Début dans */}
+              {(race?.endDate || race?.end_date) && (
+                <View style={styles.detailItem}>
+                  <Icon name="timer" size={18} color="#A1F763" />
+                  <Text style={styles.detailText}>
+                    Commence dans : {getTimeUntil(race.startDate, race.endDate)}
                   </Text>
                 </View>
               )}

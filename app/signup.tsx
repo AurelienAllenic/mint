@@ -28,16 +28,6 @@ export default function SignupScreen() {
     const API_URL = process.env.EXPO_PUBLIC_API_URL;
     setError(""); // Reset error
 
-    console.log("=== SIGNUP DATA SENT ===");
-    console.log("API_URL:", API_URL);
-    console.log("Data being sent:", {
-      email: email,
-      firstname: firstname,
-      lastname: lastname,
-      password: password,
-    });
-    console.log("========================");
-
     try {
       const res = await fetch(`${API_URL}/auth/register`, {
         method: "POST",
@@ -52,12 +42,8 @@ export default function SignupScreen() {
         },
       });
 
-      console.log("Response status:", res.status);
-      console.log("Response ok:", res.ok);
-
       if (!res.ok) {
         const errorData = await res.json();
-        console.log("Error response:", errorData);
         setError(errorData.message || "Une erreur est survenue");
         return;
       } else {

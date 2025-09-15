@@ -5,13 +5,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Image,
+  Modal,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
-  Modal,
-  FlatList,
 } from "react-native";
 import { useAuth } from "../context/auth";
 
@@ -72,11 +72,9 @@ export default function RaceDetailsScreen() {
   useEffect(() => {
     const fetchRaceData = async () => {
       if (!raceId) {
-        console.log("❌ Pas de raceId fourni");
         return;
       }
 
-      console.log("🚀 Début de fetchRaceData pour raceId:", raceId);
       setLoading(true);
       try {
         const API_URL =
@@ -85,9 +83,6 @@ export default function RaceDetailsScreen() {
         const authHeader = token?.startsWith("Bearer ")
           ? token
           : `Bearer ${token}`;
-
-        console.log("📡 Appel API:", `${API_URL}/race/${raceId}`);
-        console.log("🔑 En-tête auth:", authHeader?.substring(0, 20) + "...");
 
         // Récupérer les informations de la course
         const raceResponse = await fetch(`${API_URL}/race/${raceId}`, {
@@ -98,23 +93,8 @@ export default function RaceDetailsScreen() {
           },
         });
 
-        console.log("📥 Statut de la réponse:", raceResponse.status);
-        console.log("✅ Réponse OK:", raceResponse.ok);
-
         if (raceResponse.ok) {
           const raceData = await raceResponse.json();
-
-          // Log détaillé des données de la course reçues
-          console.log("=== DONNÉES RACE REÇUES ===");
-          console.log("Race ID:", raceId);
-          console.log("Race complète:", JSON.stringify(raceData, null, 2));
-          console.log("gpxFile:", raceData.gpxFile);
-          console.log("Type de gpxFile:", typeof raceData.gpxFile);
-          console.log("gpxFile existe:", !!raceData.gpxFile);
-          console.log("gpxFile est null:", raceData.gpxFile === null);
-          console.log("gpxFile est undefined:", raceData.gpxFile === undefined);
-          console.log("gpxFile est vide:", raceData.gpxFile === "");
-          console.log("============================");
 
           // Adapter les données pour l'affichage
           const adaptedRace: RaceDetails = {
@@ -132,18 +112,11 @@ export default function RaceDetailsScreen() {
           // Récupérer le tracé depuis le contenu GPX de la course
           if (raceData.gpxFile && raceData.gpxFile.trim() !== "") {
             try {
-              console.log("Traitement du contenu GPX de la course...");
-              console.log("Taille du contenu GPX:", raceData.gpxFile.length);
-
               // Parser directement le contenu GPX stocké en base
               const { parseGpx } = await import("@/utils/gpxParser");
               const coordinates = parseGpx(raceData.gpxFile);
 
               if (coordinates.length > 0) {
-                console.log(
-                  `${coordinates.length} coordonnées extraites du GPX`
-                );
-
                 // Optimisation pour les performances
                 let optimizedCoords = coordinates;
 
@@ -175,13 +148,6 @@ export default function RaceDetailsScreen() {
                   }
                 }
 
-                console.log(
-                  `Tracé optimisé: ${coordinates.length} → ${optimizedCoords.length} points`
-                );
-                console.log(
-                  "Coordonnées finales pour la carte:",
-                  optimizedCoords
-                );
                 setTrackCoordinates(optimizedCoords);
               } else {
                 console.warn("Aucune coordonnée trouvée dans le contenu GPX");
@@ -229,9 +195,6 @@ export default function RaceDetailsScreen() {
       latitudeDelta: Math.max(0.01, (maxLat - minLat) * 1.2),
       longitudeDelta: Math.max(0.01, (maxLng - minLng) * 1.2),
     };
-
-    console.log("Région calculée pour le tracé:", region);
-    console.log("Coordonnées utilisées:", { minLat, maxLat, minLng, maxLng });
 
     return region;
   }, [trackCoordinates]);
@@ -308,52 +271,54 @@ export default function RaceDetailsScreen() {
 
   // Fonction pour déterminer le statut de la course
   const getRaceStatus = () => {
-    if (!race?.startDate) return { status: 'unknown', color: '#888' };
-    
+    if (!race?.startDate) return { status: "unknown", color: "#888" };
+
     const now = currentTime;
     const startDate = new Date(race.startDate);
     const endDate = race.endDate ? new Date(race.endDate) : null;
-    
+
     if (now < startDate) {
-      return { status: 'upcoming', color: '#FFB020', label: 'À venir' };
+      return { status: "upcoming", color: "#FFB020", label: "À venir" };
     } else if (endDate && now > endDate) {
-      return { status: 'finished', color: '#666', label: 'Terminée' };
+      return { status: "finished", color: "#666", label: "Terminée" };
     } else {
-      return { status: 'ongoing', color: '#A1F763', label: 'En cours' };
+      return { status: "ongoing", color: "#A1F763", label: "En cours" };
     }
   };
 
   // Fonction pour calculer le temps restant
   const getTimeRemaining = () => {
     if (!race?.startDate) return null;
-    
+
     const now = currentTime;
     const startDate = new Date(race.startDate);
     const endDate = race.endDate ? new Date(race.endDate) : null;
     const raceStatus = getRaceStatus();
-    
+
     let targetDate: Date;
     let prefix: string;
-    
-    if (raceStatus.status === 'upcoming') {
+
+    if (raceStatus.status === "upcoming") {
       targetDate = startDate;
-      prefix = 'Commence dans';
-    } else if (raceStatus.status === 'ongoing' && endDate) {
+      prefix = "Commence dans";
+    } else if (raceStatus.status === "ongoing" && endDate) {
       targetDate = endDate;
-      prefix = 'Se termine dans';
+      prefix = "Se termine dans";
     } else {
       return null;
     }
-    
+
     const timeDiff = targetDate.getTime() - now.getTime();
-    
+
     if (timeDiff <= 0) return null;
-    
+
     const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
-    const hours = Math.floor((timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+    const hours = Math.floor(
+      (timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+    );
     const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
-    
+
     if (days > 0) {
       return `${prefix} ${days}j ${hours}h ${minutes}m`;
     } else if (hours > 0) {
@@ -496,13 +461,18 @@ export default function RaceDetailsScreen() {
               {/* Indicateur de statut de la course */}
               {race?.startDate && (
                 <View style={styles.statusContainer}>
-                  <View 
+                  <View
                     style={[
-                      styles.statusIndicator, 
-                      { backgroundColor: getRaceStatus().color }
-                    ]} 
+                      styles.statusIndicator,
+                      { backgroundColor: getRaceStatus().color },
+                    ]}
                   />
-                  <Text style={[styles.statusText, { color: getRaceStatus().color }]}>
+                  <Text
+                    style={[
+                      styles.statusText,
+                      { color: getRaceStatus().color },
+                    ]}
+                  >
                     {getRaceStatus().label}
                   </Text>
                 </View>
@@ -518,12 +488,18 @@ export default function RaceDetailsScreen() {
         <View style={styles.countdownContainer}>
           <BlurView style={styles.countdownBlur} intensity={40} tint="dark">
             <View style={styles.countdownContent}>
-              <Icon 
-                name={getRaceStatus().status === 'ongoing' ? 'timer' : 'clock-outline'} 
-                size={24} 
-                color={getRaceStatus().color} 
+              <Icon
+                name={
+                  getRaceStatus().status === "ongoing"
+                    ? "timer"
+                    : "clock-outline"
+                }
+                size={24}
+                color={getRaceStatus().color}
               />
-              <Text style={[styles.countdownText, { color: getRaceStatus().color }]}>
+              <Text
+                style={[styles.countdownText, { color: getRaceStatus().color }]}
+              >
                 {getTimeRemaining()}
               </Text>
             </View>
@@ -540,17 +516,39 @@ export default function RaceDetailsScreen() {
               <View style={styles.infoGrid}>
                 {/* Statut de la course */}
                 {race?.startDate && (
-                  <View style={[styles.infoCard, getRaceStatus().status === 'ongoing' && styles.ongoingRaceCard]}>
-                    <View style={[styles.infoIconContainer, { backgroundColor: getRaceStatus().color }]}>
+                  <View
+                    style={[
+                      styles.infoCard,
+                      getRaceStatus().status === "ongoing" &&
+                        styles.ongoingRaceCard,
+                    ]}
+                  >
+                    <View
+                      style={[
+                        styles.infoIconContainer,
+                        { backgroundColor: getRaceStatus().color },
+                      ]}
+                    >
                       <Icon
-                        name={getRaceStatus().status === 'ongoing' ? 'play' : getRaceStatus().status === 'upcoming' ? 'clock-outline' : 'check'}
+                        name={
+                          getRaceStatus().status === "ongoing"
+                            ? "play"
+                            : getRaceStatus().status === "upcoming"
+                            ? "clock-outline"
+                            : "check"
+                        }
                         size={24}
                         color="#0F0F0F"
                       />
                     </View>
                     <View style={styles.infoTextContainer}>
                       <Text style={styles.infoLabel}>Statut</Text>
-                      <Text style={[styles.infoValue, { color: getRaceStatus().color }]}>
+                      <Text
+                        style={[
+                          styles.infoValue,
+                          { color: getRaceStatus().color },
+                        ]}
+                      >
                         {getRaceStatus().label}
                       </Text>
                     </View>

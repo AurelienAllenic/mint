@@ -50,9 +50,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     profileImage?: string | null;
     isVisitor?: boolean;
   }) => {
-    console.log("=== AUTH CONTEXT LOGIN ===");
-    console.log("userData received:", userData);
-
     setUser({
       email: userData.email,
       name:
@@ -66,18 +63,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       isVisitor: userData.isVisitor || false,
     });
     setToken(userData.token);
-
-    console.log("User set in context:", {
-      email: userData.email,
-      name:
-        userData.name ||
-        `${userData.firstname || ""} ${userData.lastname || ""}`.trim(),
-      _id: userData._id,
-      firstname: userData.firstname ?? null,
-      lastname: userData.lastname ?? null,
-      profileImage: userData.profileImage ?? null,
-    });
-    console.log("=========================");
   };
 
   const updateUser = (updatedData: {
@@ -119,7 +104,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
       if (response.ok) {
         const profileData = await response.json();
-        console.log("Refreshed user data:", profileData);
 
         // Mettre à jour le contexte avec les données fraîches
         updateUser({

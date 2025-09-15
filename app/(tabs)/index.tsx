@@ -52,7 +52,6 @@ export default function HomeScreen() {
 
         if (response.ok) {
           const profileData = await response.json();
-          console.log("Fresh profile data loaded:", profileData);
 
           // Mettre à jour le contexte avec les données fraîches
           updateUser({
@@ -72,21 +71,6 @@ export default function HomeScreen() {
     loadUserProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Intentionnellement vide - une seule fois au montage
-
-  // Debug logs pour l'objet user - seulement quand l'utilisateur change
-  useEffect(() => {
-    if (user) {
-      console.log("=== DEBUG USER OBJECT ===");
-      console.log("User object:", user);
-      console.log("User _id:", user?._id);
-      console.log("User firstname:", user?.firstname);
-      console.log("User lastname:", user?.lastname);
-      console.log("User email:", user?.email);
-      console.log("User profileImage:", user?.profileImage);
-      console.log("Token:", token);
-      console.log("========================");
-    }
-  }, [user, token]);
 
   const [gpxCoordinates] = useState<GPXPoint[]>([]);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -131,8 +115,6 @@ export default function HomeScreen() {
             },
           });
           const rawText = await response.text();
-          console.log("Réponse brute /api/races:", rawText);
-          console.log("Status:", response.status, "Token:", authHeader);
           let data = [];
           try {
             data = JSON.parse(rawText);
@@ -384,11 +366,6 @@ export default function HomeScreen() {
                                 }
                                 // Calculer la distance
                                 const dist = calculateDistance(gpxCoordinates);
-                                console.log(
-                                  `Distance calculée pour ${
-                                    race.name
-                                  }: ${dist.toFixed(2)} km`
-                                );
                               } else {
                                 gpxError = true;
                               }

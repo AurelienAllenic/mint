@@ -9,8 +9,6 @@ const CreateOrganisation: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  console.log(token, "token");
-
   const createOrganisation = async () => {
     if (!orgName.trim()) {
       setError("Le nom de l'organisation est requis.");

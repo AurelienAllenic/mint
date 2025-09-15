@@ -91,17 +91,11 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   // Charger les données de référence au démarrage
   useEffect(() => {
     const loadReferenceData = async () => {
-      console.log("=== DÉBUT DU CHARGEMENT DES DONNÉES ===");
-      console.log("API_URL:", API_URL);
-      console.log("Token:", token ? "PRÉSENT" : "ABSENT");
-
       setLoadingData(true);
       try {
         const authHeader = token?.startsWith("Bearer ")
           ? token
           : `Bearer ${token}`;
-
-        console.log("Auth header créé:", authHeader ? "OK" : "ERREUR");
 
         // Charger les disciplines (si endpoint disponible)
         try {
@@ -137,35 +131,16 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
         // Charger les utilisateurs pour les runners
         try {
-          console.log("=== TENTATIVE DE CHARGEMENT DES UTILISATEURS ===");
-          console.log("URL appelée:", `${API_URL}/users`);
-          console.log("Authorization header:", authHeader);
-
           const usersResponse = await fetch(`${API_URL}/users`, {
             headers: { Authorization: authHeader },
           });
 
-          console.log("Status de la réponse users:", usersResponse.status);
-          console.log("Response OK?", usersResponse.ok);
-
           if (usersResponse.ok) {
             const usersList = await usersResponse.json();
-            console.log("=== UTILISATEURS CHARGÉS DEPUIS L'API ===");
-            console.log("Type de usersList:", typeof usersList);
-            console.log("Array.isArray(usersList):", Array.isArray(usersList));
-            console.log("Nombre d'utilisateurs:", usersList.length);
-            console.log("Premier utilisateur:", usersList[0]);
-            console.log("Liste complète:", usersList);
-            console.log("=== FIN CHARGEMENT UTILISATEURS ===");
 
             setUsers(usersList);
           } else {
             const errorText = await usersResponse.text();
-            console.log(
-              "ERREUR lors du chargement des utilisateurs:",
-              usersResponse.status,
-              errorText
-            );
           }
         } catch (e) {
           console.log("EXCEPTION lors du chargement des utilisateurs:", e);
@@ -237,14 +212,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         setGpxFileName(fileName);
         setGpxFileContent(gpxContent);
         setError(null);
-
-        console.log("Fichier GPX sélectionné et lu:", {
-          uri,
-          fileName,
-          contentLength: gpxContent.length,
-          size: file.size || "unknown",
-          mimeType: file.mimeType || "unknown",
-        });
       } catch (readError) {
         console.error("Erreur lors de la lecture du fichier GPX:", readError);
         setError(
@@ -364,23 +331,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         // Inclure le contenu GPX directement dans le JSON si disponible
         gpxFile: gpxFileContent || "",
       };
-
-      // Log pour déboguer
-      console.log("=== ENVOI DE LA COURSE EN JSON AVEC GPX ===");
-      console.log("- Nom:", raceName.trim());
-      console.log("- Date début:", startDate.toISOString());
-      console.log("- Date fin:", endDate.toISOString());
-      console.log("- Organisation:", selectedOrganization);
-      console.log("- Runners:", selectedRunners);
-      console.log("- Fichier GPX:", gpxFileName || "Aucun");
-      console.log(
-        "- Contenu GPX longueur:",
-        gpxFileContent ? gpxFileContent.length : 0
-      );
-      console.log("Données JSON à envoyer:", {
-        ...raceData,
-        gpxFile: gpxFileContent ? `[${gpxFileContent.length} caractères]` : "",
-      });
 
       const response = await fetch(`${API_URL}/race`, {
         method: "POST",

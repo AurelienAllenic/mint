@@ -23,7 +23,6 @@ export default function LoginScreen() {
       if (!isVisitor) {
         // Login normal
         const API_URL = process.env.EXPO_PUBLIC_API_URL;
-        console.log("API_URL:", API_URL);
 
         response = await fetch(`${API_URL}/auth/login`, {
           method: "POST",
@@ -31,26 +30,19 @@ export default function LoginScreen() {
           headers: { "Content-Type": "application/json" },
         });
 
-        console.log("Response status:", response.status);
         data = await response.json();
-        console.log("Response JSON:", data);
       } else {
         // Login invité
         const API_URL = process.env.EXPO_PUBLIC_API_URL;
-        console.log("API_URL pour invité:", API_URL);
 
         response = await fetch(`${API_URL}/auth/visitor-token`, {
           method: "GET",
           headers: { "Content-Type": "application/json" },
         });
 
-        console.log("Visitor response status:", response.status);
-
         if (response.ok) {
           data = await response.json();
-          console.log("Visitor response JSON:", data);
         } else {
-          console.log("Visitor endpoint failed with status:", response.status);
           const errorText = await response.text();
           console.log("Error response text:", errorText);
           // Utiliser le fallback pour les invités
@@ -59,12 +51,6 @@ export default function LoginScreen() {
       }
 
       if (response.ok && !isVisitor) {
-        console.log("=== LOGIN SUCCESS ===");
-        console.log("Backend response data:", data);
-        console.log("TechnicalUser:", data.technicalUser);
-        console.log("TechnicalUser _id:", data.technicalUser._id);
-        console.log("TechnicalUser _id type:", typeof data.technicalUser._id);
-
         // Extraire l'ID depuis l'ObjectId si nécessaire
         let userId = data.technicalUser._id || data.technicalUser.id;
 
@@ -72,9 +58,7 @@ export default function LoginScreen() {
         if (!userId && data.access_token) {
           try {
             const payload = JSON.parse(atob(data.access_token.split(".")[1]));
-            console.log("JWT Payload:", payload);
             userId = payload.userId || payload.id || payload.sub;
-            console.log("ID extrait du JWT:", userId);
           } catch (e) {
             console.log("Erreur lors de l'extraction du JWT:", e);
           }
@@ -86,8 +70,6 @@ export default function LoginScreen() {
         } else if (typeof userId === "object" && userId.toString) {
           userId = userId.toString();
         }
-
-        console.log("User ID final:", userId);
 
         login({
           email: data.technicalUser.email,
@@ -101,9 +83,6 @@ export default function LoginScreen() {
         });
         router.replace("/");
       } else if (isVisitor && response.ok && data) {
-        console.log("=== VISITOR LOGIN SUCCESS ===");
-        console.log("Visitor response data:", data);
-
         login({
           email: "visitor@example.com",
           name: "Visiteur",
@@ -116,8 +95,6 @@ export default function LoginScreen() {
         });
         router.replace("/");
       } else if (isVisitor) {
-        // Fallback si l'endpoint visitor-token échoue
-        console.log("Visitor token failed, using fallback");
         login({
           email: "visitor@example.com",
           name: "Visiteur",

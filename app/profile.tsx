@@ -21,7 +21,6 @@ export default function ProfileScreen() {
 
   // Rediriger les visiteurs vers la page visiteur
   useEffect(() => {
-    console.log("Current user:", user);
     if (user?.isVisitor) {
       router.replace("/visitor");
     } else if (!user) {
@@ -49,7 +48,6 @@ export default function ProfileScreen() {
 
         if (response.ok) {
           const profileData = await response.json();
-          console.log("Profile data loaded:", profileData);
 
           // Mettre à jour les états locaux avec les données du serveur
           setFirstname(profileData.firstname || "");

@@ -51,20 +51,13 @@ const Map: React.FC<MapProps> = ({
 
   useEffect(() => {
     if (gpxCoordinates?.length && mapRef.current) {
-      console.log(
-        "Centrage sur le tracé GPX:",
-        gpxCoordinates.length,
-        "points"
-      );
       const regionCalculated = calculateGPXRegion(gpxCoordinates);
-      console.log("Région calculée:", regionCalculated);
       setTimeout(() => {
         mapRef.current?.animateToRegion(regionCalculated, 2000);
         setHasCentered(true); // Empêcher le centrage sur la position utilisateur
       }, 500);
     } else if (region && mapRef.current) {
       // Si une région est fournie en prop (par exemple depuis RaceDetails), l'utiliser
-      console.log("Centrage sur la région fournie:", region);
       setTimeout(() => {
         mapRef.current?.animateToRegion(region, 2000);
         setHasCentered(true);
@@ -84,7 +77,6 @@ const Map: React.FC<MapProps> = ({
         const content = await FileSystem.readAsStringAsync(FILE_PATH);
         const parsed: UserLocation[] = JSON.parse(content);
         setLocations(parsed);
-        console.log("Données chargées :", parsed);
         setError(null);
       } catch (err: any) {
         setError(

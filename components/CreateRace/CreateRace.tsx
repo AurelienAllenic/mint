@@ -31,7 +31,7 @@ interface Organization {
 
 interface User {
   _id: string;
-  id?: string; // pour compatibilité si jamais
+  id?: string;
   email: string;
   firstname?: string;
   lastname?: string;
@@ -46,14 +46,14 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [raceName, setRaceName] = useState("Course du Lac de Paris");
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
-    date.setDate(date.getDate() + 7); // Dans 7 jours
-    date.setHours(9, 0, 0, 0); // 9h00
+    date.setDate(date.getDate() + 7);
+    date.setHours(9, 0, 0, 0);
     return date;
   });
   const [endDate, setEndDate] = useState(() => {
     const date = new Date();
-    date.setDate(date.getDate() + 7); // Dans 7 jours
-    date.setHours(12, 0, 0, 0); // 12h00
+    date.setDate(date.getDate() + 7);
+    date.setHours(12, 0, 0, 0);
     return date;
   });
   const [raceDisciplines, setRaceDisciplines] = useState<RaceDiscipline[]>([]);
@@ -84,11 +84,23 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
+  // NOUVEAUX ÉTATS POUR LE PAIEMENT
+  const [isPaid, setIsPaid] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
   const router = useRouter();
   const { token } = useAuth();
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
 
-  // Charger les données de référence au démarrage
+  // CONSTANTES DE PAIEMENT
+  const FREE_RUNNERS = 2;
+  const PRICE_PER_RUNNER = 1.5;
+
+  // CALCULS DE PAIEMENT
+  const extraRunners = Math.max(0, selectedRunners.length - FREE_RUNNERS);
+  const totalPayment = extraRunners * PRICE_PER_RUNNER;
+  const needsPayment = selectedRunners.length > FREE_RUNNERS && !isPaid;
+
   useEffect(() => {
     const loadReferenceData = async () => {
       setLoadingData(true);
@@ -97,7 +109,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           ? token
           : `Bearer ${token}`;
 
-        // Charger les disciplines (si endpoint disponible)
         try {
           const disciplinesResponse = await fetch(
             `${API_URL}/race-disciplines`,
@@ -113,7 +124,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           console.log("Erreur chargement disciplines:", e);
         }
 
-        // Charger les organisations (si endpoint disponible)
         try {
           const organizationsResponse = await fetch(
             `${API_URL}/organizations`,
@@ -129,7 +139,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           console.log("Erreur chargement organisations:", e);
         }
 
-        // Charger les utilisateurs pour les runners
         try {
           const usersResponse = await fetch(`${API_URL}/users`, {
             headers: { Authorization: authHeader },
@@ -137,7 +146,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
           if (usersResponse.ok) {
             const usersList = await usersResponse.json();
-
             setUsers(usersList);
           } else {
             const errorText = await usersResponse.text();
@@ -154,6 +162,13 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
     loadReferenceData();
   }, [token, API_URL]);
+
+  // Réinitialiser isPaid si on repasse en dessous de 2 coureurs
+  useEffect(() => {
+    if (selectedRunners.length <= FREE_RUNNERS) {
+      setIsPaid(false);
+    }
+  }, [selectedRunners.length]);
 
   const pickGpxFile = async () => {
     try {
@@ -181,7 +196,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         return;
       }
 
-      // Vérifier que le fichier est bien un GPX
       if (
         fileName &&
         !fileName.toLowerCase().includes(".gpx") &&
@@ -193,7 +207,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       }
 
       try {
-        // Lire le contenu du fichier GPX
         const gpxContent = await FileSystem.readAsStringAsync(uri);
 
         if (!gpxContent || gpxContent.trim().length === 0) {
@@ -201,7 +214,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           return;
         }
 
-        // Validation basique du contenu GPX
         if (!gpxContent.includes("<gpx") && !gpxContent.includes("<trk")) {
           console.warn(
             "Le fichier ne semble pas contenir de données GPX valides"
@@ -245,7 +257,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         ? token
         : `Bearer ${token}`;
 
-      // Le backend s'en chargera automatiquement avec req.userId du token JWT
       const response = await fetch(`${API_URL}/organizations`, {
         method: "POST",
         headers: {
@@ -259,17 +270,10 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
       if (response.ok) {
         const newOrg = await response.json();
-
-        // Ajouter la nouvelle organisation à la liste
         setOrganizations((prev) => [...prev, newOrg]);
-
-        // Sélectionner automatiquement la nouvelle organisation
         setSelectedOrganization(newOrg.id);
-
-        // Réinitialiser le formulaire de création
         setNewOrganizationName("");
         setShowCreateOrganization(false);
-
         Alert.alert("Succès", "Organisation créée avec succès !");
       } else {
         const errorText = await response.text();
@@ -280,6 +284,33 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setCreatingOrganization(false);
+    }
+  };
+
+  // FONCTION DE PAIEMENT
+  const handlePayment = async () => {
+    setIsProcessingPayment(true);
+    setError(null);
+
+    try {
+      // Simuler un appel à une API de paiement (Stripe, PayPal, etc.)
+      // Remplacer ceci par votre vraie intégration de paiement
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Si le paiement réussit
+      setIsPaid(true);
+      Alert.alert(
+        "Paiement réussi",
+        `Vous avez payé ${totalPayment.toFixed(
+          2
+        )}€ pour ${extraRunners} coureur(s) supplémentaire(s).`
+      );
+    } catch (err) {
+      console.error("Erreur lors du paiement:", err);
+      setError("Erreur lors du paiement. Veuillez réessayer.");
+      Alert.alert("Erreur", "Le paiement a échoué. Veuillez réessayer.");
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -294,14 +325,18 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       return false;
     }
 
-    // Pour l'instant, le fichier GPX n'est plus requis car le backend ne le gère pas encore
-    // if (!gpxFileUri) {
-    //   setError("Un fichier GPX est requis");
-    //   return false;
-    // }
-
     if (startDate >= endDate) {
       setError("La date de fin doit être postérieure à la date de début");
+      return false;
+    }
+
+    // BLOQUER LA CRÉATION SI PLUS DE 2 COUREURS ET PAS PAYÉ
+    if (needsPayment) {
+      setError(
+        `Vous devez payer ${totalPayment.toFixed(
+          2
+        )}€ pour ajouter ${extraRunners} coureur(s) supplémentaire(s)`
+      );
       return false;
     }
 
@@ -321,14 +356,12 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         return;
       }
 
-      // Envoyer les données en JSON avec le contenu GPX inclus
       const raceData = {
         name: raceName.trim(),
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         organization: selectedOrganization!,
         runners: selectedRunners,
-        // Inclure le contenu GPX directement dans le JSON si disponible
         gpxFile: gpxFileContent || "",
       };
 
@@ -351,7 +384,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           },
         ]);
 
-        // Reset du formulaire avec valeurs par défaut
         setRaceName("Course du Lac de Paris");
         const newStartDate = new Date();
         newStartDate.setDate(newStartDate.getDate() + 7);
@@ -368,6 +400,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         setGpxFileUri(null);
         setGpxFileName(null);
         setGpxFileContent(null);
+        setIsPaid(false);
       } else {
         const errorText = await response.text();
         console.log("Erreur API:", response.status, errorText);
@@ -701,6 +734,91 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     </View>
                   </View>
                 )}
+
+                {/* SECTION PAIEMENT - Affichée si plus de 2 coureurs */}
+                {selectedRunners.length > FREE_RUNNERS && (
+                  <View style={styles.paymentSection}>
+                    <View style={styles.paymentInfo}>
+                      <Icon name="information" size={20} color="#FFB020" />
+                      <Text style={styles.paymentInfoText}>
+                        Pour ajouter plus de {FREE_RUNNERS} coureurs, payez{" "}
+                        {PRICE_PER_RUNNER.toFixed(2)}€ par coureur
+                        supplémentaire
+                      </Text>
+                    </View>
+
+                    <View style={styles.paymentCalculation}>
+                      <View style={styles.calculationRow}>
+                        <Text style={styles.calculationLabel}>
+                          Coureurs gratuits :
+                        </Text>
+                        <Text style={styles.calculationValue}>
+                          {FREE_RUNNERS}
+                        </Text>
+                      </View>
+                      <View style={styles.calculationRow}>
+                        <Text style={styles.calculationLabel}>
+                          Coureurs payants :
+                        </Text>
+                        <Text style={styles.calculationValue}>
+                          {extraRunners}
+                        </Text>
+                      </View>
+                      <View style={styles.calculationRow}>
+                        <Text style={styles.calculationLabel}>
+                          Prix unitaire :
+                        </Text>
+                        <Text style={styles.calculationValue}>
+                          {PRICE_PER_RUNNER.toFixed(2)}€
+                        </Text>
+                      </View>
+                      <View
+                        style={[styles.calculationRow, styles.calculationTotal]}
+                      >
+                        <Text style={styles.calculationTotalLabel}>
+                          Total à payer :
+                        </Text>
+                        <Text style={styles.calculationTotalValue}>
+                          {extraRunners} × {PRICE_PER_RUNNER.toFixed(2)}€ ={" "}
+                          {totalPayment.toFixed(2)}€
+                        </Text>
+                      </View>
+                    </View>
+
+                    {!isPaid ? (
+                      <TouchableOpacity
+                        style={[
+                          styles.paymentButton,
+                          isProcessingPayment && styles.paymentButtonDisabled,
+                        ]}
+                        onPress={handlePayment}
+                        disabled={isProcessingPayment}
+                      >
+                        {isProcessingPayment ? (
+                          <ActivityIndicator size="small" color="#3B3B3B" />
+                        ) : (
+                          <>
+                            <Icon
+                              name="credit-card"
+                              size={20}
+                              color="#3B3B3B"
+                            />
+                            <Text style={styles.paymentButtonText}>
+                              Payer {totalPayment.toFixed(2)}€
+                            </Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    ) : (
+                      <View style={styles.paymentSuccess}>
+                        <Icon name="check-circle" size={24} color="#A1F763" />
+                        <Text style={styles.paymentSuccessText}>
+                          Paiement effectué avec succès !
+                        </Text>
+                      </View>
+                    )}
+                  </View>
+                )}
               </View>
 
               {/* Erreur */}
@@ -718,14 +836,19 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       {/* Bouton de création */}
       <View style={styles.buttonContainer}>
         <TouchableOpacity
-          style={[styles.createButton, loading && styles.createButtonDisabled]}
+          style={[
+            styles.createButton,
+            (loading || needsPayment) && styles.createButtonDisabled,
+          ]}
           onPress={createRace}
-          disabled={loading}
+          disabled={loading || needsPayment}
         >
           {loading ? (
             <ActivityIndicator size="small" color="#3B3B3B" />
           ) : (
-            <Text style={styles.createButtonText}>CRÉER LA COURSE</Text>
+            <Text style={styles.createButtonText}>
+              {needsPayment ? "PAIEMENT REQUIS" : "CRÉER LA COURSE"}
+            </Text>
           )}
         </TouchableOpacity>
       </View>
@@ -739,7 +862,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           onChange={(_, selectedDate) => {
             setShowStartDatePicker(false);
             if (selectedDate) {
-              // Sur Android, on affiche ensuite le time picker
               if (Platform.OS === "android") {
                 const newDate = new Date(selectedDate);
                 newDate.setHours(startDate.getHours());
@@ -945,36 +1067,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     flex: 1,
   },
-  distanceOptions: {
-    marginBottom: 16,
-  },
-  distanceButtons: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  distanceButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-  },
-  distanceButtonSelected: {
-    backgroundColor: "#A1F763",
-    borderColor: "#A1F763",
-  },
-  distanceButtonText: {
-    fontSize: 14,
-    color: "#fff",
-    fontWeight: "500",
-  },
-  distanceButtonTextSelected: {
-    color: "#3B3B3B",
-  },
-  customDistanceContainer: {
-    marginTop: 12,
-  },
   optionButtons: {
     flexDirection: "row",
     gap: 8,
@@ -1060,7 +1152,8 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   createButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
+    backgroundColor: "#666",
   },
   createButtonText: {
     color: "#3B3B3B",
@@ -1092,10 +1185,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(161, 247, 99, 0.3)",
   },
-  textArea: {
-    height: 80,
-    textAlignVertical: "top",
-  },
   createOrgActions: {
     flexDirection: "row",
     gap: 12,
@@ -1126,132 +1215,6 @@ const styles = StyleSheet.create({
     color: "#3B3B3B",
     fontWeight: "600",
   },
-  selectedRunners: {
-    marginBottom: 16,
-  },
-  runnersContainer: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  runnerChip: {
-    backgroundColor: "#A1F763",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  runnerChipText: {
-    fontSize: 14,
-    color: "#3B3B3B",
-    fontWeight: "500",
-  },
-  removeRunnerButton: {
-    padding: 2,
-  },
-  addRunnersButton: {
-    backgroundColor: "rgba(161, 247, 99, 0.2)",
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderWidth: 1,
-    borderColor: "#A1F763",
-  },
-  addRunnersButtonText: {
-    fontSize: 16,
-    color: "#A1F763",
-    fontWeight: "500",
-  },
-  addRunnersModal: {
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
-    borderRadius: 12,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: "rgba(161, 247, 99, 0.3)",
-    maxHeight: 400,
-  },
-  addRunnersHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(161, 247, 99, 0.3)",
-  },
-  addRunnersTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#A1F763",
-  },
-  closeAddRunnersButton: {
-    padding: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 8,
-  },
-  runnersList: {
-    flex: 1,
-    height: 300,
-  },
-  runnerItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
-  },
-  runnerItemSelected: {
-    backgroundColor: "rgba(161, 247, 99, 0.1)",
-    borderBottomColor: "rgba(161, 247, 99, 0.3)",
-  },
-  runnerItemInfo: {
-    flex: 1,
-  },
-  runnerItemText: {
-    fontSize: 16,
-    color: "#fff",
-    fontWeight: "500",
-    marginBottom: 2,
-  },
-  runnerItemTextSelected: {
-    color: "#A1F763",
-  },
-  runnerItemEmail: {
-    fontSize: 14,
-    color: "#888",
-  },
-  runnerItemEmailSelected: {
-    color: "#A1F763",
-    opacity: 0.8,
-  },
-  addRunnerIcon: {
-    marginLeft: 12,
-  },
-  addRunnersFooter: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(161, 247, 99, 0.3)",
-  },
-  finishSelectionButton: {
-    backgroundColor: "#A1F763",
-    borderRadius: 8,
-    padding: 12,
-    alignItems: "center",
-  },
-  finishSelectionButtonText: {
-    color: "#3B3B3B",
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  noRunnersText: {
-    textAlign: "center",
-    color: "#888",
-    padding: 20,
-    fontStyle: "italic",
-  },
-  // Nouveaux styles pour la liste déroulante des utilisateurs
   dropdownButton: {
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: 12,
@@ -1353,6 +1316,98 @@ const styles = StyleSheet.create({
   },
   removeUserButton: {
     padding: 2,
+  },
+  // NOUVEAUX STYLES POUR LA SECTION PAIEMENT
+  paymentSection: {
+    marginTop: 16,
+    backgroundColor: "rgba(255, 176, 32, 0.05)",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 176, 32, 0.3)",
+  },
+  paymentInfo: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 16,
+  },
+  paymentInfoText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#FFB020",
+    lineHeight: 20,
+  },
+  paymentCalculation: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  calculationRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  calculationLabel: {
+    fontSize: 14,
+    color: "#fff",
+    opacity: 0.8,
+  },
+  calculationValue: {
+    fontSize: 14,
+    color: "#fff",
+    fontWeight: "600",
+  },
+  calculationTotal: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(161, 247, 99, 0.2)",
+  },
+  calculationTotalLabel: {
+    fontSize: 15,
+    color: "#A1F763",
+    fontWeight: "600",
+  },
+  calculationTotalValue: {
+    fontSize: 15,
+    color: "#A1F763",
+    fontWeight: "700",
+  },
+  paymentButton: {
+    backgroundColor: "#A1F763",
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  paymentButtonDisabled: {
+    opacity: 0.6,
+  },
+  paymentButtonText: {
+    fontSize: 16,
+    color: "#3B3B3B",
+    fontWeight: "700",
+  },
+  paymentSuccess: {
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#A1F763",
+  },
+  paymentSuccessText: {
+    fontSize: 15,
+    color: "#A1F763",
+    fontWeight: "600",
   },
 });
 

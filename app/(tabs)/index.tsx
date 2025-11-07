@@ -460,7 +460,10 @@ export default function HomeScreen() {
                 <Icon name="account-group" size={24} color="#fff" />
               </BlurView>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.roundButton}>
+            <TouchableOpacity
+              style={styles.roundButton}
+              onPress={() => router.replace("/stats")}
+            >
               <BlurView
                 style={styles.roundButtonBlur}
                 intensity={40}

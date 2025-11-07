@@ -1,5 +1,6 @@
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { StripeProvider, useStripe } from "@stripe/stripe-react-native";
 import { BlurView } from "expo-blur";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
@@ -31,7 +32,7 @@ interface Organization {
 
 interface User {
   _id: string;
-  id?: string; // pour compatibilité si jamais
+  id?: string;
   email: string;
   firstname?: string;
   lastname?: string;
@@ -46,14 +47,15 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [raceName, setRaceName] = useState("Course du Lac de Paris");
   const [startDate, setStartDate] = useState(() => {
     const date = new Date();
-    date.setDate(date.getDate() + 7); // Dans 7 jours
-    date.setHours(9, 0, 0, 0); // 9h00
+    date.setDate(date.getDate() + 7);
+    date.setHours(9, 0, 0, 0);
     return date;
   });
+  const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [endDate, setEndDate] = useState(() => {
     const date = new Date();
-    date.setDate(date.getDate() + 7); // Dans 7 jours
-    date.setHours(12, 0, 0, 0); // 12h00
+    date.setDate(date.getDate() + 7);
+    date.setHours(12, 0, 0, 0);
     return date;
   });
   const [raceDisciplines, setRaceDisciplines] = useState<RaceDiscipline[]>([]);
@@ -84,11 +86,25 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
+  // NOUVEAUX ÉTATS POUR LE PAIEMENT
+  const [isPaid, setIsPaid] = useState(false);
+  const [isProcessingPayment, setIsProcessingPayment] = useState(false);
+
   const router = useRouter();
   const { token } = useAuth();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
+  const STRIPE_PUBLIC_KEY = process.env.EXPO_PUBLIC_STRIPE_KEY;
 
-  // Charger les données de référence au démarrage
+  // CONSTANTES DE PAIEMENT
+  const FREE_RUNNERS = 2;
+  const PRICE_PER_RUNNER = 1.5;
+
+  // CALCULS DE PAIEMENT
+  const extraRunners = Math.max(0, selectedRunners.length - FREE_RUNNERS);
+  const totalPayment = extraRunners * PRICE_PER_RUNNER;
+  const needsPayment = selectedRunners.length > FREE_RUNNERS && !isPaid;
+
   useEffect(() => {
     const loadReferenceData = async () => {
       setLoadingData(true);
@@ -97,7 +113,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           ? token
           : `Bearer ${token}`;
 
-        // Charger les disciplines (si endpoint disponible)
         try {
           const disciplinesResponse = await fetch(
             `${API_URL}/race-disciplines`,
@@ -113,7 +128,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           console.log("Erreur chargement disciplines:", e);
         }
 
-        // Charger les organisations (si endpoint disponible)
         try {
           const organizationsResponse = await fetch(
             `${API_URL}/organizations`,
@@ -129,7 +143,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           console.log("Erreur chargement organisations:", e);
         }
 
-        // Charger les utilisateurs pour les runners
         try {
           const usersResponse = await fetch(`${API_URL}/users`, {
             headers: { Authorization: authHeader },
@@ -137,7 +150,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
           if (usersResponse.ok) {
             const usersList = await usersResponse.json();
-
             setUsers(usersList);
           } else {
             const errorText = await usersResponse.text();
@@ -154,6 +166,13 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
     loadReferenceData();
   }, [token, API_URL]);
+
+  // Réinitialiser isPaid si on repasse en dessous de 2 coureurs
+  useEffect(() => {
+    if (selectedRunners.length <= FREE_RUNNERS) {
+      setIsPaid(false);
+    }
+  }, [selectedRunners.length]);
 
   const pickGpxFile = async () => {
     try {
@@ -181,7 +200,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         return;
       }
 
-      // Vérifier que le fichier est bien un GPX
       if (
         fileName &&
         !fileName.toLowerCase().includes(".gpx") &&
@@ -193,7 +211,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       }
 
       try {
-        // Lire le contenu du fichier GPX
         const gpxContent = await FileSystem.readAsStringAsync(uri);
 
         if (!gpxContent || gpxContent.trim().length === 0) {
@@ -201,7 +218,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           return;
         }
 
-        // Validation basique du contenu GPX
         if (!gpxContent.includes("<gpx") && !gpxContent.includes("<trk")) {
           console.warn(
             "Le fichier ne semble pas contenir de données GPX valides"
@@ -245,7 +261,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         ? token
         : `Bearer ${token}`;
 
-      // Le backend s'en chargera automatiquement avec req.userId du token JWT
       const response = await fetch(`${API_URL}/organizations`, {
         method: "POST",
         headers: {
@@ -259,17 +274,10 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
       if (response.ok) {
         const newOrg = await response.json();
-
-        // Ajouter la nouvelle organisation à la liste
         setOrganizations((prev) => [...prev, newOrg]);
-
-        // Sélectionner automatiquement la nouvelle organisation
         setSelectedOrganization(newOrg.id);
-
-        // Réinitialiser le formulaire de création
         setNewOrganizationName("");
         setShowCreateOrganization(false);
-
         Alert.alert("Succès", "Organisation créée avec succès !");
       } else {
         const errorText = await response.text();
@@ -280,6 +288,83 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setCreatingOrganization(false);
+    }
+  };
+
+  // FONCTION DE PAIEMENT
+  const handlePayment = async () => {
+    setIsProcessingPayment(true);
+    setError(null);
+
+    try {
+      const authHeader = token?.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
+
+      // Appel au backend pour créer le PaymentIntent
+      const response = await fetch(`${API_URL}/race/create-payment-intent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({
+          amount: totalPayment, // ex. 3 pour 2 coureurs extra (2 * 1.5 = 3)
+          currency: "eur",
+          quantity: extraRunners, // optionnel, pour vérif backend
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Erreur lors de la création du paiement");
+      }
+
+      const { clientSecret } = await response.json();
+
+      // Initialiser la Payment Sheet
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: "Ton App de Courses", // Remplace par le nom de ton app
+        paymentIntentClientSecret: clientSecret,
+        // Si tu veux ajouter Apple Pay/Google Pay : applePay: true, googlePay: true (mais configure d'abord dans Stripe dashboard)
+      });
+
+      if (initError) {
+        throw new Error(`Erreur init: ${initError.message}`);
+      }
+
+      // Afficher la Payment Sheet
+      const { error: presentError } = await presentPaymentSheet();
+
+      if (presentError) {
+        if (presentError.code === "Canceled") {
+          Alert.alert("Paiement annulé");
+        } else {
+          throw new Error(`Erreur paiement: ${presentError.message}`);
+        }
+        return;
+      }
+
+      // Paiement réussi !
+      const piId = clientSecret.split("_secret_")[0]; // Extrait l'ID du PaymentIntent
+      setPaymentIntentId(piId);
+      setIsPaid(true);
+
+      setSelectedRunners((prev) => [...prev]);
+
+      Alert.alert(
+        "Succès",
+        `Paiement de ${totalPayment.toFixed(2)}€ effectué !`
+      );
+    } catch (err) {
+      console.error("Erreur lors du paiement:", err);
+      setError(
+        `Erreur lors du paiement: ${
+          err instanceof Error ? err.message : String(err)
+        }`
+      );
+      Alert.alert("Erreur", "Le paiement a échoué. Veuillez réessayer.");
+    } finally {
+      setIsProcessingPayment(false);
     }
   };
 
@@ -294,14 +379,18 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       return false;
     }
 
-    // Pour l'instant, le fichier GPX n'est plus requis car le backend ne le gère pas encore
-    // if (!gpxFileUri) {
-    //   setError("Un fichier GPX est requis");
-    //   return false;
-    // }
-
     if (startDate >= endDate) {
       setError("La date de fin doit être postérieure à la date de début");
+      return false;
+    }
+
+    // BLOQUER LA CRÉATION SI PLUS DE 2 COUREURS ET PAS PAYÉ
+    if (needsPayment) {
+      setError(
+        `Vous devez payer ${totalPayment.toFixed(
+          2
+        )}€ pour ajouter ${extraRunners} coureur(s) supplémentaire(s)`
+      );
       return false;
     }
 
@@ -321,15 +410,14 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         return;
       }
 
-      // Envoyer les données en JSON avec le contenu GPX inclus
       const raceData = {
         name: raceName.trim(),
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         organization: selectedOrganization!,
         runners: selectedRunners,
-        // Inclure le contenu GPX directement dans le JSON si disponible
         gpxFile: gpxFileContent || "",
+        ...(paymentIntentId ? { paymentIntentId } : {}),
       };
 
       const response = await fetch(`${API_URL}/race`, {
@@ -351,7 +439,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           },
         ]);
 
-        // Reset du formulaire avec valeurs par défaut
         setRaceName("Course du Lac de Paris");
         const newStartDate = new Date();
         newStartDate.setDate(newStartDate.getDate() + 7);
@@ -368,6 +455,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         setGpxFileUri(null);
         setGpxFileName(null);
         setGpxFileContent(null);
+        setIsPaid(false);
       } else {
         const errorText = await response.text();
         console.log("Erreur API:", response.status, errorText);
@@ -403,413 +491,518 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   }
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.headerContainer}>
-        <BlurView style={styles.header} intensity={40} tint="dark">
-          <View style={styles.headerContent}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => router.back()}
-            >
-              <Icon name="arrow-left" size={24} color="#A1F763" />
-            </TouchableOpacity>
-            <Text style={styles.headerTitle}>Créer une course</Text>
-            <View style={styles.headerSpacer} />
-          </View>
-        </BlurView>
-      </View>
-
-      {/* Background */}
-      <Image
-        source={require("@/assets/images/radial-gradient.png")}
-        style={styles.backgroundImage}
-        resizeMode="cover"
-      />
-
-      {/* Content */}
-      <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        <View style={styles.formContainer}>
-          <BlurView style={styles.formBlur} intensity={40} tint="dark">
-            <View style={styles.formContent}>
-              {/* Nom de la course */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Nom de la course *</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Course du Lac de Paris"
-                  placeholderTextColor="#888"
-                  value={raceName}
-                  onChangeText={setRaceName}
-                />
-              </View>
-
-              {/* Dates */}
-              <View style={styles.dateRow}>
-                <View style={styles.dateGroup}>
-                  <Text style={styles.label}>Date de début *</Text>
-                  <TouchableOpacity
-                    style={styles.dateButton}
-                    onPress={() => setShowStartDatePicker(true)}
-                  >
-                    <Icon name="calendar" size={20} color="#A1F763" />
-                    <Text style={styles.dateText}>{formatDate(startDate)}</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.dateGroup}>
-                  <Text style={styles.label}>Date de fin *</Text>
-                  <TouchableOpacity
-                    style={styles.dateButton}
-                    onPress={() => setShowEndDatePicker(true)}
-                  >
-                    <Icon name="calendar" size={20} color="#A1F763" />
-                    <Text style={styles.dateText}>{formatDate(endDate)}</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {/* Organisation */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Organisation *</Text>
-
-                {!showCreateOrganization ? (
-                  <>
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                    >
-                      <View style={styles.optionButtons}>
-                        <TouchableOpacity
-                          style={styles.createOrgButton}
-                          onPress={() => setShowCreateOrganization(true)}
-                        >
-                          <Icon name="plus" size={16} color="#A1F763" />
-                          <Text style={styles.createOrgButtonText}>
-                            Créer une organisation
-                          </Text>
-                        </TouchableOpacity>
-                        {organizations.map((org, index) => (
-                          <TouchableOpacity
-                            key={org.id || `org-${index}`}
-                            style={[
-                              styles.optionButton,
-                              selectedOrganization === org.id &&
-                                styles.optionButtonSelected,
-                            ]}
-                            onPress={() => setSelectedOrganization(org.id)}
-                          >
-                            <Text
-                              style={[
-                                styles.optionButtonText,
-                                selectedOrganization === org.id &&
-                                  styles.optionButtonTextSelected,
-                              ]}
-                            >
-                              {org.name}
-                            </Text>
-                          </TouchableOpacity>
-                        ))}
-                      </View>
-                    </ScrollView>
-                  </>
-                ) : (
-                  <View style={styles.createOrgForm}>
-                    <Text style={styles.subLabel}>Nouvelle organisation :</Text>
-
-                    <TextInput
-                      style={styles.input}
-                      placeholder="Nom de l'organisation"
-                      placeholderTextColor="#888"
-                      value={newOrganizationName}
-                      onChangeText={setNewOrganizationName}
-                    />
-
-                    <View style={styles.createOrgActions}>
-                      <TouchableOpacity
-                        style={styles.cancelOrgButton}
-                        onPress={() => {
-                          setShowCreateOrganization(false);
-                          setNewOrganizationName("");
-                        }}
-                      >
-                        <Text style={styles.cancelOrgButtonText}>Annuler</Text>
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={[
-                          styles.saveOrgButton,
-                          creatingOrganization && styles.saveOrgButtonDisabled,
-                        ]}
-                        onPress={createOrganization}
-                        disabled={creatingOrganization}
-                      >
-                        {creatingOrganization ? (
-                          <ActivityIndicator size="small" color="#3B3B3B" />
-                        ) : (
-                          <Text style={styles.saveOrgButtonText}>Créer</Text>
-                        )}
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              {/* Fichier GPX */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Fichier GPX (optionnel)</Text>
-                <TouchableOpacity
-                  style={styles.fileButton}
-                  onPress={pickGpxFile}
-                >
-                  <Icon name="file-upload" size={24} color="#A1F763" />
-                  <Text style={styles.fileButtonText}>
-                    {gpxFileName ? gpxFileName : "Choisir un fichier GPX"}
-                  </Text>
-                </TouchableOpacity>
-                {gpxFileName && gpxFileContent && (
-                  <View style={styles.fileSelected}>
-                    <Icon name="check-circle" size={16} color="#A1F763" />
-                    <Text style={styles.fileSelectedText}>
-                      Fichier sélectionné ({gpxFileContent.length} caractères)
-                    </Text>
-                  </View>
-                )}
-              </View>
-
-              {/* Sélection des participants */}
-              <View style={styles.inputGroup}>
-                <Text style={styles.label}>Participants</Text>
-                <TouchableOpacity
-                  style={styles.dropdownButton}
-                  onPress={() => setShowUserDropdown(!showUserDropdown)}
-                >
-                  <Icon name="account-multiple" size={20} color="#A1F763" />
-                  <Text style={styles.dropdownButtonText}>
-                    {selectedRunners.length > 0
-                      ? `${selectedRunners.length} participant(s) sélectionné(s)`
-                      : "Sélectionner des participants"}
-                  </Text>
-                  <Icon
-                    name={showUserDropdown ? "chevron-up" : "chevron-down"}
-                    size={20}
-                    color="#A1F763"
-                  />
-                </TouchableOpacity>
-
-                {/* Liste déroulante des utilisateurs */}
-                {showUserDropdown && (
-                  <View style={styles.dropdownContainer}>
-                    <ScrollView
-                      style={styles.dropdownList}
-                      nestedScrollEnabled={true}
-                    >
-                      {users.length > 0 ? (
-                        users.map((user) => {
-                          const userId = user._id || user.id;
-                          if (!userId) return null;
-                          const isSelected = selectedRunners.includes(userId);
-                          return (
-                            <TouchableOpacity
-                              key={userId}
-                              style={[
-                                styles.dropdownItem,
-                                isSelected && styles.dropdownItemSelected,
-                              ]}
-                              onPress={() => {
-                                if (isSelected) {
-                                  setSelectedRunners((prev) =>
-                                    prev.filter((id) => id !== userId)
-                                  );
-                                } else {
-                                  setSelectedRunners((prev) => [
-                                    ...prev,
-                                    userId,
-                                  ]);
-                                }
-                              }}
-                            >
-                              <View style={styles.userInfo}>
-                                <Text
-                                  style={[
-                                    styles.userEmail,
-                                    isSelected && styles.userEmailSelected,
-                                  ]}
-                                >
-                                  {user.email}
-                                </Text>
-                                {(user.firstname || user.lastname) && (
-                                  <Text
-                                    style={[
-                                      styles.userName,
-                                      isSelected && styles.userNameSelected,
-                                    ]}
-                                  >
-                                    {user.firstname} {user.lastname}
-                                  </Text>
-                                )}
-                              </View>
-                              {isSelected && (
-                                <Icon name="check" size={20} color="#A1F763" />
-                              )}
-                            </TouchableOpacity>
-                          );
-                        })
-                      ) : (
-                        <Text style={styles.noUsersText}>
-                          Aucun utilisateur disponible
-                        </Text>
-                      )}
-                    </ScrollView>
-                  </View>
-                )}
-
-                {/* Affichage des participants sélectionnés */}
-                {selectedRunners.length > 0 && (
-                  <View style={styles.selectedUsersContainer}>
-                    <Text style={styles.selectedUsersLabel}>
-                      Participants sélectionnés :
-                    </Text>
-                    <View style={styles.selectedUsersList}>
-                      {selectedRunners.map((userId) => {
-                        const user = users.find(
-                          (u) => (u._id || u.id) === userId
-                        );
-                        if (!user) return null;
-                        return (
-                          <View key={userId} style={styles.selectedUserChip}>
-                            <Text style={styles.selectedUserChipText}>
-                              {user.email}
-                            </Text>
-                            <TouchableOpacity
-                              onPress={() => {
-                                setSelectedRunners((prev) =>
-                                  prev.filter((id) => id !== userId)
-                                );
-                              }}
-                              style={styles.removeUserButton}
-                            >
-                              <Icon name="close" size={16} color="#3B3B3B" />
-                            </TouchableOpacity>
-                          </View>
-                        );
-                      })}
-                    </View>
-                  </View>
-                )}
-              </View>
-
-              {/* Erreur */}
-              {error && (
-                <View style={styles.errorContainer}>
-                  <Icon name="alert-circle" size={20} color="#ff6b6b" />
-                  <Text style={styles.errorText}>{error}</Text>
-                </View>
-              )}
+    <StripeProvider publishableKey={STRIPE_PUBLIC_KEY || ""}>
+      <View style={styles.container}>
+        {/* Header */}
+        <View style={styles.headerContainer}>
+          <BlurView style={styles.header} intensity={40} tint="dark">
+            <View style={styles.headerContent}>
+              <TouchableOpacity
+                style={styles.backButton}
+                onPress={() => router.back()}
+              >
+                <Icon name="arrow-left" size={24} color="#A1F763" />
+              </TouchableOpacity>
+              <Text style={styles.headerTitle}>Créer une course</Text>
+              <View style={styles.headerSpacer} />
             </View>
           </BlurView>
         </View>
-      </ScrollView>
 
-      {/* Bouton de création */}
-      <View style={styles.buttonContainer}>
-        <TouchableOpacity
-          style={[styles.createButton, loading && styles.createButtonDisabled]}
-          onPress={createRace}
-          disabled={loading}
+        {/* Background */}
+        <Image
+          source={require("@/assets/images/radial-gradient.png")}
+          style={styles.backgroundImage}
+          resizeMode="cover"
+        />
+
+        {/* Content */}
+        <ScrollView
+          style={styles.scrollContainer}
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <ActivityIndicator size="small" color="#3B3B3B" />
-          ) : (
-            <Text style={styles.createButtonText}>CRÉER LA COURSE</Text>
-          )}
-        </TouchableOpacity>
-      </View>
+          <View style={styles.formContainer}>
+            <BlurView style={styles.formBlur} intensity={40} tint="dark">
+              <View style={styles.formContent}>
+                {/* Nom de la course */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Nom de la course *</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Course du Lac de Paris"
+                    placeholderTextColor="#888"
+                    value={raceName}
+                    onChangeText={setRaceName}
+                  />
+                </View>
 
-      {/* Date Pickers */}
-      {showStartDatePicker && (
-        <DateTimePicker
-          value={startDate}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(_, selectedDate) => {
-            setShowStartDatePicker(false);
-            if (selectedDate) {
-              // Sur Android, on affiche ensuite le time picker
-              if (Platform.OS === "android") {
-                const newDate = new Date(selectedDate);
-                newDate.setHours(startDate.getHours());
-                newDate.setMinutes(startDate.getMinutes());
+                {/* Dates */}
+                <View style={styles.dateRow}>
+                  <View style={styles.dateGroup}>
+                    <Text style={styles.label}>Date de début *</Text>
+                    <TouchableOpacity
+                      style={styles.dateButton}
+                      onPress={() => setShowStartDatePicker(true)}
+                    >
+                      <Icon name="calendar" size={20} color="#A1F763" />
+                      <Text style={styles.dateText}>
+                        {formatDate(startDate)}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <View style={styles.dateGroup}>
+                    <Text style={styles.label}>Date de fin *</Text>
+                    <TouchableOpacity
+                      style={styles.dateButton}
+                      onPress={() => setShowEndDatePicker(true)}
+                    >
+                      <Icon name="calendar" size={20} color="#A1F763" />
+                      <Text style={styles.dateText}>{formatDate(endDate)}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+
+                {/* Organisation */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Organisation *</Text>
+
+                  {!showCreateOrganization ? (
+                    <>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                      >
+                        <View style={styles.optionButtons}>
+                          <TouchableOpacity
+                            style={styles.createOrgButton}
+                            onPress={() => setShowCreateOrganization(true)}
+                          >
+                            <Icon name="plus" size={16} color="#A1F763" />
+                            <Text style={styles.createOrgButtonText}>
+                              Créer une organisation
+                            </Text>
+                          </TouchableOpacity>
+                          {organizations.map((org, index) => (
+                            <TouchableOpacity
+                              key={org.id || `org-${index}`}
+                              style={[
+                                styles.optionButton,
+                                selectedOrganization === org.id &&
+                                  styles.optionButtonSelected,
+                              ]}
+                              onPress={() => setSelectedOrganization(org.id)}
+                            >
+                              <Text
+                                style={[
+                                  styles.optionButtonText,
+                                  selectedOrganization === org.id &&
+                                    styles.optionButtonTextSelected,
+                                ]}
+                              >
+                                {org.name}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      </ScrollView>
+                    </>
+                  ) : (
+                    <View style={styles.createOrgForm}>
+                      <Text style={styles.subLabel}>
+                        Nouvelle organisation :
+                      </Text>
+
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Nom de l'organisation"
+                        placeholderTextColor="#888"
+                        value={newOrganizationName}
+                        onChangeText={setNewOrganizationName}
+                      />
+
+                      <View style={styles.createOrgActions}>
+                        <TouchableOpacity
+                          style={styles.cancelOrgButton}
+                          onPress={() => {
+                            setShowCreateOrganization(false);
+                            setNewOrganizationName("");
+                          }}
+                        >
+                          <Text style={styles.cancelOrgButtonText}>
+                            Annuler
+                          </Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[
+                            styles.saveOrgButton,
+                            creatingOrganization &&
+                              styles.saveOrgButtonDisabled,
+                          ]}
+                          onPress={createOrganization}
+                          disabled={creatingOrganization}
+                        >
+                          {creatingOrganization ? (
+                            <ActivityIndicator size="small" color="#3B3B3B" />
+                          ) : (
+                            <Text style={styles.saveOrgButtonText}>Créer</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
+                </View>
+
+                {/* Fichier GPX */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Fichier GPX (optionnel)</Text>
+                  <TouchableOpacity
+                    style={styles.fileButton}
+                    onPress={pickGpxFile}
+                  >
+                    <Icon name="file-upload" size={24} color="#A1F763" />
+                    <Text style={styles.fileButtonText}>
+                      {gpxFileName ? gpxFileName : "Choisir un fichier GPX"}
+                    </Text>
+                  </TouchableOpacity>
+                  {gpxFileName && gpxFileContent && (
+                    <View style={styles.fileSelected}>
+                      <Icon name="check-circle" size={16} color="#A1F763" />
+                      <Text style={styles.fileSelectedText}>
+                        Fichier sélectionné ({gpxFileContent.length} caractères)
+                      </Text>
+                    </View>
+                  )}
+                </View>
+
+                {/* Sélection des participants */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Participants</Text>
+                  <TouchableOpacity
+                    style={styles.dropdownButton}
+                    onPress={() => setShowUserDropdown(!showUserDropdown)}
+                  >
+                    <Icon name="account-multiple" size={20} color="#A1F763" />
+                    <Text style={styles.dropdownButtonText}>
+                      {selectedRunners.length > 0
+                        ? `${selectedRunners.length} participant(s) sélectionné(s)`
+                        : "Sélectionner des participants"}
+                    </Text>
+                    <Icon
+                      name={showUserDropdown ? "chevron-up" : "chevron-down"}
+                      size={20}
+                      color="#A1F763"
+                    />
+                  </TouchableOpacity>
+
+                  {/* Liste déroulante des utilisateurs */}
+                  {showUserDropdown && (
+                    <View style={styles.dropdownContainer}>
+                      <ScrollView
+                        style={styles.dropdownList}
+                        nestedScrollEnabled={true}
+                      >
+                        {users.length > 0 ? (
+                          users.map((user) => {
+                            const userId = user._id || user.id;
+                            if (!userId) return null;
+                            const isSelected = selectedRunners.includes(userId);
+                            return (
+                              <TouchableOpacity
+                                key={userId}
+                                style={[
+                                  styles.dropdownItem,
+                                  isSelected && styles.dropdownItemSelected,
+                                ]}
+                                onPress={() => {
+                                  if (isSelected) {
+                                    setSelectedRunners((prev) =>
+                                      prev.filter((id) => id !== userId)
+                                    );
+                                  } else {
+                                    setSelectedRunners((prev) => [
+                                      ...prev,
+                                      userId,
+                                    ]);
+                                  }
+                                }}
+                              >
+                                <View style={styles.userInfo}>
+                                  <Text
+                                    style={[
+                                      styles.userEmail,
+                                      isSelected && styles.userEmailSelected,
+                                    ]}
+                                  >
+                                    {user.email}
+                                  </Text>
+                                  {(user.firstname || user.lastname) && (
+                                    <Text
+                                      style={[
+                                        styles.userName,
+                                        isSelected && styles.userNameSelected,
+                                      ]}
+                                    >
+                                      {user.firstname} {user.lastname}
+                                    </Text>
+                                  )}
+                                </View>
+                                {isSelected && (
+                                  <Icon
+                                    name="check"
+                                    size={20}
+                                    color="#A1F763"
+                                  />
+                                )}
+                              </TouchableOpacity>
+                            );
+                          })
+                        ) : (
+                          <Text style={styles.noUsersText}>
+                            Aucun utilisateur disponible
+                          </Text>
+                        )}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  {/* Affichage des participants sélectionnés */}
+                  {selectedRunners.length > 0 && (
+                    <View style={styles.selectedUsersContainer}>
+                      <Text style={styles.selectedUsersLabel}>
+                        Participants sélectionnés :
+                      </Text>
+                      <View style={styles.selectedUsersList}>
+                        {selectedRunners.map((userId) => {
+                          const user = users.find(
+                            (u) => (u._id || u.id) === userId
+                          );
+                          if (!user) return null;
+                          return (
+                            <View key={userId} style={styles.selectedUserChip}>
+                              <Text style={styles.selectedUserChipText}>
+                                {user.email}
+                              </Text>
+                              <TouchableOpacity
+                                onPress={() => {
+                                  setSelectedRunners((prev) =>
+                                    prev.filter((id) => id !== userId)
+                                  );
+                                }}
+                                style={styles.removeUserButton}
+                              >
+                                <Icon name="close" size={16} color="#3B3B3B" />
+                              </TouchableOpacity>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  )}
+
+                  {/* SECTION PAIEMENT - Affichée si plus de 2 coureurs */}
+                  {selectedRunners.length > FREE_RUNNERS && (
+                    <View style={styles.paymentSection}>
+                      <View style={styles.paymentInfo}>
+                        <Icon name="information" size={20} color="#FFB020" />
+                        <Text style={styles.paymentInfoText}>
+                          Pour ajouter plus de {FREE_RUNNERS} coureurs, payez{" "}
+                          {PRICE_PER_RUNNER.toFixed(2)}€ par coureur
+                          supplémentaire
+                        </Text>
+                      </View>
+
+                      <View style={styles.paymentCalculation}>
+                        <View style={styles.calculationRow}>
+                          <Text style={styles.calculationLabel}>
+                            Coureurs gratuits :
+                          </Text>
+                          <Text style={styles.calculationValue}>
+                            {FREE_RUNNERS}
+                          </Text>
+                        </View>
+                        <View style={styles.calculationRow}>
+                          <Text style={styles.calculationLabel}>
+                            Coureurs payants :
+                          </Text>
+                          <Text style={styles.calculationValue}>
+                            {extraRunners}
+                          </Text>
+                        </View>
+                        <View style={styles.calculationRow}>
+                          <Text style={styles.calculationLabel}>
+                            Prix unitaire :
+                          </Text>
+                          <Text style={styles.calculationValue}>
+                            {PRICE_PER_RUNNER.toFixed(2)}€
+                          </Text>
+                        </View>
+                        <View
+                          style={[
+                            styles.calculationRow,
+                            styles.calculationTotal,
+                          ]}
+                        >
+                          <Text style={styles.calculationTotalLabel}>
+                            Total à payer :
+                          </Text>
+                          <Text style={styles.calculationTotalValue}>
+                            {extraRunners} × {PRICE_PER_RUNNER.toFixed(2)}€ ={" "}
+                            {totalPayment.toFixed(2)}€
+                          </Text>
+                        </View>
+                      </View>
+
+                      {!isPaid ? (
+                        <TouchableOpacity
+                          style={[
+                            styles.paymentButton,
+                            isProcessingPayment && styles.paymentButtonDisabled,
+                          ]}
+                          onPress={handlePayment}
+                          disabled={isProcessingPayment}
+                        >
+                          {isProcessingPayment ? (
+                            <ActivityIndicator size="small" color="#3B3B3B" />
+                          ) : (
+                            <>
+                              <Icon
+                                name="credit-card"
+                                size={20}
+                                color="#3B3B3B"
+                              />
+                              <Text style={styles.paymentButtonText}>
+                                Payer {totalPayment.toFixed(2)}€
+                              </Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      ) : (
+                        <View style={styles.paymentSuccess}>
+                          <Icon name="check-circle" size={24} color="#A1F763" />
+                          <Text style={styles.paymentSuccessText}>
+                            Paiement effectué avec succès !
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </View>
+
+                {/* Erreur */}
+                {error && (
+                  <View style={styles.errorContainer}>
+                    <Icon name="alert-circle" size={20} color="#ff6b6b" />
+                    <Text style={styles.errorText}>{error}</Text>
+                  </View>
+                )}
+              </View>
+            </BlurView>
+          </View>
+        </ScrollView>
+
+        {/* Bouton de création */}
+        <View style={styles.buttonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.createButton,
+              (loading || needsPayment) && styles.createButtonDisabled,
+            ]}
+            onPress={createRace}
+            disabled={loading || needsPayment}
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#3B3B3B" />
+            ) : (
+              <Text style={styles.createButtonText}>
+                {needsPayment ? "PAIEMENT REQUIS" : "CRÉER LA COURSE"}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+
+        {/* Date Pickers */}
+        {showStartDatePicker && (
+          <DateTimePicker
+            value={startDate}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(_, selectedDate) => {
+              setShowStartDatePicker(false);
+              if (selectedDate) {
+                if (Platform.OS === "android") {
+                  const newDate = new Date(selectedDate);
+                  newDate.setHours(startDate.getHours());
+                  newDate.setMinutes(startDate.getMinutes());
+                  setStartDate(newDate);
+                  setShowStartTimePicker(true);
+                } else {
+                  setStartDate(selectedDate);
+                }
+              }
+            }}
+          />
+        )}
+
+        {showEndDatePicker && (
+          <DateTimePicker
+            value={endDate}
+            mode="date"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(_, selectedDate) => {
+              setShowEndDatePicker(false);
+              if (selectedDate) {
+                if (Platform.OS === "android") {
+                  const newDate = new Date(selectedDate);
+                  newDate.setHours(endDate.getHours());
+                  newDate.setMinutes(endDate.getMinutes());
+                  setEndDate(newDate);
+                  setShowEndTimePicker(true);
+                } else {
+                  setEndDate(selectedDate);
+                }
+              }
+            }}
+          />
+        )}
+
+        {showStartTimePicker && (
+          <DateTimePicker
+            value={startDate}
+            mode="time"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(_, selectedTime) => {
+              setShowStartTimePicker(false);
+              if (selectedTime) {
+                const newDate = new Date(startDate);
+                newDate.setHours(selectedTime.getHours());
+                newDate.setMinutes(selectedTime.getMinutes());
                 setStartDate(newDate);
-                setShowStartTimePicker(true);
-              } else {
-                setStartDate(selectedDate);
               }
-            }
-          }}
-        />
-      )}
+            }}
+          />
+        )}
 
-      {showEndDatePicker && (
-        <DateTimePicker
-          value={endDate}
-          mode="date"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(_, selectedDate) => {
-            setShowEndDatePicker(false);
-            if (selectedDate) {
-              if (Platform.OS === "android") {
-                const newDate = new Date(selectedDate);
-                newDate.setHours(endDate.getHours());
-                newDate.setMinutes(endDate.getMinutes());
+        {showEndTimePicker && (
+          <DateTimePicker
+            value={endDate}
+            mode="time"
+            display={Platform.OS === "ios" ? "spinner" : "default"}
+            onChange={(_, selectedTime) => {
+              setShowEndTimePicker(false);
+              if (selectedTime) {
+                const newDate = new Date(endDate);
+                newDate.setHours(selectedTime.getHours());
+                newDate.setMinutes(selectedTime.getMinutes());
                 setEndDate(newDate);
-                setShowEndTimePicker(true);
-              } else {
-                setEndDate(selectedDate);
               }
-            }
-          }}
-        />
-      )}
-
-      {showStartTimePicker && (
-        <DateTimePicker
-          value={startDate}
-          mode="time"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(_, selectedTime) => {
-            setShowStartTimePicker(false);
-            if (selectedTime) {
-              const newDate = new Date(startDate);
-              newDate.setHours(selectedTime.getHours());
-              newDate.setMinutes(selectedTime.getMinutes());
-              setStartDate(newDate);
-            }
-          }}
-        />
-      )}
-
-      {showEndTimePicker && (
-        <DateTimePicker
-          value={endDate}
-          mode="time"
-          display={Platform.OS === "ios" ? "spinner" : "default"}
-          onChange={(_, selectedTime) => {
-            setShowEndTimePicker(false);
-            if (selectedTime) {
-              const newDate = new Date(endDate);
-              newDate.setHours(selectedTime.getHours());
-              newDate.setMinutes(selectedTime.getMinutes());
-              setEndDate(newDate);
-            }
-          }}
-        />
-      )}
-    </View>
+            }}
+          />
+        )}
+      </View>
+    </StripeProvider>
   );
 };
 
@@ -945,36 +1138,6 @@ const styles = StyleSheet.create({
     color: "#fff",
     flex: 1,
   },
-  distanceOptions: {
-    marginBottom: 16,
-  },
-  distanceButtons: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  distanceButton: {
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 20,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: "rgba(255, 255, 255, 0.2)",
-  },
-  distanceButtonSelected: {
-    backgroundColor: "#A1F763",
-    borderColor: "#A1F763",
-  },
-  distanceButtonText: {
-    fontSize: 14,
-    color: "#fff",
-    fontWeight: "500",
-  },
-  distanceButtonTextSelected: {
-    color: "#3B3B3B",
-  },
-  customDistanceContainer: {
-    marginTop: 12,
-  },
   optionButtons: {
     flexDirection: "row",
     gap: 8,
@@ -1060,7 +1223,8 @@ const styles = StyleSheet.create({
     elevation: 5,
   },
   createButtonDisabled: {
-    opacity: 0.6,
+    opacity: 0.5,
+    backgroundColor: "#666",
   },
   createButtonText: {
     color: "#3B3B3B",
@@ -1092,10 +1256,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(161, 247, 99, 0.3)",
   },
-  textArea: {
-    height: 80,
-    textAlignVertical: "top",
-  },
   createOrgActions: {
     flexDirection: "row",
     gap: 12,
@@ -1126,132 +1286,6 @@ const styles = StyleSheet.create({
     color: "#3B3B3B",
     fontWeight: "600",
   },
-  selectedRunners: {
-    marginBottom: 16,
-  },
-  runnersContainer: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  runnerChip: {
-    backgroundColor: "#A1F763",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-  runnerChipText: {
-    fontSize: 14,
-    color: "#3B3B3B",
-    fontWeight: "500",
-  },
-  removeRunnerButton: {
-    padding: 2,
-  },
-  addRunnersButton: {
-    backgroundColor: "rgba(161, 247, 99, 0.2)",
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    borderWidth: 1,
-    borderColor: "#A1F763",
-  },
-  addRunnersButtonText: {
-    fontSize: 16,
-    color: "#A1F763",
-    fontWeight: "500",
-  },
-  addRunnersModal: {
-    backgroundColor: "rgba(0, 0, 0, 0.9)",
-    borderRadius: 12,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: "rgba(161, 247, 99, 0.3)",
-    maxHeight: 400,
-  },
-  addRunnersHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(161, 247, 99, 0.3)",
-  },
-  addRunnersTitle: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#A1F763",
-  },
-  closeAddRunnersButton: {
-    padding: 4,
-    backgroundColor: "rgba(255, 255, 255, 0.1)",
-    borderRadius: 8,
-  },
-  runnersList: {
-    flex: 1,
-    height: 300,
-  },
-  runnerItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 255, 255, 0.1)",
-  },
-  runnerItemSelected: {
-    backgroundColor: "rgba(161, 247, 99, 0.1)",
-    borderBottomColor: "rgba(161, 247, 99, 0.3)",
-  },
-  runnerItemInfo: {
-    flex: 1,
-  },
-  runnerItemText: {
-    fontSize: 16,
-    color: "#fff",
-    fontWeight: "500",
-    marginBottom: 2,
-  },
-  runnerItemTextSelected: {
-    color: "#A1F763",
-  },
-  runnerItemEmail: {
-    fontSize: 14,
-    color: "#888",
-  },
-  runnerItemEmailSelected: {
-    color: "#A1F763",
-    opacity: 0.8,
-  },
-  addRunnerIcon: {
-    marginLeft: 12,
-  },
-  addRunnersFooter: {
-    padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: "rgba(161, 247, 99, 0.3)",
-  },
-  finishSelectionButton: {
-    backgroundColor: "#A1F763",
-    borderRadius: 8,
-    padding: 12,
-    alignItems: "center",
-  },
-  finishSelectionButtonText: {
-    color: "#3B3B3B",
-    fontWeight: "600",
-    fontSize: 16,
-  },
-  noRunnersText: {
-    textAlign: "center",
-    color: "#888",
-    padding: 20,
-    fontStyle: "italic",
-  },
-  // Nouveaux styles pour la liste déroulante des utilisateurs
   dropdownButton: {
     backgroundColor: "rgba(255, 255, 255, 0.1)",
     borderRadius: 12,
@@ -1353,6 +1387,98 @@ const styles = StyleSheet.create({
   },
   removeUserButton: {
     padding: 2,
+  },
+  // NOUVEAUX STYLES POUR LA SECTION PAIEMENT
+  paymentSection: {
+    marginTop: 16,
+    backgroundColor: "rgba(255, 176, 32, 0.05)",
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 176, 32, 0.3)",
+  },
+  paymentInfo: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    marginBottom: 16,
+  },
+  paymentInfoText: {
+    flex: 1,
+    fontSize: 14,
+    color: "#FFB020",
+    lineHeight: 20,
+  },
+  paymentCalculation: {
+    backgroundColor: "rgba(255, 255, 255, 0.05)",
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  calculationRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingVertical: 6,
+  },
+  calculationLabel: {
+    fontSize: 14,
+    color: "#fff",
+    opacity: 0.8,
+  },
+  calculationValue: {
+    fontSize: 14,
+    color: "#fff",
+    fontWeight: "600",
+  },
+  calculationTotal: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(161, 247, 99, 0.2)",
+  },
+  calculationTotalLabel: {
+    fontSize: 15,
+    color: "#A1F763",
+    fontWeight: "600",
+  },
+  calculationTotalValue: {
+    fontSize: 15,
+    color: "#A1F763",
+    fontWeight: "700",
+  },
+  paymentButton: {
+    backgroundColor: "#A1F763",
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+  },
+  paymentButtonDisabled: {
+    opacity: 0.6,
+  },
+  paymentButtonText: {
+    fontSize: 16,
+    color: "#3B3B3B",
+    fontWeight: "700",
+  },
+  paymentSuccess: {
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    borderWidth: 1,
+    borderColor: "#A1F763",
+  },
+  paymentSuccessText: {
+    fontSize: 15,
+    color: "#A1F763",
+    fontWeight: "600",
   },
 });
 

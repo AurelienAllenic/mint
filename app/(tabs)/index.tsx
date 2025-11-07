@@ -471,14 +471,14 @@ export default function HomeScreen() {
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.roundButton}
-              // onPress={() => setShowRaceMenu((v) => !v)}
+              onPress={() => router.replace("/premium")}
             >
               <BlurView
                 style={styles.roundButtonBlur}
                 intensity={40}
                 tint="dark"
               >
-                <Icon name="cog" size={24} color="#fff" />
+                <Icon name="crown" size={24} color="#fff" />
               </BlurView>
             </TouchableOpacity>
 

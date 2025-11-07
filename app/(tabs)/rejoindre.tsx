@@ -10,12 +10,15 @@ import {
   Dimensions,
   FlatList,
   Image,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
 } from "react-native";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { useAuth } from "../../context/auth";
 
 const { width } = Dimensions.get("window");
@@ -48,6 +51,13 @@ interface Race {
 export default function RejoindreScreen() {
   const router = useRouter();
   const { token, user } = useAuth();
+
+  // Safe area insets for notches / home indicator
+  const insets = useSafeAreaInsets();
+  // Reduce the default top inset slightly so the page "starts higher" visually.
+  // You can tweak `TOP_OFFSET_ADJUST` if you want the page even higher/lower.
+  const TOP_OFFSET_ADJUST = 42; // pixels to subtract from the top inset
+  const adjustedTopInset = Math.max(insets.top - TOP_OFFSET_ADJUST, 0);
 
   // Rediriger les visiteurs vers la page visiteur
   useEffect(() => {
@@ -478,7 +488,12 @@ export default function RejoindreScreen() {
   );
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={[
+        styles.container,
+        { paddingTop: adjustedTopInset, paddingBottom: insets.bottom },
+      ]}
+    >
       <Animated.View
         style={[
           styles.header,
@@ -506,7 +521,10 @@ export default function RejoindreScreen() {
       ) : (
         <Animated.ScrollView
           style={styles.scrollContainer}
-          contentContainerStyle={styles.scrollContent}
+          contentContainerStyle={[
+            styles.scrollContent,
+            { paddingBottom: 40 + insets.bottom },
+          ]}
           showsVerticalScrollIndicator={false}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],

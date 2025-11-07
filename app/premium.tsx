@@ -1,0 +1,267 @@
+import Icon from "@expo/vector-icons/MaterialCommunityIcons";
+import { BlurView } from "expo-blur";
+import { useRouter } from "expo-router";
+import React from "react";
+import { Image, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+
+export default function PremiumPage() {
+  const router = useRouter();
+
+  return (
+    <View style={styles.container}>
+      <Image
+        source={require("@/assets/images/radial-gradient.png")}
+        style={styles.radialGradient}
+        resizeMode="cover"
+      />
+
+      <View style={styles.headerContainer}>
+        <BlurView style={styles.header} intensity={40} tint="dark">
+          <View style={styles.headerContent}>
+            <View>
+              <Text style={styles.title}>Abonnements</Text>
+              <Text style={styles.subtitle}>
+                Choisissez l'abonnement qui vous correspond {"\n"}le mieux.
+              </Text>
+            </View>
+            <TouchableOpacity
+              onPress={() => router.replace("/")}
+              style={styles.closeBtn}
+            >
+              <Icon name="close" size={22} color="#fff" />
+            </TouchableOpacity>
+          </View>
+        </BlurView>
+      </View>
+
+      <View style={styles.body}>
+        <TouchableOpacity style={[styles.planButton, styles.planGhost]}>
+          <BlurView intensity={40} tint="dark" style={styles.planBlur}>
+            <View style={styles.planTop}>
+              <Text style={styles.planTitle}>Basique</Text>
+              <Text style={styles.planPrice}>Gratuit</Text>
+            </View>
+            <View style={styles.planFeatures}>
+              <View style={styles.featureRow}>
+                <Icon name="check" size={16} color="#fff" />
+                <Text style={styles.featureText}> Statistiques basiques</Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Icon name="check" size={16} color="#fff" />
+                <Text style={styles.featureText}> Historique jusqu'à 1 an</Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Icon name="check" size={16} color="#fff" />
+                <Text style={styles.featureText}> Bannières publicitaires</Text>
+              </View>
+            </View>
+            <View style={styles.planCtaRow}>
+              <TouchableOpacity
+                style={styles.ctaButton}
+                onPress={() => router.replace("/")}
+              >
+                <Text style={styles.ctaButtonText}>Plan actuel</Text>
+              </TouchableOpacity>
+            </View>
+          </BlurView>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={[styles.planButton, styles.planPrimary]}>
+          <View style={styles.planPrimaryContent}>
+            <View style={styles.planTop}>
+              <Text style={styles.planTitlePrimary}>Premium</Text>
+              <Text style={styles.planPricePrimary}>4,99 €/mois</Text>
+            </View>
+            <View style={styles.planFeatures}>
+              <View style={styles.featureRow}>
+                <Icon name="check" size={16} color="#A1F763" />
+                <Text style={styles.featureTextPrimary}>
+                  {" "}
+                  Statistiques avancées
+                </Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Icon name="check" size={16} color="#A1F763" />
+                <Text style={styles.featureTextPrimary}>
+                  {" "}
+                  Historique complet jusqu'à la création du compte
+                </Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Icon name="check" size={16} color="#A1F763" />
+                <Text style={styles.featureTextPrimary}>
+                  {" "}
+                  Comparaison des statistiques avec d'autres coureurs
+                </Text>
+              </View>
+              <View style={styles.featureRow}>
+                <Icon name="check" size={16} color="#A1F763" />
+                <Text style={styles.featureTextPrimary}> Zéro publicités</Text>
+              </View>
+            </View>
+            <View style={styles.planCtaRow}>
+              <TouchableOpacity
+                style={[styles.ctaButton, styles.ctaButtonPrimary]}
+                onPress={() => router.push("/premium")}
+              >
+                <Text
+                  style={[styles.ctaButtonText, styles.ctaButtonTextPrimary]}
+                >
+                  S'abonner
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: "#0f1112",
+    position: "relative",
+  },
+  radialGradient: {
+    position: "absolute",
+    top: "30%",
+    left: "-15%",
+    width: "130%",
+    height: "130%",
+    opacity: 0.9,
+    zIndex: 0,
+    pointerEvents: "none",
+  },
+  headerContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 60,
+    zIndex: 10,
+  },
+  header: {
+    borderRadius: 20,
+    backgroundColor: "rgba(20,20,20,0.35)",
+    overflow: "hidden",
+  },
+  headerContent: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 16,
+  },
+  title: {
+    color: "#A1F763",
+    fontSize: 34,
+    fontWeight: "900",
+  },
+  subtitle: {
+    color: "#fff",
+    fontSize: 16,
+    marginTop: 6,
+  },
+  closeBtn: {
+    padding: 6,
+  },
+  body: {
+    padding: 20,
+    paddingTop: 40,
+    zIndex: 5,
+  },
+  planButton: {
+    borderRadius: 16,
+    marginBottom: 18,
+    overflow: "hidden",
+  },
+  planBlur: {
+    padding: 18,
+  },
+  planGhost: {
+    backgroundColor: "transparent",
+  },
+  planPrimary: {
+    backgroundColor: "#232323",
+  },
+  planPrimaryContent: {
+    padding: 18,
+  },
+  planTop: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 12,
+  },
+  planTitle: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "800",
+  },
+  planTitlePrimary: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "900",
+  },
+  planPrice: {
+    color: "#fff",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  planPricePrimary: {
+    color: "#fff",
+    fontSize: 22,
+    fontWeight: "900",
+  },
+  planFeatures: {
+    marginBottom: 12,
+  },
+  featureRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+  featureText: {
+    color: "#fff",
+    opacity: 0.95,
+    fontSize: 16,
+  },
+  featureTextPrimary: {
+    color: "#fff",
+    fontSize: 16,
+  },
+  planCtaRow: {
+    alignItems: "stretch",
+    marginTop: 4,
+  },
+  planCtaTextGhost: {
+    color: "#A1F763",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  planCtaTextPrimary: {
+    color: "#fff",
+    fontWeight: "900",
+    fontSize: 16,
+  },
+  /* CTA button styles */
+  ctaButton: {
+    backgroundColor: "#d4d4d4",
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+    alignItems: "center",
+    width: "100%",
+    justifyContent: "center",
+  },
+  ctaButtonText: {
+    color: "#3B3B3B",
+    fontWeight: "900",
+    fontSize: 18,
+  },
+  ctaButtonPrimary: {
+    /* same green background for both, primary just keeps contrast */
+    backgroundColor: "#A1F763",
+  },
+  ctaButtonTextPrimary: {
+    color: "#3B3B3B",
+  },
+});

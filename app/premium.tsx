@@ -2,7 +2,7 @@ import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { StripeProvider, useStripe } from "@stripe/stripe-react-native";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
-import React, { useState } from "react";
+import React, { useState, useEffect, use } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -19,9 +19,40 @@ export default function PremiumPage() {
   const { token } = useAuth();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [loading, setLoading] = useState(false);
+  const [isPremium, setIsPremium] = useState(false);
 
   const API_URL = process.env.EXPO_PUBLIC_API_URL!;
   const STRIPE_PUBLIC_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLIC_KEY!;
+
+  useEffect(() => {
+    const checkPremiumStatus = async () => {
+      if (!token || !API_URL ) return;
+      try {
+        const authHeader = token.startsWith("Bearer ")
+          ? token
+          : `Bearer ${token}`;
+
+        const response = await fetch(`${API_URL}/users/profile`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.isPremium) {
+            setIsPremium(true);
+          }
+        }
+      } catch (error) {
+        console.error("Erreur lors de la vérification du statut premium :", error);
+      }
+    };
+
+    checkPremiumStatus();
+  }, [token]);
 
   const handleSubscribe = async () => {
     if (!token) {
@@ -204,6 +235,11 @@ export default function PremiumPage() {
                 </View>
               </View>
               <View style={styles.planCtaRow}>
+                {isPremium ? (
+                  <TouchableOpacity disabled>
+                    <Text style={styles.planCtaTextPrimary}>Vous êtes déjà abonné</Text>
+                  </TouchableOpacity>
+                ) : (
                 <TouchableOpacity
                   style={[
                     styles.ctaButton,
@@ -226,6 +262,7 @@ export default function PremiumPage() {
                     </Text>
                   )}
                 </TouchableOpacity>
+                )}
               </View>
             </View>
           </TouchableOpacity>

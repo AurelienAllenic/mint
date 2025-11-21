@@ -2,7 +2,7 @@ import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { StripeProvider, useStripe } from "@stripe/stripe-react-native";
 import { BlurView } from "expo-blur";
 import { useRouter } from "expo-router";
-import React, { useState, useEffect, use } from "react";
+import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,7 +26,7 @@ export default function PremiumPage() {
 
   useEffect(() => {
     const checkPremiumStatus = async () => {
-      if (!token || !API_URL ) return;
+      if (!token || !API_URL) return;
       try {
         const authHeader = token.startsWith("Bearer ")
           ? token
@@ -42,12 +42,16 @@ export default function PremiumPage() {
 
         if (response.ok) {
           const data = await response.json();
+          console.log("Statut premium de l'utilisateur ! :", data.isPremium);
           if (data.isPremium) {
             setIsPremium(true);
           }
         }
       } catch (error) {
-        console.error("Erreur lors de la vérification du statut premium :", error);
+        console.error(
+          "Erreur lors de la vérification du statut premium :",
+          error
+        );
       }
     };
 
@@ -130,6 +134,56 @@ export default function PremiumPage() {
     }
   };
 
+  const handleCancelSubscription = async () => {
+    if (!token) {
+      Alert.alert("Erreur", "Vous devez être connecté.");
+      return;
+    }
+    setLoading(true);
+
+    try {
+      const authHeader = token.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
+
+      // 1. Se désabonner
+      const subResponse = await fetch(`${API_URL}/users/cancel-subscription`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+      });
+
+      if (!subResponse.ok) throw new Error(await subResponse.text());
+
+      Alert.alert("Succès", "Vous êtes désabonné!");
+      router.replace("/");
+    } catch (err: any) {
+      console.error(err);
+      Alert.alert("Erreur", err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Affiche une alerte de confirmation avant d'annuler l'abonnement
+  const confirmCancelSubscription = () => {
+    Alert.alert(
+      "Confirmer la désinscription",
+      "Êtes-vous sûr de vouloir vous désabonner ? Vous perdrez immédiatement tous vos avantages premium.",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Se désabonner",
+          style: "destructive",
+          onPress: () => handleCancelSubscription(),
+        },
+      ],
+      { cancelable: true }
+    );
+  };
+
   return (
     <StripeProvider publishableKey={STRIPE_PUBLIC_KEY}>
       <View style={styles.container}>
@@ -187,12 +241,37 @@ export default function PremiumPage() {
                 </View>
               </View>
               <View style={styles.planCtaRow}>
-                <TouchableOpacity
-                  style={styles.ctaButton}
-                  onPress={() => router.replace("/")}
-                >
-                  <Text style={styles.ctaButtonText}>Plan actuel</Text>
-                </TouchableOpacity>
+                {isPremium ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.ctaButton,
+                      styles.ctaButtonPrimary,
+                      loading && styles.ctaButtonDisabled,
+                    ]}
+                    onPress={confirmCancelSubscription}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator size="small" color="#3B3B3B" />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.ctaButtonText,
+                          styles.ctaButtonTextPrimary,
+                        ]}
+                      >
+                        Revenir au plan Basique
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.ctaButton}
+                    onPress={() => router.replace("/")}
+                  >
+                    <Text style={styles.ctaButtonText}>Plan actuel</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             </BlurView>
           </TouchableOpacity>
@@ -236,32 +315,50 @@ export default function PremiumPage() {
               </View>
               <View style={styles.planCtaRow}>
                 {isPremium ? (
-                  <TouchableOpacity disabled>
-                    <Text style={styles.planCtaTextPrimary}>Vous êtes déjà abonné</Text>
+                  <TouchableOpacity
+                    style={[
+                      styles.ctaButton,
+                      loading && styles.ctaButtonDisabled,
+                    ]}
+                    onPress={handleSubscribe}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator size="small" color="#3B3B3B" />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.ctaButtonText,
+                          styles.ctaButtonTextPrimary,
+                        ]}
+                      >
+                        Plan actuel
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 ) : (
-                <TouchableOpacity
-                  style={[
-                    styles.ctaButton,
-                    styles.ctaButtonPrimary,
-                    loading && styles.ctaButtonDisabled,
-                  ]}
-                  onPress={handleSubscribe}
-                  disabled={loading}
-                >
-                  {loading ? (
-                    <ActivityIndicator size="small" color="#3B3B3B" />
-                  ) : (
-                    <Text
-                      style={[
-                        styles.ctaButtonText,
-                        styles.ctaButtonTextPrimary,
-                      ]}
-                    >
-                      S'abonner
-                    </Text>
-                  )}
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.ctaButton,
+                      styles.ctaButtonPrimary,
+                      loading && styles.ctaButtonDisabled,
+                    ]}
+                    onPress={handleSubscribe}
+                    disabled={loading}
+                  >
+                    {loading ? (
+                      <ActivityIndicator size="small" color="#3B3B3B" />
+                    ) : (
+                      <Text
+                        style={[
+                          styles.ctaButtonText,
+                          styles.ctaButtonTextPrimary,
+                        ]}
+                      >
+                        S'abonner
+                      </Text>
+                    )}
+                  </TouchableOpacity>
                 )}
               </View>
             </View>

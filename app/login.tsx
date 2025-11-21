@@ -7,8 +7,8 @@ import { useAuth } from "../context/auth";
 import { loginStyles } from "../style/login.styles";
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("enzo@gmail.com");
-  const [password, setPassword] = useState("password");
+  const [email, setEmail] = useState("aurelien@gmail.com");
+  const [password, setPassword] = useState("aurelien123");
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);

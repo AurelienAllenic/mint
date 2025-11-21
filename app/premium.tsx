@@ -36,8 +36,8 @@ export default function PremiumPage() {
         ? token
         : `Bearer ${token}`;
 
-      // 1. Appel backend
-      const response = await fetch(`${API_URL}/race/create-subscription`, {
+      // 1. Créer subscription trial
+      const subResponse = await fetch(`${API_URL}/race/create-subscription`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -45,45 +45,55 @@ export default function PremiumPage() {
         },
       });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(errorText || "Erreur serveur");
-      }
+      if (!subResponse.ok) throw new Error(await subResponse.text());
 
-      const { setupIntentClientSecret } = await response.json();
+      const { subscriptionId } = await subResponse.json();
 
-      // 2. Initialiser PaymentSheet avec setupIntent
-      const { error: initError } = await initPaymentSheet({
-        merchantDisplayName: "Ton App de Courses",
-        setupIntentClientSecret, // ← CLÉ ICI
-        allowsDelayedPaymentMethods: true,
+      // 2. Créer paiement initial
+      const payResponse = await fetch(`${API_URL}/race/create-payment-intent`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({ amount: 4.99 }),
       });
 
-      if (initError) {
-        throw new Error(`Init échouée: ${initError.message}`);
-      }
+      const { clientSecret } = await payResponse.json();
 
-      // 3. Ouvrir la feuille
+      // 3. Init PaymentSheet
+      const { error: initError } = await initPaymentSheet({
+        merchantDisplayName: "Votre App",
+        paymentIntentClientSecret: clientSecret,
+      });
+
+      if (initError) throw new Error(initError.message);
+
+      // 4. Present
       const { error: presentError } = await presentPaymentSheet();
 
       if (presentError) {
-        if (presentError.code === "Canceled") {
-          Alert.alert("Annulé", "L'abonnement a été annulé.");
-        } else {
-          throw new Error(`Validation échouée: ${presentError.message}`);
-        }
-        return;
+        if (presentError.code === "Canceled") return;
+        throw new Error(presentError.message);
       }
 
-      // SUCCÈS
-      Alert.alert(
-        "Succès",
-        "Abonnement Premium activé ! Premier débit dans 1 mois.",
-        [{ text: "Super !", onPress: () => router.replace("/") }]
-      );
+      // 5. Activer premium
+      const activate = await fetch(`${API_URL}/race/activate-premium`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({ subscriptionId }),
+      });
+
+      if (!activate.ok) throw new Error(await activate.text());
+
+      Alert.alert("Succès", "Premium activé !");
+      router.replace("/");
     } catch (err: any) {
-      console.error("Erreur abonnement :", err);
-      Alert.alert("Erreur", err.message || "Impossible de s'abonner.");
+      console.error(err);
+      Alert.alert("Erreur", err.message);
     } finally {
       setLoading(false);
     }

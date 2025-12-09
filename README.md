@@ -71,3 +71,18 @@ mint/
 - [Tutoriel Expo](https://docs.expo.dev/tutorial/introduction/)
 - [Expo sur GitHub](https://github.com/expo/expo)
 - [Communauté Discord](https://chat.expo.dev)
+
+## Build l'app pour tester les pubs 
+
+Installer EAS CLI si nécessaire : 
+```npm install -g eas-cli```
+Login et config EAS (si pas déjà) : ```eas login``` puis ```eas build:configure```
+Build dev client (ex. Android) : ```eas build --profile development -p android```
+
+##### Si cette étape cause une erreur :
+
+1 - ```npx expo-doctor```
+2 - ```npx expo install --check```
+3 Relancer la commande précédente
+
+Installer l'APK sur le téléphone/simulateur puis lancer ```expo start --dev-client```

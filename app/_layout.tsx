@@ -1,6 +1,16 @@
+// @ts-nocheck
+import Constants from "expo-constants";
 import { useFonts } from "expo-font";
-import { Slot } from "expo-router";
-import { AuthProvider } from "../context/auth";
+import * as Linking from "expo-linking";
+import { Slot, useSegments } from "expo-router";
+import React, { useEffect, useMemo, useState } from "react";
+import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
+import { AuthProvider, useAuth } from "../context/auth";
+// Note: react-native-google-mobile-ads is native — we require it dynamically
+// only when running a built app to avoid crashes in Expo Go.
+
+const EXCLUDED_ROUTES = ["login", "signup", "welcome", "register"];
 
 export default function RootLayout() {
   const [fontsLoaded] = useFonts({
@@ -8,13 +18,178 @@ export default function RootLayout() {
     MontserratBold: require("@/assets/fonts/static/Montserrat-Bold.ttf"),
     MontserratSemiBold: require("@/assets/fonts/static/Montserrat-SemiBold.ttf"),
     MontserratLight: require("@/assets/fonts/static/Montserrat-Light.ttf"),
-    // Ajoute les autres variantes si besoin
   });
+
   if (!fontsLoaded) return null;
 
   return (
     <AuthProvider>
-      <Slot />
+      <InnerLayout />
     </AuthProvider>
   );
 }
+
+function InnerLayout() {
+  const { user, token, refreshUserData } = useAuth();
+  const segments = useSegments();
+  const firstSegment = segments && segments.length > 0 ? segments[0] : "";
+
+  const [isPremium, setIsPremium] = useState<boolean>(false);
+  const [adUrl, setAdUrl] = useState<string | null>(null);
+
+  const API_URL = process.env.EXPO_PUBLIC_API_URL || "";
+
+  useEffect(() => {
+    // If the auth `user` object contains `isPremium`, use it directly so
+    // UI reacts immediately when `user` is updated elsewhere in the app.
+    if (user && typeof (user as any).isPremium !== "undefined") {
+      setIsPremium(!!(user as any).isPremium);
+      return;
+    }
+
+    // Otherwise, fall back to fetching the profile (old behavior).
+    let mounted = true;
+    const checkPremiumStatus = async () => {
+      if (!token || !API_URL) return;
+      try {
+        const authHeader = token.startsWith("Bearer ")
+          ? token
+          : `Bearer ${token}`;
+        const response = await fetch(`${API_URL}/users/profile`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+        });
+
+        if (!mounted) return;
+        if (response.ok) {
+          const data = await response.json();
+          setIsPremium(!!data.isPremium);
+          // update auth context with fresh data if available
+          if (refreshUserData) {
+            try {
+              await refreshUserData();
+            } catch {}
+          }
+        }
+      } catch (error) {}
+    };
+
+    checkPremiumStatus();
+    return () => {
+      mounted = false;
+    };
+  }, [user, token]);
+
+  const isExpoGo = Constants.appOwnership === "expo";
+  const isBuilt = !isExpoGo;
+
+  const hideByRoute = EXCLUDED_ROUTES.includes(firstSegment);
+
+  const showAds = !isPremium && !hideByRoute;
+
+  // Randomly pick one of the two local images on each load when in Expo Go
+  const selectedImageName = useMemo(() => {
+    const pick = Math.random() < 0.5 ? 0 : 1;
+    // images live in assets/images/
+    return pick === 0 ? "IMG_8478.png" : "IMG_8479.png";
+    // re-evaluate on each mount / route change
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firstSegment]);
+
+  useEffect(() => {
+    if (selectedImageName.includes("IMG_8479")) {
+      setAdUrl("https://wero-wallet.eu/fr");
+    } else {
+      setAdUrl("https://konyks.com/");
+    }
+  }, [selectedImageName]);
+
+  const expoImage = selectedImageName === "IMG_8479.png"
+    ? require("../assets/images/IMG_8479.png")
+    : require("../assets/images/IMG_8478.png");
+
+  // When built (not Expo Go), dynamically require the native ads module.
+  let BuiltAd: React.ReactNode = null;
+  if (isBuilt && showAds) {
+    try {
+      // Dynamically require to avoid loading native module in Expo Go
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const mobileAds = require("react-native-google-mobile-ads");
+      const { BannerAd, BannerAdSize, TestIds } = mobileAds;
+      const unitId =
+        typeof __DEV__ !== "undefined" && __DEV
+          ? TestIds.BANNER
+          : process.env.EXPO_PUBLIC_ADMOB_BANNER_ID || TestIds.BANNER;
+
+      BuiltAd = (
+        <BannerAd size={BannerAdSize.ADAPTIVE_BANNER} unitId={unitId} />
+      );
+    } catch (e) {
+      // If require fails, silently fall back to no ad (avoid debug UI)
+      BuiltAd = null;
+    }
+  }
+
+  return (
+    <View style={styles.container}>
+      <Slot />
+
+      {showAds && (
+        <SafeAreaView style={styles.adWrapper} edges={["bottom"]}>
+          {isBuilt ? (
+            BuiltAd
+          ) : (
+            <TouchableOpacity
+              onPress={() => {
+                Linking.openURL(`${adUrl}?utm_source=mint_app`);
+              }}
+              style={styles.adTouchable}
+              activeOpacity={0.8}
+            >
+              <Image
+                source={expoImage}
+                style={styles.adImage}
+                resizeMode="contain"
+              />
+            </TouchableOpacity>
+          )}
+        </SafeAreaView>
+      )}
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  adWrapper: {
+    width: "100%",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "transparent",
+  },
+  adTouchable: {
+    width: "100%",
+    height: 60,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  adImage: {
+    width: "100%",
+    height: 60,
+  },
+  debugBox: {
+    padding: 6,
+    backgroundColor: "#fee",
+    borderRadius: 6,
+  },
+  debugText: {
+    color: "#900",
+    fontSize: 12,
+  },
+  /* debug styles removed */
+});

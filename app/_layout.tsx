@@ -6,7 +6,8 @@ import { Slot, useSegments } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { AuthProvider, useAuth } from "../context/auth";
+import { AuthProvider } from "../context/auth";
+import { usePremiumStatus } from "../utils/getPremiumStatus";
 // Note: react-native-google-mobile-ads is native — we require it dynamically
 // only when running a built app to avoid crashes in Expo Go.
 
@@ -30,58 +31,12 @@ export default function RootLayout() {
 }
 
 function InnerLayout() {
-  const { user, token, refreshUserData } = useAuth();
   const segments = useSegments();
   const firstSegment = segments && segments.length > 0 ? segments[0] : "";
 
-  const [isPremium, setIsPremium] = useState<boolean>(false);
   const [adUrl, setAdUrl] = useState<string | null>(null);
 
-  const API_URL = process.env.EXPO_PUBLIC_API_URL || "";
-
-  useEffect(() => {
-    // If the auth `user` object contains `isPremium`, use it directly so
-    // UI reacts immediately when `user` is updated elsewhere in the app.
-    if (user && typeof (user as any).isPremium !== "undefined") {
-      setIsPremium(!!(user as any).isPremium);
-      return;
-    }
-
-    // Otherwise, fall back to fetching the profile (old behavior).
-    let mounted = true;
-    const checkPremiumStatus = async () => {
-      if (!token || !API_URL) return;
-      try {
-        const authHeader = token.startsWith("Bearer ")
-          ? token
-          : `Bearer ${token}`;
-        const response = await fetch(`${API_URL}/users/profile`, {
-          method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: authHeader,
-          },
-        });
-
-        if (!mounted) return;
-        if (response.ok) {
-          const data = await response.json();
-          setIsPremium(!!data.isPremium);
-          // update auth context with fresh data if available
-          if (refreshUserData) {
-            try {
-              await refreshUserData();
-            } catch {}
-          }
-        }
-      } catch (error) {}
-    };
-
-    checkPremiumStatus();
-    return () => {
-      mounted = false;
-    };
-  }, [user, token]);
+  const isPremium = usePremiumStatus();
 
   const isExpoGo = Constants.appOwnership === "expo";
   const isBuilt = !isExpoGo;
@@ -107,9 +62,10 @@ function InnerLayout() {
     }
   }, [selectedImageName]);
 
-  const expoImage = selectedImageName === "IMG_8479.png"
-    ? require("../assets/images/IMG_8479.png")
-    : require("../assets/images/IMG_8478.png");
+  const expoImage =
+    selectedImageName === "IMG_8479.png"
+      ? require("../assets/images/IMG_8479.png")
+      : require("../assets/images/IMG_8478.png");
 
   // When built (not Expo Go), dynamically require the native ads module.
   let BuiltAd: React.ReactNode = null;

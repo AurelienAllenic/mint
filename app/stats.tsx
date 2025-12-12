@@ -1,3 +1,4 @@
+import { usePremiumStatus } from "@/utils/getPremiumStatus";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -5,22 +6,32 @@ import { StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export default function StatsPage() {
   const router = useRouter();
+  const isPremium = usePremiumStatus();
 
   return (
     <View style={styles.container}>
-      <View style={styles.banner}>
-        <Icon name="crown" size={28} color="#fff" />
-        <Text style={styles.bannerText}>
-          Vous souhaitez accèder à des statistiques plus avancées ?
-        </Text>
-        <TouchableOpacity
-          activeOpacity={0.85}
-          style={styles.button}
-          onPress={() => router.push("/premium")}
-        >
-          <Text style={styles.buttonText}>S'abonner à premium</Text>
-        </TouchableOpacity>
-      </View>
+      {isPremium ? (
+        <View style={styles.banner}>
+          <Icon name="crown" size={28} color="#fff" />
+          <Text style={styles.bannerText}>
+            Statistiques avancées — arrivent prochainement !
+          </Text>
+        </View>
+      ) : (
+        <View style={styles.banner}>
+          <Icon name="crown" size={28} color="#fff" />
+          <Text style={styles.bannerText}>
+            Vous souhaitez accèder à des statistiques plus avancées ?
+          </Text>
+          <TouchableOpacity
+            activeOpacity={0.85}
+            style={styles.button}
+            onPress={() => router.push("/premium")}
+          >
+            <Text style={styles.buttonText}>S'abonner à premium</Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }

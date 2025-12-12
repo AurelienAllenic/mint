@@ -432,6 +432,58 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       });
 
       if (response.ok) {
+        // Récupérer les données de la course créée (incluant l'ID)
+        const createdRace = await response.json();
+        const raceId = createdRace._id || createdRace.id;
+
+        // Appeler l'API externe pour la gestion des positions en temps réel
+        const WS_API_URL = "http://mint-dev-ws.charles-chrismann.fr";
+        const SIGNATURE_SECRET = process.env.EXPO_PUBLIC_SIGNATURE_SECRET;
+
+        if (!SIGNATURE_SECRET) {
+          console.warn("SIGNATURE_SECRET non défini, l'appel à l'API externe sera ignoré");
+        } else if (raceId && gpxFileContent && selectedRunners.length > 0) {
+          try {
+            const wsRaceData = {
+              id: raceId,
+              startDate: startDate.toISOString(),
+              endDate: endDate.toISOString(),
+              runnerIds: selectedRunners,
+              gpx: gpxFileContent,
+            };
+
+            const wsResponse = await fetch(`${WS_API_URL}/races`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                authorization: `Bearer ${SIGNATURE_SECRET}`,
+              },
+              body: JSON.stringify(wsRaceData),
+            });
+
+            if (!wsResponse.ok) {
+              const wsErrorText = await wsResponse.text();
+              console.error("Erreur lors de l'appel à l'API WebSocket:", wsErrorText);
+              // Ne pas bloquer la création si l'API externe échoue
+              Alert.alert(
+                "Avertissement",
+                "Course créée mais l'API de suivi en temps réel n'a pas pu être initialisée. " +
+                "La course fonctionnera normalement mais le suivi en temps réel pourrait être limité."
+              );
+            } else {
+              console.log("API WebSocket initialisée avec succès");
+            }
+          } catch (wsError) {
+            console.error("Erreur lors de l'appel à l'API WebSocket:", wsError);
+            // Ne pas bloquer la création si l'API externe échoue
+            Alert.alert(
+              "Avertissement",
+              "Course créée mais l'API de suivi en temps réel n'a pas pu être initialisée. " +
+              "La course fonctionnera normalement mais le suivi en temps réel pourrait être limité."
+            );
+          }
+        }
+
         Alert.alert("Succès", "Course créée avec succès !", [
           {
             text: "Retour",

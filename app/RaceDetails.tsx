@@ -263,12 +263,15 @@ export default function RaceDetailsScreen() {
       console.log('📍 [WebSocket] Nombre de coureurs:', positions.length);
       console.log('🏆 [WebSocket] Rankings:', rankingsData);
       
-      // Mettre à jour les positions
-      const newPositions = new Map<string, { lon: number; lat: number; alt: number }>();
-      positions.forEach(([userId, lon, lat, alt]) => {
-        newPositions.set(userId, { lon, lat, alt });
+      // Mettre à jour les positions (en conservant les anciennes)
+      setRunnerPositions(prevPositions => {
+        const updatedPositions = new Map(prevPositions); // Copier les positions existantes
+        positions.forEach(([userId, lon, lat, alt]) => {
+          updatedPositions.set(userId, { lon, lat, alt }); // Mettre à jour ou ajouter
+        });
+        console.log('📍 [WebSocket] Total coureurs visibles:', updatedPositions.size);
+        return updatedPositions;
       });
-      setRunnerPositions(newPositions);
 
       // Mettre à jour le ranking
       const newRankings = rankingsData.map(([userId, progress], index) => ({

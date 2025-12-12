@@ -24,16 +24,23 @@ interface LatLng {
   longitude: number;
 }
 
+interface RunnerPosition {
+  userId: string;
+  latitude: number;
+  longitude: number;
+}
+
 interface MapProps {
-  user: { email?: string };
-  gpxCoordinates: LatLng[];
+  user: any;
+  gpxCoordinates?: LatLng[];
   region?: {
     latitude: number;
     longitude: number;
     latitudeDelta: number;
     longitudeDelta: number;
   };
-  forceTrackCentering?: boolean; // Nouvelle prop pour forcer le centrage sur le tracé
+  forceTrackCentering?: boolean;
+  runnerPositions?: RunnerPosition[]; // NOUVEAU
 }
 
 const Map: React.FC<MapProps> = ({
@@ -41,6 +48,7 @@ const Map: React.FC<MapProps> = ({
   gpxCoordinates,
   region,
   forceTrackCentering = false,
+  runnerPositions = [], // NOUVEAU
 }) => {
   const [location, setLocation] = useState<LatLng | null>(null);
   const [locations, setLocations] = useState<UserLocation[]>([]);
@@ -239,6 +247,22 @@ const Map: React.FC<MapProps> = ({
             </Callout>
           </Marker>
         ))}
+
+        {/* NOUVEAU : Marqueurs pour les positions des coureurs */}
+        {runnerPositions.map((runnerPos) => (
+          <Marker
+            key={runnerPos.userId}
+            coordinate={{
+              latitude: runnerPos.latitude,
+              longitude: runnerPos.longitude,
+            }}
+            pinColor="#A1F763"
+          >
+            <Callout>
+              <Text>Coureur: {runnerPos.userId.substring(0, 8)}</Text>
+            </Callout>
+          </Marker>
+        ))}
       </MapView>
     </View>
   );
@@ -278,6 +302,59 @@ const styles = StyleSheet.create({
     backgroundColor: "white",
     padding: 5,
     borderRadius: 4,
+  },
+  rankingContainer: {
+    position: 'absolute',
+    top: 100,
+    left: 10,
+    right: 10,
+    zIndex: 1000,
+  },
+  rankingBlur: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    padding: 12,
+  },
+  rankingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  rankingTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  rankingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  rankingPosition: {
+    width: 40,
+    alignItems: 'center',
+  },
+  rankingPositionText: {
+    color: '#A1F763',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  rankingInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  rankingName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  rankingProgress: {
+    color: '#888',
+    fontSize: 12,
+    marginTop: 2,
   },
 });
 

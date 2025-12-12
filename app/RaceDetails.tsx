@@ -1,6 +1,7 @@
-import Map from "@/components/Map/Map";
+import MapComponent from "@/components/Map/Map";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { BlurView } from "expo-blur";
+import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useState } from "react";
 import {
@@ -13,6 +14,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { io, Socket } from "socket.io-client";
 import { useAuth } from "../context/auth";
 
 interface RaceDetails {
@@ -59,6 +61,12 @@ export default function RaceDetailsScreen() {
   const [showParticipantsModal, setShowParticipantsModal] = useState(false);
   const [showRaceInfo, setShowRaceInfo] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+
+  // NOUVEAUX ÉTATS POUR WEBSOCKET
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [runnerPositions, setRunnerPositions] = useState<Map<string, { lon: number; lat: number; alt: number }>>(new Map());
+  const [rankings, setRankings] = useState<{ userId: string; progress: number; rank: number }[]>([]);
+  const [isRunner, setIsRunner] = useState(false);
 
   // Mettre à jour l'heure actuelle chaque seconde pour le compte à rebours
   useEffect(() => {
@@ -174,6 +182,239 @@ export default function RaceDetailsScreen() {
 
     fetchRaceData();
   }, [raceId, token]);
+
+  // NOUVEAU useEffect pour initialiser le WebSocket
+  useEffect(() => {
+    console.log('🔍 [WebSocket Init] Démarrage...');
+    console.log('🔍 [WebSocket Init] race:', race ? 'OK' : 'NULL');
+    console.log('🔍 [WebSocket Init] raceId:', raceId);
+    console.log('🔍 [WebSocket Init] user:', user);
+    
+    if (!race || !raceId) {
+      console.warn('⚠️ [WebSocket Init] Pas de race ou raceId, sortie');
+      return;
+    }
+
+    const raceIdToUse = race._id || race.id;
+    console.log('🔍 [WebSocket Init] raceIdToUse:', raceIdToUse);
+    
+    if (!raceIdToUse) {
+      console.warn('⚠️ [WebSocket Init] Pas de raceIdToUse, sortie');
+      return;
+    }
+
+    // Vérifier si l'utilisateur est un coureur
+    const userId = user?._id;
+    console.log('🔍 [WebSocket Init] userId:', userId);
+    console.log('🔍 [WebSocket Init] runners:', race.runners);
+    
+    const userIsRunner = race.runners?.some(
+      (runner: any) => {
+        const runnerId = runner._id || runner.id;
+        console.log('🔍 [WebSocket Init] Comparaison runner:', runnerId, 'avec user:', userId);
+        return runnerId === userId;
+      }
+    ) || false;
+    
+    console.log('🏃 [WebSocket Init] isRunner:', userIsRunner);
+    console.log('🏃 [WebSocket Init] token présent:', !!token);
+    setIsRunner(userIsRunner);
+
+    const WS_API_URL = "http://mint-dev-ws.charles-chrismann.fr";
+    let newSocket: Socket;
+
+    console.log('🔍 [WebSocket Init] Vérification: userIsRunner=', userIsRunner, ', token=', !!token);
+
+    if (userIsRunner && token) {
+      console.log('🔑 [WebSocket Init] ✅ Connexion en tant que COUREUR avec JWT utilisateur');
+      const cleanToken = token.startsWith("Bearer ") ? token.replace("Bearer ", "") : token;
+      console.log('🔑 [WebSocket Init] JWT (20 premiers chars):', cleanToken.substring(0, 20) + '...');
+      
+      // Pour un coureur : connexion avec le JWT utilisateur (qui contient userId)
+      // IMPORTANT: Ne pas utiliser SIGNATURE_SECRET ici, c'est uniquement pour POST /races
+      newSocket = io(WS_API_URL, {
+        auth: { token: cleanToken }, // JWT sans "Bearer "
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        timeout: 10000,
+      });
+      console.log('🔑 [WebSocket Init] Socket créé avec JWT utilisateur');
+    } else {
+      console.log('👁️ [WebSocket Init] ⚠️ Connexion en tant que SPECTATEUR (sans auth)');
+      // Pour un spectateur : connexion sans auth
+      newSocket = io(WS_API_URL, {
+        transports: ['websocket', 'polling'],
+        reconnection: true,
+        reconnectionAttempts: 5,
+        reconnectionDelay: 1000,
+        timeout: 10000,
+      });
+      console.log('👁️ [WebSocket Init] Socket créé sans auth');
+    }
+
+    console.log('🔌 [WebSocket Init] Tentative de connexion à:', WS_API_URL);
+
+    // Écouter les mises à jour de positions et rankings (pour spectateurs)
+    newSocket.on('positions', (updateData: { positions: [string, number, number, number][], rankings: [string, number][] }) => {
+      console.log('📍 [WebSocket] Positions reçues:', updateData);
+      const { positions, rankings: rankingsData } = updateData;
+      console.log('📍 [WebSocket] Nombre de coureurs:', positions.length);
+      console.log('🏆 [WebSocket] Rankings:', rankingsData);
+      
+      // Mettre à jour les positions
+      const newPositions = new Map<string, { lon: number; lat: number; alt: number }>();
+      positions.forEach(([userId, lon, lat, alt]) => {
+        newPositions.set(userId, { lon, lat, alt });
+      });
+      setRunnerPositions(newPositions);
+
+      // Mettre à jour le ranking
+      const newRankings = rankingsData.map(([userId, progress], index) => ({
+        userId,
+        progress,
+        rank: index + 1
+      }));
+      setRankings(newRankings);
+    });
+
+    newSocket.on('connect', () => {
+      console.log('✅ [WebSocket] Connecté au WebSocket');
+      console.log('✅ [WebSocket] Socket ID:', newSocket.id);
+      console.log('✅ [WebSocket] Transport:', newSocket.io.engine.transport.name);
+    });
+
+    newSocket.on('connecting', () => {
+      console.log('🔄 [WebSocket] Connexion en cours...');
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('❌ [WebSocket] Erreur de connexion:', error);
+      console.error('❌ [WebSocket] Message:', error.message);
+      console.error('❌ [WebSocket] Details:', JSON.stringify(error));
+    });
+
+    newSocket.on('disconnect', (reason) => {
+      console.log('❌ [WebSocket] Déconnecté du WebSocket');
+      console.log('❌ [WebSocket] Raison:', reason);
+    });
+
+    newSocket.on('error', (error) => {
+      console.error('❌ [WebSocket] Erreur:', error);
+    });
+
+    newSocket.on('reconnect_attempt', (attemptNumber) => {
+      console.log('🔄 [WebSocket] Tentative de reconnexion #', attemptNumber);
+    });
+
+    newSocket.on('reconnect_error', (error) => {
+      console.error('❌ [WebSocket] Erreur de reconnexion:', error);
+    });
+
+    newSocket.on('reconnect_failed', () => {
+      console.error('❌ [WebSocket] Échec de reconnexion après plusieurs tentatives');
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      console.log('🧹 [WebSocket] Nettoyage - déconnexion');
+      newSocket.disconnect();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [race, raceId, user]);
+
+  // NOUVEAU useEffect pour envoyer la position du coureur
+  useEffect(() => {
+    console.log('📍 [Location] Démarrage surveillance position...');
+    console.log('📍 [Location] isRunner:', isRunner);
+    console.log('📍 [Location] socket:', socket ? 'OK' : 'NULL');
+    console.log('📍 [Location] socket.connected:', socket?.connected);
+    console.log('📍 [Location] raceId:', raceId);
+    console.log('📍 [Location] race:', race ? 'OK' : 'NULL');
+    
+    if (!isRunner) {
+      console.log('⚠️ [Location] Pas un coureur, sortie');
+      return;
+    }
+    
+    if (!socket) {
+      console.log('⚠️ [Location] Pas de socket, sortie');
+      return;
+    }
+    
+    if (!raceId || !race) {
+      console.log('⚠️ [Location] Pas de raceId ou race, sortie');
+      return;
+    }
+
+    const raceIdToUse = race._id || race.id;
+    console.log('📍 [Location] raceIdToUse:', raceIdToUse);
+    
+    if (!raceIdToUse) {
+      console.log('⚠️ [Location] Pas de raceIdToUse, sortie');
+      return;
+    }
+
+    let subscription: Location.LocationSubscription | null = null;
+
+    // Demander les permissions de localisation
+    (async () => {
+      console.log('🔐 [Location] Demande de permissions...');
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      console.log('🔐 [Location] Statut permission:', status);
+      
+      if (status !== 'granted') {
+        console.warn('❌ [Location] Permission de localisation refusée');
+        return;
+      }
+
+      console.log('✅ [Location] Permission accordée, démarrage watchPosition...');
+
+      // Surveiller la position et l'envoyer au WebSocket
+      subscription = await Location.watchPositionAsync(
+        {
+          accuracy: Location.Accuracy.High,
+          timeInterval: 2000, // Envoyer toutes les 2 secondes
+          distanceInterval: 5, // Ou tous les 5 mètres
+        },
+        (location) => {
+          console.log('📍 [Location] Nouvelle position détectée:', {
+            lat: location.coords.latitude,
+            lon: location.coords.longitude,
+            alt: location.coords.altitude,
+          });
+          
+          if (socket && socket.connected) {
+            const positionData = {
+              raceId: raceIdToUse,
+              position: {
+                lon: location.coords.longitude,
+                lat: location.coords.latitude,
+                alt: location.coords.altitude || 0,
+              }
+            };
+            console.log('📤 [Location] Envoi position au WebSocket:', positionData);
+            socket.emit('position', positionData);
+          } else {
+            console.warn('⚠️ [Location] Socket non connecté, position non envoyée');
+            console.log('⚠️ [Location] socket:', socket ? 'existe' : 'null');
+            console.log('⚠️ [Location] socket.connected:', socket?.connected);
+          }
+        }
+      );
+
+      console.log('✅ [Location] Surveillance position démarrée');
+    })();
+
+    return () => {
+      console.log('🧹 [Location] Nettoyage surveillance position');
+      if (subscription) {
+        subscription.remove();
+      }
+    };
+  }, [isRunner, socket, raceId, race]);
 
   // Calculer la région pour centrer la carte sur le tracé (mémorisé)
   const mapRegion = useMemo(() => {
@@ -415,6 +656,17 @@ export default function RaceDetailsScreen() {
     </Modal>
   );
 
+  // NOUVELLE fonction pour obtenir le nom d'un coureur depuis son ID
+  const getRunnerName = (userId: string) => {
+    const runner = race?.runners?.find((r: any) => (r._id || r.id) === userId);
+    if (runner) {
+      return runner.firstname && runner.lastname
+        ? `${runner.firstname} ${runner.lastname}`
+        : runner.email || `Coureur ${userId.substring(0, 8)}`;
+    }
+    return `Coureur ${userId.substring(0, 8)}`;
+  };
+
   if (loading) {
     return (
       <View style={styles.container}>
@@ -644,13 +896,50 @@ export default function RaceDetailsScreen() {
         </View>
       )}
 
+      {/* NOUVEAU : Affichage du ranking si disponible */}
+      {rankings.length > 0 && (
+        <View style={styles.rankingContainer}>
+          <BlurView style={styles.rankingBlur} intensity={40} tint="dark">
+            <View style={styles.rankingHeader}>
+              <Icon name="trophy" size={24} color="#A1F763" />
+              <Text style={styles.rankingTitle}>Classement en direct</Text>
+            </View>
+            <FlatList
+              data={rankings.slice(0, 5)} // Top 5
+              keyExtractor={(item) => item.userId}
+              renderItem={({ item, index }) => (
+                <View style={styles.rankingItem}>
+                  <View style={styles.rankingPosition}>
+                    <Text style={styles.rankingPositionText}>
+                      {item.rank === 1 ? '🥇' : item.rank === 2 ? '🥈' : item.rank === 3 ? '🥉' : `#${item.rank}`}
+                    </Text>
+                  </View>
+                  <View style={styles.rankingInfo}>
+                    <Text style={styles.rankingName}>{getRunnerName(item.userId)}</Text>
+                    <Text style={styles.rankingProgress}>
+                      {item.progress.toFixed(0)} m parcourus
+                    </Text>
+                  </View>
+                </View>
+              )}
+            />
+          </BlurView>
+        </View>
+      )}
+
       {/* Carte avec le même style que home */}
       <View style={styles.mapContainer}>
-        <Map
+        <MapComponent
           user={{ email: user?.email }}
           gpxCoordinates={trackCoordinates}
           region={mapRegion}
           forceTrackCentering={true}
+          // NOUVEAU : Passer les positions des coureurs à la carte
+          runnerPositions={Array.from(runnerPositions.entries()).map(([userId, pos]) => ({
+            userId,
+            latitude: pos.lat,
+            longitude: pos.lon,
+          }))}
         />
         <Image
           source={require("@/assets/images/radial-gradient.png")}
@@ -1149,5 +1438,58 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "600",
     lineHeight: 16,
+  },
+  rankingContainer: {
+    position: 'absolute',
+    top: 100,
+    left: 10,
+    right: 10,
+    zIndex: 1000,
+  },
+  rankingBlur: {
+    borderRadius: 12,
+    overflow: 'hidden',
+    padding: 12,
+  },
+  rankingHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  rankingTitle: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 8,
+  },
+  rankingItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+  },
+  rankingPosition: {
+    width: 40,
+    alignItems: 'center',
+  },
+  rankingPositionText: {
+    color: '#A1F763',
+    fontSize: 18,
+    fontWeight: 'bold',
+  },
+  rankingInfo: {
+    flex: 1,
+    marginLeft: 12,
+  },
+  rankingName: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  rankingProgress: {
+    color: '#888',
+    fontSize: 12,
+    marginTop: 2,
   },
 });

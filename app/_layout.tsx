@@ -56,7 +56,7 @@ function InnerLayout() {
 
   useEffect(() => {
     if (selectedImageName.includes("IMG_8479")) {
-      setAdUrl("https://wero-wallet.eu/fr");
+      setAdUrl("https://www.westernunion.com/fr/fr/home.html");
     } else {
       setAdUrl("https://konyks.com/");
     }

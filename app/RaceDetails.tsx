@@ -258,14 +258,76 @@ export default function RaceDetailsScreen() {
 
     // Écouter les mises à jour de positions et rankings
     newSocket.on('positions', (updateData: { positions: [string, number, number, number][], ranking: [string, number][] }) => {
-      console.log('📊 [Ranking] Données reçues du WebSocket:', JSON.stringify(updateData, null, 2));
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('📊 [STATS] Données complètes reçues du WebSocket:');
+      console.log(JSON.stringify(updateData, null, 2));
+      console.log('═══════════════════════════════════════════════════════');
       
       // Le serveur envoie "ranking" (sans 's'), pas "rankings"
       const { positions, ranking: rankingsData } = updateData;
       
-      console.log('📍 [Position] Nombre de positions:', positions?.length || 0);
-      console.log('🏆 [Ranking] Données de ranking brutes:', rankingsData);
-      console.log('🏆 [Ranking] Nombre de coureurs classés:', rankingsData?.length || 0);
+      // ========== STATISTIQUES DES POSITIONS ==========
+      console.log('📍 [STATS] === POSITIONS ===');
+      console.log(`📍 [STATS] Nombre total de positions: ${positions?.length || 0}`);
+      
+      if (positions && positions.length > 0) {
+        positions.forEach(([userId, lon, lat, alt], index) => {
+          const isCurrentUser = userId === user?._id;
+          const prefix = isCurrentUser ? '👤 [STATS] VOUS' : `📍 [STATS] Coureur #${index + 1}`;
+          console.log(`${prefix} - ID: ${userId.substring(0, 8)}...`);
+          console.log(`   📍 Coordonnées: lat=${lat.toFixed(6)}, lon=${lon.toFixed(6)}, alt=${alt.toFixed(2)}m`);
+        });
+      }
+      
+      // ========== STATISTIQUES DU CLASSEMENT ==========
+      console.log('🏆 [STATS] === CLASSEMENT ===');
+      console.log(`🏆 [STATS] Nombre de coureurs classés: ${rankingsData?.length || 0}`);
+      
+      if (rankingsData && rankingsData.length > 0) {
+        rankingsData.forEach(([userId, progress], index) => {
+          const rank = index + 1;
+          const isCurrentUser = userId === user?._id;
+          const prefix = isCurrentUser ? '👤 [STATS] VOUS' : `🏆 [STATS] #${rank}`;
+          const progressKm = (progress / 1000).toFixed(2);
+          const progressM = progress.toFixed(0);
+          const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
+          
+          console.log(`${prefix} ${medal} - ID: ${userId.substring(0, 8)}...`);
+          console.log(`   📏 Progression: ${progressM}m (${progressKm}km)`);
+          console.log(`   🏅 Rang: #${rank}`);
+        });
+        
+        // Statistiques globales
+        const totalDistance = rankingsData.reduce((sum, [, progress]) => sum + progress, 0);
+        const avgDistance = totalDistance / rankingsData.length;
+        const maxDistance = Math.max(...rankingsData.map(([, progress]) => progress));
+        const minDistance = Math.min(...rankingsData.map(([, progress]) => progress));
+        
+        console.log('📊 [STATS] === STATISTIQUES GLOBALES ===');
+        console.log(`📊 [STATS] Distance totale parcourue (tous coureurs): ${(totalDistance / 1000).toFixed(2)}km`);
+        console.log(`📊 [STATS] Distance moyenne: ${(avgDistance / 1000).toFixed(2)}km`);
+        console.log(`📊 [STATS] Distance max: ${(maxDistance / 1000).toFixed(2)}km`);
+        console.log(`📊 [STATS] Distance min: ${(minDistance / 1000).toFixed(2)}km`);
+        
+        // Votre position dans le classement
+        const userRanking = rankingsData.findIndex(([uid]) => uid === user?._id);
+        if (userRanking !== -1) {
+          const userRank = userRanking + 1;
+          const userProgress = rankingsData[userRanking][1];
+          console.log('👤 [STATS] === VOTRE STATISTIQUE ===');
+          console.log(`👤 [STATS] Votre rang: #${userRank}`);
+          console.log(`👤 [STATS] Votre progression: ${(userProgress / 1000).toFixed(2)}km (${userProgress.toFixed(0)}m)`);
+          if (userRank > 1) {
+            const leaderProgress = rankingsData[0][1];
+            const gap = leaderProgress - userProgress;
+            console.log(`👤 [STATS] Écart avec le leader: ${(gap / 1000).toFixed(2)}km (${gap.toFixed(0)}m)`);
+          }
+        }
+      } else {
+        console.warn('⚠️ [STATS] Aucune donnée de ranking disponible');
+      }
+      
+      console.log('═══════════════════════════════════════════════════════');
       
       // Mettre à jour les positions (en conservant les anciennes)
       setRunnerPositions(prevPositions => {
@@ -303,12 +365,18 @@ export default function RaceDetailsScreen() {
     });
 
     newSocket.on('connect', () => {
-      console.log('✅ [WebSocket] Connecté au serveur');
-      console.log('✅ [WebSocket] Socket ID:', newSocket.id);
-      console.log('✅ [WebSocket] Transport utilisé:', newSocket.io.engine.transport.name);
-      console.log('🏁 [WebSocket] Rejoindre la course:', raceIdToUse);
+      console.log('═══════════════════════════════════════════════════════');
+      console.log('✅ [STATS] === CONNEXION WEBSOCKET ===');
+      console.log(`✅ [STATS] Socket ID: ${newSocket.id}`);
+      console.log(`✅ [STATS] Transport utilisé: ${newSocket.io.engine.transport.name}`);
+      console.log(`✅ [STATS] Mode: ${userIsRunner ? 'COUREUR' : 'SPECTATEUR'}`);
+      console.log(`✅ [STATS] Course ID: ${raceIdToUse}`);
+      console.log(`✅ [STATS] Nombre de participants: ${race.runners?.length || 0}`);
+      console.log(`✅ [STATS] Timestamp: ${new Date().toISOString()}`);
+      console.log('═══════════════════════════════════════════════════════');
+      
       newSocket.emit('join-race', raceIdToUse);
-      console.log('✅ [WebSocket] Événement join-race émis');
+      console.log('✅ [STATS] Événement join-race émis');
     });
 
     // Écouter tous les événements pour debug
@@ -387,14 +455,35 @@ export default function RaceDetailsScreen() {
         },
         (location) => {
           if (socket && socket.connected) {
-            socket.emit('position', {
+            const positionData = {
               raceId: raceIdToUse,
               position: {
                 lon: location.coords.longitude,
                 lat: location.coords.latitude,
                 alt: location.coords.altitude || 0,
               }
-            });
+            };
+            
+            // Logger les statistiques de position envoyées
+            console.log('📤 [STATS] === POSITION ENVOYÉE ===');
+            console.log(`📤 [STATS] Course ID: ${raceIdToUse}`);
+            console.log(`📤 [STATS] Coordonnées: lat=${location.coords.latitude.toFixed(6)}, lon=${location.coords.longitude.toFixed(6)}`);
+            console.log(`📤 [STATS] Altitude: ${(location.coords.altitude || 0).toFixed(2)}m`);
+            if (location.coords.accuracy) {
+              console.log(`📤 [STATS] Précision: ±${location.coords.accuracy.toFixed(2)}m`);
+            }
+            if (location.coords.speed) {
+              console.log(`📤 [STATS] Vitesse: ${(location.coords.speed * 3.6).toFixed(2)}km/h`);
+            }
+            if (location.coords.heading) {
+              console.log(`📤 [STATS] Direction: ${location.coords.heading.toFixed(1)}°`);
+            }
+            console.log(`📤 [STATS] Timestamp: ${new Date(location.timestamp).toISOString()}`);
+            console.log('═══════════════════════════════════════════════════════');
+            
+            socket.emit('position', positionData);
+          } else {
+            console.warn('⚠️ [STATS] Socket non connecté, position non envoyée');
           }
         }
       );

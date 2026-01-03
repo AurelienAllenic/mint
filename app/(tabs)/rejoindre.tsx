@@ -86,7 +86,12 @@ export default function RejoindreScreen() {
     extrapolate: "clamp",
   });
 
+  const [hasLoadedRaces, setHasLoadedRaces] = useState(false); // Flag pour éviter les rechargements multiples
+
   useEffect(() => {
+    // Ne charger qu'une seule fois
+    if (hasLoadedRaces) return;
+    
     const fetchRaces = async () => {
       setLoading(true);
       try {
@@ -212,6 +217,7 @@ export default function RejoindreScreen() {
 
           setMesRaces(mesCourses);
           setMesParticipations(mesParticipationsData);
+          setHasLoadedRaces(true); // Marquer comme chargé
         } else {
           const trailImages = [
             "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
@@ -235,7 +241,8 @@ export default function RejoindreScreen() {
     };
 
     fetchRaces();
-  }, [token, user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, user?._id]); // Utiliser user._id au lieu de user pour éviter les boucles
 
   const RaceCard = ({ race }: { race: Race }) => {
     const scaleValue = new Animated.Value(1);

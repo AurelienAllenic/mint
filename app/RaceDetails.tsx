@@ -61,6 +61,7 @@ export default function RaceDetailsScreen() {
   const [showParticipantsModal, setShowParticipantsModal] = useState(false);
   const [showRaceInfo, setShowRaceInfo] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [hasLoadedRace, setHasLoadedRace] = useState(false); // Flag pour éviter les rechargements multiples
 
   // NOUVEAUX ÉTATS POUR WEBSOCKET
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -68,15 +69,16 @@ export default function RaceDetailsScreen() {
   const [rankings, setRankings] = useState<{ userId: string; progress: number; rank: number }[]>([]);
   const [isRunner, setIsRunner] = useState(false);
   const [isRankingExpanded, setIsRankingExpanded] = useState(true); // Par défaut, le classement est déplié
+  const [isJoiningRace, setIsJoiningRace] = useState(false); // Flag pour éviter les appels multiples
 
-  // Surveiller les changements de rankings pour debug
-  useEffect(() => {
-    console.log('📊 [Ranking] État rankings mis à jour:', rankings);
-    console.log('📊 [Ranking] Nombre de coureurs:', rankings.length);
-    if (rankings.length > 0) {
-      console.log('📊 [Ranking] Top 3:', rankings.slice(0, 3));
-    }
-  }, [rankings]);
+  // Surveiller les changements de rankings pour debug (désactivé pour éviter les logs excessifs)
+  // useEffect(() => {
+  //   console.log('📊 [Ranking] État rankings mis à jour:', rankings);
+  //   console.log('📊 [Ranking] Nombre de coureurs:', rankings.length);
+  //   if (rankings.length > 0) {
+  //     console.log('📊 [Ranking] Top 3:', rankings.slice(0, 3));
+  //   }
+  // }, [rankings]);
 
   // Mettre à jour l'heure actuelle chaque seconde pour le compte à rebours
   useEffect(() => {
@@ -88,8 +90,18 @@ export default function RaceDetailsScreen() {
   }, []);
 
   useEffect(() => {
+    // Réinitialiser le flag quand on change de course
+    if (race?._id !== raceId) {
+      setHasLoadedRace(false);
+    }
+    
     const fetchRaceData = async () => {
       if (!raceId) {
+        return;
+      }
+      
+      // Ne pas recharger si déjà chargé pour cette course
+      if (hasLoadedRace && race?._id === raceId) {
         return;
       }
 
@@ -126,6 +138,7 @@ export default function RaceDetailsScreen() {
             category: "Course",
           };
           setRace(adaptedRace);
+          setHasLoadedRace(true); // Marquer comme chargé
 
           // Récupérer le tracé depuis le contenu GPX de la course
           if (raceData.gpxFile && raceData.gpxFile.trim() !== "") {
@@ -191,11 +204,12 @@ export default function RaceDetailsScreen() {
     };
 
     fetchRaceData();
-  }, [raceId, token]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [raceId, token]); // hasLoadedRace n'est pas dans les dépendances pour éviter les boucles
 
   // NOUVEAU useEffect pour initialiser le WebSocket
   useEffect(() => {
-    if (!race || !raceId) return;
+    if (!race || !raceId || isJoiningRace || !hasLoadedRace) return; // Ne pas se reconnecter si la course n'est pas encore chargée
 
     const raceIdToUse = race._id || race.id;
     if (!raceIdToUse) return;
@@ -269,13 +283,13 @@ export default function RaceDetailsScreen() {
           progress,
           rank: index + 1
         }));
-        console.log('✅ [Ranking] Nouveau classement calculé:', newRankings);
+        // console.log('✅ [Ranking] Nouveau classement calculé:', newRankings);
         setRankings(newRankings);
       } else {
-        console.warn('⚠️ [Ranking] Aucune donnée de ranking dans la réponse');
+        // console.warn('⚠️ [Ranking] Aucune donnée de ranking dans la réponse');
         // Si pas de rankings mais des positions, on peut créer un classement basique
         if (positions && positions.length > 0) {
-          console.log('⚠️ [Ranking] Pas de ranking du serveur, calcul basé sur les positions');
+          // console.log('⚠️ [Ranking] Pas de ranking du serveur, calcul basé sur les positions');
           const fallbackRankings = positions.map(([userId], index) => ({
             userId,
             progress: 0, // On ne peut pas calculer la progression sans le GPX
@@ -341,7 +355,7 @@ export default function RaceDetailsScreen() {
       newSocket.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [race, raceId, user]);
+  }, [race?._id, race?.id, race?.runners?.length, raceId, user?._id, token]);
 
 
   // NOUVEAU useEffect pour envoyer la position du coureur
@@ -444,20 +458,69 @@ export default function RaceDetailsScreen() {
 
   // Fonction pour gérer l'inscription à la course
   const handleJoinRace = async () => {
-    if (!race?._id && !race?.id) return;
+    if (!race?._id && !race?.id || isJoiningRace) return; // Éviter les appels multiples
 
+    setIsJoiningRace(true);
     try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
       const raceIdToUse = race._id || race.id;
-      // Ici vous pouvez ajouter la logique d'inscription à la course
-      console.log(
-        `Tentative d'inscription à la course ${raceIdToUse}: ${race.name}`
-      );
+      const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
 
-      // Pour l'instant, on affiche juste une alerte
-      alert(`Inscription demandée pour "${race.name}"`);
+      console.log(`Tentative d'inscription à la course ${raceIdToUse}`);
+
+      const response = await fetch(`${API_URL}/race/${raceIdToUse}/join`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+      });
+
+      if (response.ok) {
+        // Mettre à jour uniquement la liste des runners sans recharger toute la course
+        // Cela évite de déclencher le useEffect du WebSocket
+        const raceResponse = await fetch(`${API_URL}/race/${raceIdToUse}`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+        });
+
+        if (raceResponse.ok) {
+          const raceData = await raceResponse.json();
+          // Mettre à jour uniquement les runners SANS créer un nouvel objet race
+          // Cela évite de déclencher le useEffect du WebSocket
+          const userId = user?._id;
+          const userIsRunner = raceData.runners?.some(
+            (runner: any) => (runner._id || runner.id) === userId
+          ) || false;
+          setIsRunner(userIsRunner);
+          
+          // Mettre à jour race de manière optimisée
+          setRace(prevRace => {
+            if (!prevRace) return prevRace;
+            // Ne mettre à jour que si les runners ont vraiment changé
+            const runnersChanged = JSON.stringify(prevRace.runners) !== JSON.stringify(raceData.runners);
+            if (!runnersChanged) return prevRace;
+            
+            return {
+              ...prevRace,
+              runners: raceData.runners,
+              participants: raceData.runners?.length || 0,
+            };
+          });
+          console.log("✅ Inscription réussie, statut mis à jour");
+        }
+      } else {
+        const errorText = await response.text();
+        alert(`Erreur: ${errorText}`);
+      }
     } catch (error) {
       console.error("Erreur lors de l'inscription:", error);
       alert("Erreur lors de l'inscription à la course");
+    } finally {
+      setIsJoiningRace(false);
     }
   };
 
@@ -1043,6 +1106,7 @@ export default function RaceDetailsScreen() {
               style={isRunner ? styles.leaveButton : styles.joinButton}
               onPress={isRunner ? handleLeaveRace : handleJoinRace}
               activeOpacity={0.8}
+              disabled={isJoiningRace}
             >
               <BlurView
                 style={styles.joinButtonBlur}
@@ -1050,7 +1114,7 @@ export default function RaceDetailsScreen() {
                 tint="dark"
               >
                 <Text style={styles.joinButtonText}>
-                  {isRunner ? 'QUITTER' : 'REJOINDRE'}
+                  {isJoiningRace ? 'INSCRIPTION...' : (isRunner ? 'QUITTER' : 'REJOINDRE')}
                 </Text>
               </BlurView>
             </TouchableOpacity>

@@ -3,7 +3,7 @@ import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { BlurView } from "expo-blur";
 import * as Location from "expo-location";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -67,6 +67,16 @@ export default function RaceDetailsScreen() {
   const [runnerPositions, setRunnerPositions] = useState<Map<string, { lon: number; lat: number; alt: number }>>(new Map());
   const [rankings, setRankings] = useState<{ userId: string; progress: number; rank: number }[]>([]);
   const [isRunner, setIsRunner] = useState(false);
+  const [isRankingExpanded, setIsRankingExpanded] = useState(true); // Par défaut, le classement est déplié
+
+  // Surveiller les changements de rankings pour debug
+  useEffect(() => {
+    console.log('📊 [Ranking] État rankings mis à jour:', rankings);
+    console.log('📊 [Ranking] Nombre de coureurs:', rankings.length);
+    if (rankings.length > 0) {
+      console.log('📊 [Ranking] Top 3:', rankings.slice(0, 3));
+    }
+  }, [rankings]);
 
   // Mettre à jour l'heure actuelle chaque seconde pour le compte à rebours
   useEffect(() => {
@@ -185,138 +195,143 @@ export default function RaceDetailsScreen() {
 
   // NOUVEAU useEffect pour initialiser le WebSocket
   useEffect(() => {
-    console.log('🔍 [WebSocket Init] Démarrage...');
-    console.log('🔍 [WebSocket Init] race:', race ? 'OK' : 'NULL');
-    console.log('🔍 [WebSocket Init] raceId:', raceId);
-    console.log('🔍 [WebSocket Init] user:', user);
-    
-    if (!race || !raceId) {
-      console.warn('⚠️ [WebSocket Init] Pas de race ou raceId, sortie');
-      return;
-    }
+    if (!race || !raceId) return;
 
     const raceIdToUse = race._id || race.id;
-    console.log('🔍 [WebSocket Init] raceIdToUse:', raceIdToUse);
-    
-    if (!raceIdToUse) {
-      console.warn('⚠️ [WebSocket Init] Pas de raceIdToUse, sortie');
-      return;
-    }
+    if (!raceIdToUse) return;
 
     // Vérifier si l'utilisateur est un coureur
     const userId = user?._id;
-    console.log('🔍 [WebSocket Init] userId:', userId);
-    console.log('🔍 [WebSocket Init] runners:', race.runners);
-    
     const userIsRunner = race.runners?.some(
-      (runner: any) => {
-        const runnerId = runner._id || runner.id;
-        console.log('🔍 [WebSocket Init] Comparaison runner:', runnerId, 'avec user:', userId);
-        return runnerId === userId;
-      }
+      (runner: any) => (runner._id || runner.id) === userId
     ) || false;
     
-    console.log('🏃 [WebSocket Init] isRunner:', userIsRunner);
-    console.log('🏃 [WebSocket Init] token présent:', !!token);
     setIsRunner(userIsRunner);
 
     const WS_API_URL = "http://mint-dev-ws.charles-chrismann.fr";
     let newSocket: Socket;
 
-    console.log('🔍 [WebSocket Init] Vérification: userIsRunner=', userIsRunner, ', token=', !!token);
+    console.log('🔌 [WebSocket] Tentative de connexion à:', WS_API_URL);
+    console.log('🔌 [WebSocket] Mode:', userIsRunner && token ? 'COUREUR (avec JWT)' : 'SPECTATEUR (sans auth)');
 
-    if (userIsRunner && token) {
-      console.log('🔑 [WebSocket Init] ✅ Connexion en tant que COUREUR avec JWT utilisateur');
+    // TEST TEMPORAIRE : Forcer la connexion sans auth pour diagnostiquer
+    const FORCE_NO_AUTH = false; // Mettre à true pour tester sans JWT
+    
+    if (userIsRunner && token && !FORCE_NO_AUTH) {
       const cleanToken = token.startsWith("Bearer ") ? token.replace("Bearer ", "") : token;
-      console.log('🔑 [WebSocket Init] JWT (20 premiers chars):', cleanToken.substring(0, 20) + '...');
+      console.log('🔑 [WebSocket] JWT présent:', cleanToken.substring(0, 20) + '...');
       
-      // Pour un coureur : connexion avec le JWT utilisateur (qui contient userId)
-      // IMPORTANT: Ne pas utiliser SIGNATURE_SECRET ici, c'est uniquement pour POST /races
       newSocket = io(WS_API_URL, {
-        auth: { token: cleanToken }, // JWT sans "Bearer "
-        transports: ['websocket', 'polling'],
+        auth: { token: cleanToken },
+        transports: ['polling', 'websocket'], // Essayer polling en premier
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
-        timeout: 10000,
+        timeout: 20000, // Augmenter le timeout
       });
-      console.log('🔑 [WebSocket Init] Socket créé avec JWT utilisateur');
     } else {
-      console.log('👁️ [WebSocket Init] ⚠️ Connexion en tant que SPECTATEUR (sans auth)');
-      // Pour un spectateur : connexion sans auth
+      if (FORCE_NO_AUTH) console.warn('⚠️ [WebSocket] MODE TEST : Connexion sans auth forcée');
+      else console.log('👁️ [WebSocket] Connexion sans authentification');
+      
       newSocket = io(WS_API_URL, {
-        transports: ['websocket', 'polling'],
+        transports: ['polling', 'websocket'], // Essayer polling en premier
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
-        timeout: 10000,
+        timeout: 20000, // Augmenter le timeout
       });
-      console.log('👁️ [WebSocket Init] Socket créé sans auth');
     }
 
-    console.log('🔌 [WebSocket Init] Tentative de connexion à:', WS_API_URL);
-
-    // Écouter les mises à jour de positions et rankings (pour spectateurs)
-    newSocket.on('positions', (updateData: { positions: [string, number, number, number][], rankings: [string, number][] }) => {
-      console.log('📍 [WebSocket] Positions reçues:', updateData);
-      const { positions, rankings: rankingsData } = updateData;
-      console.log('📍 [WebSocket] Nombre de coureurs:', positions.length);
-      console.log('🏆 [WebSocket] Rankings:', rankingsData);
+    // Écouter les mises à jour de positions et rankings
+    newSocket.on('positions', (updateData: { positions: [string, number, number, number][], ranking: [string, number][] }) => {
+      console.log('📊 [Ranking] Données reçues du WebSocket:', JSON.stringify(updateData, null, 2));
+      
+      // Le serveur envoie "ranking" (sans 's'), pas "rankings"
+      const { positions, ranking: rankingsData } = updateData;
+      
+      console.log('📍 [Position] Nombre de positions:', positions?.length || 0);
+      console.log('🏆 [Ranking] Données de ranking brutes:', rankingsData);
+      console.log('🏆 [Ranking] Nombre de coureurs classés:', rankingsData?.length || 0);
       
       // Mettre à jour les positions (en conservant les anciennes)
       setRunnerPositions(prevPositions => {
-        const updatedPositions = new Map(prevPositions); // Copier les positions existantes
+        const updatedPositions = new Map(prevPositions);
         positions.forEach(([userId, lon, lat, alt]) => {
-          updatedPositions.set(userId, { lon, lat, alt }); // Mettre à jour ou ajouter
+          updatedPositions.set(userId, { lon, lat, alt });
         });
-        console.log('📍 [WebSocket] Total coureurs visibles:', updatedPositions.size);
         return updatedPositions;
       });
 
       // Mettre à jour le ranking
-      const newRankings = rankingsData.map(([userId, progress], index) => ({
-        userId,
-        progress,
-        rank: index + 1
-      }));
-      setRankings(newRankings);
+      if (rankingsData && rankingsData.length > 0) {
+        const newRankings = rankingsData.map(([userId, progress], index) => ({
+          userId,
+          progress,
+          rank: index + 1
+        }));
+        console.log('✅ [Ranking] Nouveau classement calculé:', newRankings);
+        setRankings(newRankings);
+      } else {
+        console.warn('⚠️ [Ranking] Aucune donnée de ranking dans la réponse');
+        // Si pas de rankings mais des positions, on peut créer un classement basique
+        if (positions && positions.length > 0) {
+          console.log('⚠️ [Ranking] Pas de ranking du serveur, calcul basé sur les positions');
+          const fallbackRankings = positions.map(([userId], index) => ({
+            userId,
+            progress: 0, // On ne peut pas calculer la progression sans le GPX
+            rank: index + 1
+          }));
+          setRankings(fallbackRankings);
+        } else {
+          setRankings([]);
+        }
+      }
     });
 
     newSocket.on('connect', () => {
-      console.log('✅ [WebSocket] Connecté au WebSocket');
+      console.log('✅ [WebSocket] Connecté au serveur');
       console.log('✅ [WebSocket] Socket ID:', newSocket.id);
-      console.log('✅ [WebSocket] Transport:', newSocket.io.engine.transport.name);
+      console.log('✅ [WebSocket] Transport utilisé:', newSocket.io.engine.transport.name);
+      console.log('🏁 [WebSocket] Rejoindre la course:', raceIdToUse);
+      newSocket.emit('join-race', raceIdToUse);
+      console.log('✅ [WebSocket] Événement join-race émis');
     });
 
-    newSocket.on('connecting', () => {
-      console.log('🔄 [WebSocket] Connexion en cours...');
+    // Écouter tous les événements pour debug
+    newSocket.onAny((eventName, ...args) => {
+      console.log(`📡 [WebSocket] Événement reçu: ${eventName}`, args);
     });
 
-    newSocket.on('connect_error', (error) => {
-      console.error('❌ [WebSocket] Erreur de connexion:', error);
-      console.error('❌ [WebSocket] Message:', error.message);
-      console.error('❌ [WebSocket] Details:', JSON.stringify(error));
+    newSocket.on('connect_error', (error: any) => {
+      console.error('❌ [WebSocket] Erreur de connexion:', error.message);
+      console.error('❌ [WebSocket] Détails complets:', JSON.stringify(error, null, 2));
+      
+      // Si c'est un problème d'auth, essayer de se reconnecter sans auth
+      if (error.message === 'Unauthorized' || error.message.includes('websocket error')) {
+        console.warn('⚠️ [WebSocket] Le serveur rejette la connexion. Vérifiez le JWT_SECRET.');
+      }
     });
 
     newSocket.on('disconnect', (reason) => {
-      console.log('❌ [WebSocket] Déconnecté du WebSocket');
-      console.log('❌ [WebSocket] Raison:', reason);
+      console.log('❌ [WebSocket] Déconnecté:', reason);
+      if (reason === 'io server disconnect') {
+        console.warn('⚠️ [WebSocket] Le serveur a fermé la connexion');
+      } else if (reason === 'transport error') {
+        console.error('⚠️ [WebSocket] Erreur de transport - le serveur est-il accessible ?');
+      }
     });
 
-    newSocket.on('error', (error) => {
-      console.error('❌ [WebSocket] Erreur:', error);
+    newSocket.io.on('error', (error) => {
+      console.error('❌ [WebSocket] Erreur du moteur:', error);
     });
 
-    newSocket.on('reconnect_attempt', (attemptNumber) => {
-      console.log('🔄 [WebSocket] Tentative de reconnexion #', attemptNumber);
+    newSocket.io.on('reconnect_attempt', (attemptNumber) => {
+      console.log(`🔄 [WebSocket] Tentative de reconnexion #${attemptNumber}`);
     });
 
-    newSocket.on('reconnect_error', (error) => {
-      console.error('❌ [WebSocket] Erreur de reconnexion:', error);
-    });
-
-    newSocket.on('reconnect_failed', () => {
-      console.error('❌ [WebSocket] Échec de reconnexion après plusieurs tentatives');
+    newSocket.io.on('reconnect_failed', () => {
+      console.error('❌ [WebSocket] Toutes les tentatives de reconnexion ont échoué');
+      console.error('💡 [WebSocket] Le serveur http://mint-dev-ws.charles-chrismann.fr est-il en ligne ?');
     });
 
     setSocket(newSocket);
@@ -328,91 +343,50 @@ export default function RaceDetailsScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [race, raceId, user]);
 
+
   // NOUVEAU useEffect pour envoyer la position du coureur
   useEffect(() => {
-    console.log('📍 [Location] Démarrage surveillance position...');
-    console.log('📍 [Location] isRunner:', isRunner);
-    console.log('📍 [Location] socket:', socket ? 'OK' : 'NULL');
-    console.log('📍 [Location] socket.connected:', socket?.connected);
-    console.log('📍 [Location] raceId:', raceId);
-    console.log('📍 [Location] race:', race ? 'OK' : 'NULL');
-    
-    if (!isRunner) {
-      console.log('⚠️ [Location] Pas un coureur, sortie');
-      return;
-    }
-    
-    if (!socket) {
-      console.log('⚠️ [Location] Pas de socket, sortie');
-      return;
-    }
-    
-    if (!raceId || !race) {
-      console.log('⚠️ [Location] Pas de raceId ou race, sortie');
+    if (!isRunner || !socket || !raceId || !race) {
       return;
     }
 
     const raceIdToUse = race._id || race.id;
-    console.log('📍 [Location] raceIdToUse:', raceIdToUse);
-    
-    if (!raceIdToUse) {
-      console.log('⚠️ [Location] Pas de raceIdToUse, sortie');
-      return;
-    }
+    if (!raceIdToUse) return;
 
     let subscription: Location.LocationSubscription | null = null;
 
     // Demander les permissions de localisation
     (async () => {
-      console.log('🔐 [Location] Demande de permissions...');
       const { status } = await Location.requestForegroundPermissionsAsync();
-      console.log('🔐 [Location] Statut permission:', status);
       
       if (status !== 'granted') {
-        console.warn('❌ [Location] Permission de localisation refusée');
+        console.warn('❌ Permission de localisation refusée');
         return;
       }
-
-      console.log('✅ [Location] Permission accordée, démarrage watchPosition...');
 
       // Surveiller la position et l'envoyer au WebSocket
       subscription = await Location.watchPositionAsync(
         {
           accuracy: Location.Accuracy.High,
-          timeInterval: 2000, // Envoyer toutes les 2 secondes
-          distanceInterval: 5, // Ou tous les 5 mètres
+          timeInterval: 2000,
+          distanceInterval: 5,
         },
         (location) => {
-          console.log('📍 [Location] Nouvelle position détectée:', {
-            lat: location.coords.latitude,
-            lon: location.coords.longitude,
-            alt: location.coords.altitude,
-          });
-          
           if (socket && socket.connected) {
-            const positionData = {
+            socket.emit('position', {
               raceId: raceIdToUse,
               position: {
                 lon: location.coords.longitude,
                 lat: location.coords.latitude,
                 alt: location.coords.altitude || 0,
               }
-            };
-            console.log('📤 [Location] Envoi position au WebSocket:', positionData);
-            socket.emit('position', positionData);
-          } else {
-            console.warn('⚠️ [Location] Socket non connecté, position non envoyée');
-            console.log('⚠️ [Location] socket:', socket ? 'existe' : 'null');
-            console.log('⚠️ [Location] socket.connected:', socket?.connected);
+            });
           }
         }
       );
-
-      console.log('✅ [Location] Surveillance position démarrée');
     })();
 
     return () => {
-      console.log('🧹 [Location] Nettoyage surveillance position');
       if (subscription) {
         subscription.remove();
       }
@@ -486,6 +460,39 @@ export default function RaceDetailsScreen() {
       alert("Erreur lors de l'inscription à la course");
     }
   };
+
+    // Fonction pour quitter la course
+    const handleLeaveRace = async () => {
+      if (!race?._id && !race?.id) return;
+  
+      try {
+        const API_URL = process.env.EXPO_PUBLIC_API_URL;
+        const raceIdToUse = race._id || race.id;
+        const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  
+        console.log(`Tentative de désinscription de la course ${raceIdToUse}`);
+  
+        const response = await fetch(`${API_URL}/race/${raceIdToUse}/leave`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+        });
+  
+        if (response.ok) {
+          alert(`Vous avez quitté la course "${race.name}"`);
+          // Recharger les données de la course
+          router.back(); // Ou recharger la page
+        } else {
+          const errorText = await response.text();
+          alert(`Erreur: ${errorText}`);
+        }
+      } catch (error) {
+        console.error("Erreur lors de la désinscription:", error);
+        alert("Erreur lors de la désinscription de la course");
+      }
+    };
 
   // Fonction pour formater la date
   const formatDate = (dateString: string) => {
@@ -572,95 +579,136 @@ export default function RaceDetailsScreen() {
     }
   };
 
-  // Composant pour afficher un participant
-  const ParticipantItem = ({
-    participant,
-    index,
-  }: {
-    participant: any;
-    index: number;
-  }) => (
+  // Fonction de rendu d'un participant (mémorisée)
+  const renderParticipantItem = useCallback(({ item, index }: { item: any; index: number }) => (
     <View style={styles.participantItem}>
       <View style={styles.participantAvatar}>
         <Text style={styles.participantAvatarText}>
-          {participant.firstname?.charAt(0)?.toUpperCase() ||
-            participant.name?.charAt(0)?.toUpperCase() ||
-            participant.email?.charAt(0)?.toUpperCase() ||
+          {item.firstname?.charAt(0)?.toUpperCase() ||
+            item.name?.charAt(0)?.toUpperCase() ||
+            item.email?.charAt(0)?.toUpperCase() ||
             (index + 1).toString()}
         </Text>
       </View>
       <View style={styles.participantInfo}>
         <Text style={styles.participantName}>
-          {participant.firstname && participant.lastname
-            ? `${participant.firstname} ${participant.lastname}`
-            : participant.name ||
-              participant.email ||
+          {item.firstname && item.lastname
+            ? `${item.firstname} ${item.lastname}`
+            : item.name ||
+              item.email ||
               `Participant ${index + 1}`}
         </Text>
-        {participant.email && (
-          <Text style={styles.participantEmail}>{participant.email}</Text>
+        {item.email && (
+          <Text style={styles.participantEmail}>{item.email}</Text>
+        )}
+        {item.progress !== undefined && (
+          <Text style={styles.participantProgress}>
+            {item.progress.toFixed(0)} m parcourus
+          </Text>
         )}
       </View>
       <View style={styles.participantNumber}>
-        <Text style={styles.participantNumberText}>#{index + 1}</Text>
+        <Text style={styles.participantNumberText}>
+          {item.rank ? (
+            item.rank === 1 ? '🥇' : item.rank === 2 ? '🥈' : item.rank === 3 ? '🥉' : `#${item.rank}`
+          ) : (
+            `#${index + 1}`
+          )}
+        </Text>
       </View>
     </View>
+  ), []);
+
+  // Fonction keyExtractor mémorisée
+  const keyExtractor = useCallback((item: any, index: number) => 
+    item._id || item.id || `participant-${index}`, []
   );
 
-  // Composant Modal pour les participants
-  const ParticipantsModal = () => (
-    <Modal
-      visible={showParticipantsModal}
-      animationType="slide"
-      presentationStyle="pageSheet"
-      onRequestClose={() => setShowParticipantsModal(false)}
-    >
-      <View style={styles.modalContainer}>
-        <BlurView style={styles.modalHeader} intensity={40} tint="dark">
-          <View style={styles.modalHeaderContent}>
-            <Text style={styles.modalTitle}>
-              Participants ({race?.runners?.length || 0})
-            </Text>
-            <TouchableOpacity
-              style={styles.modalCloseButton}
-              onPress={() => setShowParticipantsModal(false)}
-            >
-              <Icon name="close" size={24} color="#A1F763" />
-            </TouchableOpacity>
-          </View>
-        </BlurView>
+  // Mémoriser les participants avec leur classement
+  const participants = useMemo(() => {
+    const runners = race?.runners || [];
+    
+    // Si on a des rankings, les ajouter aux participants
+    if (rankings.length > 0) {
+      return runners.map((runner: any) => {
+        const runnerId = runner._id || runner.id;
+        const ranking = rankings.find(r => r.userId === runnerId);
+        return {
+          ...runner,
+          rank: ranking?.rank,
+          progress: ranking?.progress
+        };
+      }).sort((a, b) => {
+        // Trier par rang (si disponible)
+        if (a.rank && b.rank) return a.rank - b.rank;
+        if (a.rank) return -1;
+        if (b.rank) return 1;
+        return 0;
+      });
+    }
+    
+    return runners;
+  }, [race?.runners, rankings]);
 
-        <View style={styles.modalContent}>
-          {!race?.runners || race.runners.length === 0 ? (
-            <View style={styles.emptyParticipants}>
-              <Icon name="account-off" size={60} color="#888" />
-              <Text style={styles.emptyParticipantsText}>
-                Aucun participant
+  // Composant Modal pour les participants (ne se re-render que si nécessaire)
+  const ParticipantsModal = useMemo(() => {
+    if (!showParticipantsModal) return null;
+    
+    return (
+      <Modal
+        visible={true}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowParticipantsModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <BlurView style={styles.modalHeader} intensity={40} tint="dark">
+            <View style={styles.modalHeaderContent}>
+              <Text style={styles.modalTitle}>
+                Participants ({participants.length})
               </Text>
-              <Text style={styles.emptyParticipantsSubText}>
-                Cette course n&apos;a pas encore de participants inscrits.
-              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowParticipantsModal(false)}
+              >
+                <Icon name="close" size={24} color="#A1F763" />
+              </TouchableOpacity>
             </View>
-          ) : (
-            <FlatList
-              data={race.runners}
-              keyExtractor={(item, index) =>
-                item._id || item.id || index.toString()
-              }
-              renderItem={({ item, index }) => (
-                <ParticipantItem participant={item} index={index} />
-              )}
-              showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.participantsList}
-            />
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
+          </BlurView>
 
-  // NOUVELLE fonction pour obtenir le nom d'un coureur depuis son ID
-  const getRunnerName = (userId: string) => {
+          <View style={styles.modalContent}>
+            {participants.length === 0 ? (
+              <View style={styles.emptyParticipants}>
+                <Icon name="account-off" size={60} color="#888" />
+                <Text style={styles.emptyParticipantsText}>
+                  Aucun participant
+                </Text>
+                <Text style={styles.emptyParticipantsSubText}>
+                  Cette course n&apos;a pas encore de participants inscrits.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={participants}
+                keyExtractor={keyExtractor}
+                renderItem={renderParticipantItem}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.participantsList}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={10}
+                updateCellsBatchingPeriod={50}
+                initialNumToRender={10}
+                windowSize={10}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+    );
+  }, [showParticipantsModal, participants, keyExtractor, renderParticipantItem]);
+
+  // NOUVELLE fonction pour obtenir le nom d'un coureur depuis son ID (mémorisée)
+  const getRunnerName = useCallback((userId: string) => {
     const runner = race?.runners?.find((r: any) => (r._id || r.id) === userId);
     if (runner) {
       return runner.firstname && runner.lastname
@@ -668,7 +716,36 @@ export default function RaceDetailsScreen() {
         : runner.email || `Coureur ${userId.substring(0, 8)}`;
     }
     return `Coureur ${userId.substring(0, 8)}`;
-  };
+  }, [race?.runners]);
+
+  // Mémoriser les positions pour éviter de recréer le tableau à chaque render
+  const runnerPositionsArray = useMemo(() => {
+    return Array.from(runnerPositions.entries()).map(([userId, pos]) => ({
+      userId,
+      latitude: pos.lat,
+      longitude: pos.lon,
+    }));
+  }, [runnerPositions]);
+
+  // Fonction de rendu pour le ranking (mémorisée)
+  const renderRankingItem = useCallback(({ item }: { item: { userId: string; progress: number; rank: number } }) => (
+    <View style={styles.rankingItem}>
+      <View style={styles.rankingPosition}>
+        <Text style={styles.rankingPositionText}>
+          {item.rank === 1 ? '🥇' : item.rank === 2 ? '🥈' : item.rank === 3 ? '🥉' : `#${item.rank}`}
+        </Text>
+      </View>
+      <View style={styles.rankingInfo}>
+        <Text style={styles.rankingName}>{getRunnerName(item.userId)}</Text>
+        <Text style={styles.rankingProgress}>
+          {item.progress.toFixed(0)} m parcourus
+        </Text>
+      </View>
+    </View>
+  ), [getRunnerName]);
+
+  // KeyExtractor pour le ranking
+  const rankingKeyExtractor = useCallback((item: { userId: string; progress: number; rank: number }) => item.userId, []);
 
   if (loading) {
     return (
@@ -900,35 +977,46 @@ export default function RaceDetailsScreen() {
       )}
 
       {/* NOUVEAU : Affichage du ranking si disponible */}
-      {rankings.length > 0 && (
+      {rankings.length > 0 ? (
+        <View style={styles.rankingContainer}>
+          <BlurView style={styles.rankingBlur} intensity={40} tint="dark">
+            <TouchableOpacity 
+              style={styles.rankingHeader}
+              onPress={() => setIsRankingExpanded(!isRankingExpanded)}
+              activeOpacity={0.7}
+            >
+              <Icon name="trophy" size={24} color="#A1F763" />
+              <Text style={styles.rankingTitle}>Classement en direct</Text>
+              <Icon 
+                name={isRankingExpanded ? "chevron-up" : "chevron-down"} 
+                size={24} 
+                color="#A1F763" 
+                style={styles.rankingChevron}
+              />
+            </TouchableOpacity>
+            {isRankingExpanded && (
+              <FlatList
+                data={rankings.slice(0, 5)} // Top 5
+                keyExtractor={rankingKeyExtractor}
+                renderItem={renderRankingItem}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={5}
+                initialNumToRender={5}
+              />
+            )}
+          </BlurView>
+        </View>
+      ) : socket && socket.connected ? (
+        // Afficher un message si connecté mais pas de données
         <View style={styles.rankingContainer}>
           <BlurView style={styles.rankingBlur} intensity={40} tint="dark">
             <View style={styles.rankingHeader}>
-              <Icon name="trophy" size={24} color="#A1F763" />
-              <Text style={styles.rankingTitle}>Classement en direct</Text>
+              <Icon name="trophy-outline" size={24} color="#888" />
+              <Text style={[styles.rankingTitle, { color: '#888' }]}>En attente du classement...</Text>
             </View>
-            <FlatList
-              data={rankings.slice(0, 5)} // Top 5
-              keyExtractor={(item) => item.userId}
-              renderItem={({ item, index }) => (
-                <View style={styles.rankingItem}>
-                  <View style={styles.rankingPosition}>
-                    <Text style={styles.rankingPositionText}>
-                      {item.rank === 1 ? '🥇' : item.rank === 2 ? '🥈' : item.rank === 3 ? '🥉' : `#${item.rank}`}
-                    </Text>
-                  </View>
-                  <View style={styles.rankingInfo}>
-                    <Text style={styles.rankingName}>{getRunnerName(item.userId)}</Text>
-                    <Text style={styles.rankingProgress}>
-                      {item.progress.toFixed(0)} m parcourus
-                    </Text>
-                  </View>
-                </View>
-              )}
-            />
           </BlurView>
         </View>
-      )}
+      ) : null}
 
       {/* Carte avec le même style que home */}
       <View style={styles.mapContainer}>
@@ -937,12 +1025,7 @@ export default function RaceDetailsScreen() {
           gpxCoordinates={trackCoordinates}
           region={mapRegion}
           forceTrackCentering={true}
-          // NOUVEAU : Passer les positions des coureurs à la carte
-          runnerPositions={Array.from(runnerPositions.entries()).map(([userId, pos]) => ({
-            userId,
-            latitude: pos.lat,
-            longitude: pos.lon,
-          }))}
+          runnerPositions={runnerPositionsArray}
         />
         <Image
           source={require("@/assets/images/radial-gradient.png")}
@@ -957,8 +1040,8 @@ export default function RaceDetailsScreen() {
           // Interface pour utilisateur connecté : boutons rejoindre et retour
           <View style={styles.mainButtonsContainer}>
             <TouchableOpacity
-              style={styles.joinButton}
-              onPress={handleJoinRace}
+              style={isRunner ? styles.leaveButton : styles.joinButton}
+              onPress={isRunner ? handleLeaveRace : handleJoinRace}
               activeOpacity={0.8}
             >
               <BlurView
@@ -966,7 +1049,9 @@ export default function RaceDetailsScreen() {
                 intensity={40}
                 tint="dark"
               >
-                <Text style={styles.joinButtonText}>REJOINDRE</Text>
+                <Text style={styles.joinButtonText}>
+                  {isRunner ? 'QUITTER' : 'REJOINDRE'}
+                </Text>
               </BlurView>
             </TouchableOpacity>
             <TouchableOpacity
@@ -1005,7 +1090,7 @@ export default function RaceDetailsScreen() {
       </View>
 
       {/* Modal des participants */}
-      <ParticipantsModal />
+      {ParticipantsModal}
     </View>
   );
 }
@@ -1216,6 +1301,25 @@ const styles = StyleSheet.create({
     elevation: 5,
     overflow: "hidden",
   },
+  leaveButton: {
+    backgroundColor: "rgba(255, 107, 107, 0.3)", // Rouge transparent
+    borderRadius: 15,
+    flex: 1,
+    height: 85,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOpacity: 0.2,
+    shadowRadius: 5,
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
+    elevation: 5,
+    overflow: "hidden",
+    borderWidth: 1,
+    borderColor: "rgba(255, 107, 107, 0.5)",
+  },
   joinButtonBlur: {
     borderRadius: 15,
     width: "100%",
@@ -1381,6 +1485,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#888",
   },
+  participantProgress: {
+    fontSize: 12,
+    color: "#A1F763",
+    marginTop: 4,
+    fontWeight: "600",
+  },
   participantNumber: {
     backgroundColor: "rgba(161, 247, 99, 0.1)",
     borderRadius: 8,
@@ -1390,7 +1500,7 @@ const styles = StyleSheet.create({
     borderColor: "rgba(161, 247, 99, 0.3)",
   },
   participantNumberText: {
-    fontSize: 12,
+    fontSize: 16,
     fontWeight: "bold",
     color: "#A1F763",
   },
@@ -1444,10 +1554,10 @@ const styles = StyleSheet.create({
   },
   rankingContainer: {
     position: 'absolute',
-    top: 100,
+    top: 200, // Positionné sous le header (top: 60) et le countdown (top: 140)
     left: 10,
     right: 10,
-    zIndex: 1000,
+    zIndex: 9, // En dessous du header (zIndex: 10) mais au-dessus de la carte
   },
   rankingBlur: {
     borderRadius: 12,
@@ -1458,12 +1568,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 8,
+    paddingVertical: 4,
   },
   rankingTitle: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
     marginLeft: 8,
+    flex: 1,
+  },
+  rankingChevron: {
+    marginLeft: 'auto',
   },
   rankingItem: {
     flexDirection: 'row',

@@ -249,17 +249,21 @@ const Map: React.FC<MapProps> = ({
         ))}
 
         {/* NOUVEAU : Marqueurs pour les positions des coureurs */}
-        {runnerPositions.map((runnerPos) => (
+        {runnerPositions && runnerPositions.length > 0 && runnerPositions.map((runnerPos) => (
           <Marker
             key={runnerPos.userId}
             coordinate={{
               latitude: runnerPos.latitude,
               longitude: runnerPos.longitude,
             }}
-            pinColor="#A1F763"
+            pinColor="#FF6B6B"
+            title={`Coureur ${runnerPos.userId.substring(0, 8)}`}
           >
             <Callout>
-              <Text>Coureur: {runnerPos.userId.substring(0, 8)}</Text>
+              <Text style={{ fontWeight: 'bold' }}>Coureur</Text>
+              <Text>ID: {runnerPos.userId.substring(0, 8)}</Text>
+              <Text>Lat: {runnerPos.latitude.toFixed(6)}</Text>
+              <Text>Lon: {runnerPos.longitude.toFixed(6)}</Text>
             </Callout>
           </Marker>
         ))}

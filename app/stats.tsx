@@ -45,8 +45,12 @@ export default function StatsPage() {
     const fetchCompletedRaces = async () => {
       setLoading(true);
       try {
-        const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
-        const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+        const API_URL =
+          process.env.EXPO_PUBLIC_API_URL ||
+          "https://back-mint-node.vercel.app";
+        const authHeader = token.startsWith("Bearer ")
+          ? token
+          : `Bearer ${token}`;
 
         const response = await fetch(`${API_URL}/race`, {
           method: "GET",
@@ -60,7 +64,7 @@ export default function StatsPage() {
           const data = await response.json();
           const now = new Date();
           const userId = user?._id;
-          
+
           // Filtrer UNIQUEMENT les courses terminées que le coureur connecté a complétées
           const completed = data.filter((race: any) => {
             // 1. La course doit être terminée
@@ -68,26 +72,29 @@ export default function StatsPage() {
             const endDate = new Date(race.endDate);
             const isFinished = endDate < now;
             if (!isFinished) return false;
-            
+
             // 2. L'utilisateur doit être dans les participants
-            const isParticipant = race.runners?.some(
-              (runner: any) => {
-                const runnerId = runner._id || runner.id || runner;
-                return String(runnerId) === String(userId);
-              }
-            );
+            const isParticipant = race.runners?.some((runner: any) => {
+              const runnerId = runner._id || runner.id || runner;
+              return String(runnerId) === String(userId);
+            });
             if (!isParticipant) return false;
-            
+
             // 3. On considère qu'une course est "complétée" si elle est terminée et que l'utilisateur y a participé
             // (Le backend devrait avoir un flag "completed" ou des stats pour confirmer)
             return true;
           });
 
-          console.log(`📊 [Stats] Courses complétées trouvées: ${completed.length}`);
+          console.log(
+            `📊 [Stats] Courses complétées trouvées: ${completed.length}`,
+          );
           setCompletedRaces(completed);
         }
       } catch (error) {
-        console.error("Erreur lors du chargement des courses terminées:", error);
+        console.error(
+          "Erreur lors du chargement des courses terminées:",
+          error,
+        );
       } finally {
         setLoading(false);
       }
@@ -101,8 +108,11 @@ export default function StatsPage() {
     setLoadingStats(true);
     setSelectedRace(raceId);
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
-      const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
+      const API_URL =
+        process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
+      const authHeader = token?.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
 
       // TODO: Remplacer par l'endpoint réel du backend pour les stats
       // Pour l'instant, on simule avec les données de la course
@@ -117,17 +127,17 @@ export default function StatsPage() {
       if (response.ok) {
         const raceData = await response.json();
         const userId = user?._id;
-        
+
         // Vérifier que l'utilisateur connecté a bien participé à cette course
-        const userParticipated = raceData.runners?.some(
-          (runner: any) => {
-            const runnerId = runner._id || runner.id || runner;
-            return String(runnerId) === String(userId);
-          }
-        );
+        const userParticipated = raceData.runners?.some((runner: any) => {
+          const runnerId = runner._id || runner.id || runner;
+          return String(runnerId) === String(userId);
+        });
 
         if (!userParticipated) {
-          console.warn("⚠️ [Stats] L'utilisateur n'a pas participé à cette course");
+          console.warn(
+            "⚠️ [Stats] L'utilisateur n'a pas participé à cette course",
+          );
           setLoadingStats(false);
           return;
         }
@@ -151,21 +161,26 @@ export default function StatsPage() {
               startDate: statsData.startDate || raceData.startDate,
               endDate: statsData.endDate || raceData.endDate,
               finalRank: statsData.finalRank,
-              totalParticipants: statsData.totalParticipants || raceData.runners?.length || 0,
+              totalParticipants:
+                statsData.totalParticipants || raceData.runners?.length || 0,
               totalDistance: statsData.totalDistance,
               progressHistory: statsData.progressHistory || [],
               averageSpeed: statsData.averageSpeed,
               maxSpeed: statsData.maxSpeed,
               minSpeed: statsData.minSpeed,
             };
-            console.log(`✅ [Stats] Stats réelles chargées pour: ${raceData.name}`);
+            console.log(
+              `✅ [Stats] Stats réelles chargées pour: ${raceData.name}`,
+            );
             setRaceStats(stats);
             return;
           }
         } catch (statsError) {
-          console.log("ℹ️ [Stats] Endpoint /stats non disponible, utilisation de données simulées");
+          console.log(
+            "ℹ️ [Stats] Endpoint /stats non disponible, utilisation de données simulées",
+          );
         }
-        
+
         // Sinon, simuler des stats (à remplacer par les vraies stats du backend)
         const stats: RaceStats = {
           raceId: raceData._id || raceData.id,
@@ -177,13 +192,23 @@ export default function StatsPage() {
           totalDistance: 25000, // À récupérer du backend (en mètres)
           progressHistory: [
             { timestamp: raceData.startDate, progress: 0, rank: 1 },
-            { timestamp: new Date(Date.now() - 3600000).toISOString(), progress: 10000, rank: 1 },
-            { timestamp: new Date(Date.now() - 1800000).toISOString(), progress: 20000, rank: 1 },
+            {
+              timestamp: new Date(Date.now() - 3600000).toISOString(),
+              progress: 10000,
+              rank: 1,
+            },
+            {
+              timestamp: new Date(Date.now() - 1800000).toISOString(),
+              progress: 20000,
+              rank: 1,
+            },
             { timestamp: raceData.endDate, progress: 25000, rank: 1 },
           ],
         };
 
-        console.log(`📊 [Stats] Stats simulées chargées pour: ${raceData.name}`);
+        console.log(
+          `📊 [Stats] Stats simulées chargées pour: ${raceData.name}`,
+        );
         setRaceStats(stats);
       }
     } catch (error) {
@@ -195,7 +220,13 @@ export default function StatsPage() {
 
   if (!isPremium) {
     return (
-      <View style={styles.container}>
+      <View style={[styles.container, styles.centerContainer]}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.push("/")}
+        >
+          <Icon name="arrow-left" size={24} color="#fff" />
+        </TouchableOpacity>
         <View style={styles.banner}>
           <Icon name="crown" size={28} color="#fff" />
           <Text style={styles.bannerText}>
@@ -224,9 +255,15 @@ export default function StatsPage() {
 
   if (raceStats) {
     return (
-      <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={styles.scrollContent}
+      >
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => setRaceStats(null)} style={styles.backButton}>
+          <TouchableOpacity
+            onPress={() => setRaceStats(null)}
+            style={styles.backButton}
+          >
             <Icon name="arrow-left" size={24} color="#A1F763" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>{raceStats.raceName}</Text>
@@ -241,7 +278,9 @@ export default function StatsPage() {
           </View>
           <View style={styles.statCard}>
             <Icon name="map-marker-distance" size={32} color="#A1F763" />
-            <Text style={styles.statValue}>{(raceStats.totalDistance / 1000).toFixed(2)} km</Text>
+            <Text style={styles.statValue}>
+              {(raceStats.totalDistance / 1000).toFixed(2)} km
+            </Text>
             <Text style={styles.statLabel}>Distance totale</Text>
           </View>
           <View style={styles.statCard}>
@@ -269,6 +308,12 @@ export default function StatsPage() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => router.push("/")}
+        >
+          <Icon name="arrow-left" size={24} color="#fff" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Statistiques avancées</Text>
         <Icon name="chart-line" size={28} color="#A1F763" />
       </View>
@@ -378,9 +423,7 @@ const RankingChart = ({ data }: { data: RaceStats["progressHistory"] }) => {
                   ]}
                 />
               </View>
-              <Text style={styles.barLabel}>
-                #{d.rank}
-              </Text>
+              <Text style={styles.barLabel}>#{d.rank}</Text>
               <Text style={styles.barTimeLabel}>
                 {new Date(d.timestamp).toLocaleTimeString("fr-FR", {
                   hour: "2-digit",
@@ -400,6 +443,11 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#0f1112",
   },
+  centerContainer: {
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
   scrollContent: {
     padding: 20,
   },
@@ -412,6 +460,8 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+    backgroundColor: "rgba(161, 247, 99, 0.1)",
+    borderRadius: 10,
   },
   headerTitle: {
     fontSize: 24,
@@ -421,13 +471,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   banner: {
-    width: "100%",
+    width: "90%",
     backgroundColor: "#D4AF37",
     borderRadius: 16,
     paddingVertical: 20,
     paddingHorizontal: 18,
     alignItems: "center",
-    margin: 20,
+    marginVertical: 20,
+    alignSelf: "center",
   },
   bannerText: {
     color: "#fff",

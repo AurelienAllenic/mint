@@ -52,7 +52,7 @@ export default function MyRacesPage() {
           leurs courses depuis la section de création de courses.
         </Text>
         <TouchableOpacity
-          style={styles.backButton}
+          style={styles.backButtonRestricted}
           onPress={() => router.back()}
         >
           <Text style={styles.backButtonText}>Retour</Text>
@@ -156,6 +156,12 @@ export default function MyRacesPage() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => router.push("/")}
+      >
+        <Icon name="arrow-left" size={24} color="#fff" />
+      </TouchableOpacity>
       <View style={styles.header}>
         <Text style={styles.title}>Mes Courses</Text>
         <Text style={styles.subtitle}>
@@ -201,9 +207,21 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#222",
   },
+  backButton: {
+    position: "absolute",
+    top: 60,
+    left: 20,
+    width: 40,
+    height: 40,
+    backgroundColor: "#2C2C2C",
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    zIndex: 10,
+  },
   header: {
     padding: 20,
-    paddingTop: 60,
+    paddingTop: 115,
     borderBottomWidth: 1,
     borderBottomColor: "#333",
   },
@@ -250,7 +268,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     opacity: 0.8,
   },
-  backButton: {
+  backButtonRestricted: {
     backgroundColor: "#A1F763",
     paddingVertical: 12,
     paddingHorizontal: 28,

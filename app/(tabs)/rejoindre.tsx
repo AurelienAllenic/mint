@@ -70,7 +70,7 @@ export default function RejoindreScreen() {
   const [mesRaces, setMesRaces] = useState<Race[]>([]);
   const [mesParticipations, setMesParticipations] = useState<Race[]>([]);
   const [activeTab, setActiveTab] = useState<"courses" | "participations">(
-    "courses"
+    user?.role === "coureur" ? "participations" : "courses",
   );
   const scrollY = new Animated.Value(0);
 
@@ -91,7 +91,7 @@ export default function RejoindreScreen() {
   useEffect(() => {
     // Ne charger qu'une seule fois
     if (hasLoadedRaces) return;
-    
+
     const fetchRaces = async () => {
       setLoading(true);
       try {
@@ -209,7 +209,7 @@ export default function RejoindreScreen() {
               });
 
               return isParticipant;
-            }
+            },
           );
 
           // console.log("Mes courses (propriétaire):", mesCourses);
@@ -365,8 +365,8 @@ export default function RejoindreScreen() {
                         statusInfo.status === "ongoing"
                           ? "play-circle"
                           : statusInfo.status === "finished"
-                          ? "check-circle"
-                          : "calendar-start"
+                            ? "check-circle"
+                            : "calendar-start"
                       }
                       size={14}
                       color={statusInfo.color}
@@ -516,7 +516,11 @@ export default function RejoindreScreen() {
         >
           <Icon name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Rejoindre une course</Text>
+        <Text style={styles.headerTitle}>
+          {user?.role === "organisateur"
+            ? "Mes courses"
+            : "Rejoindre une course"}
+        </Text>
         <View style={styles.placeholder} />
       </Animated.View>
 
@@ -535,25 +539,31 @@ export default function RejoindreScreen() {
           showsVerticalScrollIndicator={false}
           onScroll={Animated.event(
             [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: true }
+            { useNativeDriver: true },
           )}
           scrollEventThrottle={16}
         >
           {/* Onglets */}
-          <View style={styles.tabContainer}>
-            <TabButton
-              title="Mes courses"
-              isActive={activeTab === "courses"}
-              onPress={() => setActiveTab("courses")}
-              icon="account-check"
-            />
-            <TabButton
-              title="Mes participations"
-              isActive={activeTab === "participations"}
-              onPress={() => setActiveTab("participations")}
-              icon="run"
-            />
-          </View>
+          {(user?.role === "organisateur" || user?.role === "coureur") && (
+            <View style={styles.tabContainer}>
+              {user?.role === "organisateur" && (
+                <TabButton
+                  title="Mes courses"
+                  isActive={activeTab === "courses"}
+                  onPress={() => setActiveTab("courses")}
+                  icon="account-check"
+                />
+              )}
+              {user?.role === "coureur" && (
+                <TabButton
+                  title="Mes participations"
+                  isActive={activeTab === "participations"}
+                  onPress={() => setActiveTab("participations")}
+                  icon="run"
+                />
+              )}
+            </View>
+          )}
 
           {/* Contenu selon l'onglet actif */}
           <RaceList

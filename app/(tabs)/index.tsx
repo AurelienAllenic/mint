@@ -438,7 +438,9 @@ export default function HomeScreen() {
               style={styles.mainButton}
               onPress={() => router.push("/rejoindre")}
             >
-              <Text style={styles.mainButtonText}>REJOINDRE</Text>
+              <Text style={styles.mainButtonText}>
+                {user?.role === "organisateur" ? "MES COURSES" : "REJOINDRE"}
+              </Text>
             </TouchableOpacity>
           </View>
           {/* <TouchableOpacity

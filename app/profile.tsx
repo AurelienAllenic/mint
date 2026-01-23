@@ -78,21 +78,21 @@ export default function ProfileScreen() {
   const [profileImage, setProfileImage] = useState(user?.profileImage || "");
   const [isLoading, setIsLoading] = useState(false);
 
-  // Mettre à jour les états locaux quand l'utilisateur change
+  // Mettre à jour les états locaux seulement au montage initial
   useEffect(() => {
-    if (user) {
+    if (user && !isEditing) {
       setFirstname(user.firstname || "");
       setLastname(user.lastname || "");
       setEmail(user.email || "");
       setProfileImage(user.profileImage || "");
     }
-  }, [user]);
+  }, [user?._id]); // Seulement quand l'ID utilisateur change (changement d'utilisateur)
 
   const handleSave = async () => {
     if (!token) {
       Alert.alert(
         "Erreur",
-        "Vous devez être connecté pour modifier votre profil"
+        "Vous devez être connecté pour modifier votre profil",
       );
       return;
     }
@@ -125,7 +125,7 @@ export default function ProfileScreen() {
       if (!response.ok) {
         const errorData = await response.json();
         throw new Error(
-          errorData.message || "Erreur lors de la mise à jour du profil"
+          errorData.message || "Erreur lors de la mise à jour du profil",
         );
       }
 
@@ -144,7 +144,7 @@ export default function ProfileScreen() {
       console.error("Erreur lors de la mise à jour du profil:", error);
       Alert.alert(
         "Erreur",
-        error instanceof Error ? error.message : "Une erreur est survenue"
+        error instanceof Error ? error.message : "Une erreur est survenue",
       );
     } finally {
       setIsLoading(false);

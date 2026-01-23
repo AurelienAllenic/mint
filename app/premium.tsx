@@ -17,7 +17,7 @@ import { useAuth } from "../context/auth";
 
 export default function PremiumPage() {
   const router = useRouter();
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
   const [loading, setLoading] = useState(false);
 
@@ -25,6 +25,29 @@ export default function PremiumPage() {
   const STRIPE_PUBLIC_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLIC_KEY!;
 
   const isPremium = usePremiumStatus();
+
+  // Rediriger les organisateurs et les visiteurs
+  if (!user || user.isVisitor || user.role === "organisateur") {
+    return (
+      <View style={styles.container}>
+        <View style={styles.restrictedContainer}>
+          <Icon name="cancel" size={80} color="#FF6B6B" />
+          <Text style={styles.restrictedTitle}>Accès refusé</Text>
+          <Text style={styles.restrictedText}>
+            {user?.role === "organisateur"
+              ? "Cette page est réservée aux coureurs. Les organisateurs n'ont pas accès au plan premium."
+              : "Vous devez être connecté en tant que coureur pour accéder à cette page."}
+          </Text>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => router.back()}
+          >
+            <Text style={styles.backButtonText}>Retour</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   const handleSubscribe = async () => {
     if (!token) {
@@ -148,7 +171,7 @@ export default function PremiumPage() {
           onPress: () => handleCancelSubscription(),
         },
       ],
-      { cancelable: true }
+      { cancelable: true },
     );
   };
 
@@ -484,5 +507,36 @@ const styles = StyleSheet.create({
   },
   ctaButtonDisabled: {
     opacity: 0.6,
+  },
+  restrictedContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
+  },
+  restrictedTitle: {
+    color: "#fff",
+    fontSize: 24,
+    fontWeight: "800",
+    marginTop: 20,
+    marginBottom: 10,
+  },
+  restrictedText: {
+    color: "#fff",
+    fontSize: 16,
+    textAlign: "center",
+    marginBottom: 30,
+    opacity: 0.8,
+  },
+  backButton: {
+    backgroundColor: "#A1F763",
+    paddingVertical: 12,
+    paddingHorizontal: 28,
+    borderRadius: 12,
+  },
+  backButtonText: {
+    color: "#3B3B3B",
+    fontWeight: "900",
+    fontSize: 16,
   },
 });

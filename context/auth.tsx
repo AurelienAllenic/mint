@@ -7,6 +7,7 @@ type User = {
   firstname?: string | null;
   lastname?: string | null;
   profileImage?: string | null;
+  role?: "visitor" | "coureur" | "organisateur";
   isConnected: boolean;
   isVisitor?: boolean;
 } | null;
@@ -23,6 +24,7 @@ type AuthContextType = {
     firstname?: string | null;
     lastname?: string | null;
     profileImage?: string | null;
+    role?: "visitor" | "coureur" | "organisateur";
     isVisitor?: boolean;
   }) => void;
   logout: () => void;
@@ -48,6 +50,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     firstname?: string | null;
     lastname?: string | null;
     profileImage?: string | null;
+    role?: "visitor" | "coureur" | "organisateur";
     isVisitor?: boolean;
   }) => {
     setUser({
@@ -59,6 +62,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       firstname: userData.firstname ?? null,
       lastname: userData.lastname ?? null,
       profileImage: userData.profileImage ?? null,
+      role: userData.role,
       isConnected: true,
       isVisitor: userData.isVisitor || false,
     });
@@ -115,7 +119,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     } catch (error) {
       console.error(
         "Erreur lors du rafraîchissement des données utilisateur:",
-        error
+        error,
       );
     }
   };

@@ -51,6 +51,17 @@ export const loginStyles = StyleSheet.create({
     marginBottom: 10,
     fontFamily: "Montserrat",
   },
+  pickerContainer: {
+    backgroundColor: "#2C2C2C",
+    borderRadius: 10,
+    marginBottom: 10,
+    overflow: "hidden",
+  },
+  picker: {
+    color: "#fff",
+    backgroundColor: "#2C2C2C",
+    fontFamily: "Montserrat",
+  },
   forgotPassword: {
     color: "#fff",
     textDecorationLine: "underline",

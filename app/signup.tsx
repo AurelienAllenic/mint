@@ -3,6 +3,7 @@
 import { router } from "expo-router";
 import { useState } from "react";
 import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { Picker } from "@react-native-picker/picker";
 import { useAuth } from "../context/auth";
 import { loginStyles } from "../style/login.styles";
 
@@ -12,6 +13,7 @@ export default function SignupScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [role, setRole] = useState<"coureur" | "organisateur">("coureur");
   const [error, setError] = useState("");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const { login } = useAuth();
@@ -36,6 +38,7 @@ export default function SignupScreen() {
           firstname: firstname,
           lastname: lastname,
           password: password,
+          role: role,
         }),
         headers: {
           "Content-Type": "application/json",
@@ -105,6 +108,17 @@ export default function SignupScreen() {
           onFocus={() => setFocusedInput("email")}
           onBlur={() => setFocusedInput(null)}
         />
+        <View style={loginStyles.pickerContainer}>
+          <Picker
+            selectedValue={role}
+            onValueChange={(itemValue) => setRole(itemValue as "coureur" | "organisateur")}
+            style={loginStyles.picker}
+            dropdownIconColor="#A1F763"
+          >
+            <Picker.Item label="Coureur" value="coureur" />
+            <Picker.Item label="Organisateur" value="organisateur" />
+          </Picker>
+        </View>
         <TextInput
           style={loginStyles.input}
           placeholder="Mot de passe"

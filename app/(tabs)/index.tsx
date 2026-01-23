@@ -63,7 +63,7 @@ export default function HomeScreen() {
       } catch (error) {
         console.error(
           "Erreur lors du chargement du profil utilisateur:",
-          error
+          error,
         );
       }
     };
@@ -139,7 +139,7 @@ export default function HomeScreen() {
 
   // Calcul de la région centrée sur le tracé sélectionné
   const getRegionFromCoordinates = (
-    coords: { latitude: number; longitude: number }[]
+    coords: { latitude: number; longitude: number }[],
   ) => {
     if (!coords || coords.length === 0) return undefined;
     const latitudes = coords.map((c) => c.latitude);
@@ -173,7 +173,7 @@ export default function HomeScreen() {
   }, [showRaceMenu, raceMenuAnim]);
 
   function calculateDistance(
-    coords: { latitude: number; longitude: number }[]
+    coords: { latitude: number; longitude: number }[],
   ): number {
     if (!coords || coords.length < 2) return 0;
     let total = 0;
@@ -334,7 +334,7 @@ export default function HomeScreen() {
                                       ([lng, lat]: [number, number]) => ({
                                         latitude: lat,
                                         longitude: lng,
-                                      })
+                                      }),
                                     );
                                   } else {
                                     gpxCoordinates = parseGpx(gpxText);
@@ -349,7 +349,7 @@ export default function HomeScreen() {
                                 }
                                 if (gpxCoordinates.length > 200) {
                                   const step = Math.ceil(
-                                    gpxCoordinates.length / 200
+                                    gpxCoordinates.length / 200,
                                   );
                                   gpxCoordinates = gpxCoordinates.filter(
                                     (
@@ -357,11 +357,11 @@ export default function HomeScreen() {
                                         latitude: number;
                                         longitude: number;
                                       },
-                                      i: number
+                                      i: number,
                                     ) =>
                                       i === 0 ||
                                       i === gpxCoordinates.length - 1 ||
-                                      i % step === 0
+                                      i % step === 0,
                                   );
                                 }
                                 // Calculer la distance
@@ -372,7 +372,7 @@ export default function HomeScreen() {
                               if (gpxError || gpxCoordinates.length === 0) {
                                 Alert.alert(
                                   "Erreur",
-                                  "Impossible d'afficher le tracé GPX de cette course."
+                                  "Impossible d'afficher le tracé GPX de cette course.",
                                 );
                                 setSelectedRaceRoute(null);
                               } else {
@@ -381,11 +381,11 @@ export default function HomeScreen() {
                             } catch (e) {
                               console.error(
                                 "Erreur lors du chargement de la course :",
-                                e
+                                e,
                               );
                               Alert.alert(
                                 "Erreur",
-                                "Une erreur est survenue lors de l'affichage de cette course."
+                                "Une erreur est survenue lors de l'affichage de cette course.",
                               );
                               setSelectedRaceRoute(null);
                             } finally {
@@ -420,18 +420,20 @@ export default function HomeScreen() {
         )}
         <View style={styles.container__btns}>
           <View style={styles.mainButtonsContainer}>
-            <TouchableOpacity
-              style={styles.joinButton}
-              onPress={() => router.push("/create-race")}
-            >
-              <BlurView
-                style={styles.joinButtonBlur}
-                intensity={40}
-                tint="dark"
+            {user?.role === "organisateur" && (
+              <TouchableOpacity
+                style={styles.joinButton}
+                onPress={() => router.push("/create-race")}
               >
-                <Text style={styles.joinButtonText}>CRÉER</Text>
-              </BlurView>
-            </TouchableOpacity>
+                <BlurView
+                  style={styles.joinButtonBlur}
+                  intensity={40}
+                  tint="dark"
+                >
+                  <Text style={styles.joinButtonText}>CRÉER</Text>
+                </BlurView>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.mainButton}
               onPress={() => router.push("/rejoindre")}
@@ -460,6 +462,20 @@ export default function HomeScreen() {
                 <Icon name="account-group" size={24} color="#fff" />
               </BlurView>
             </TouchableOpacity>
+            {user?.role === "coureur" && (
+              <TouchableOpacity
+                style={styles.roundButton}
+                onPress={() => router.push("/(tabs)/my-races")}
+              >
+                <BlurView
+                  style={styles.roundButtonBlur}
+                  intensity={40}
+                  tint="dark"
+                >
+                  <Icon name="run-fast" size={24} color="#fff" />
+                </BlurView>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={styles.roundButton}
               onPress={() => router.replace("/stats")}
@@ -472,18 +488,20 @@ export default function HomeScreen() {
                 <Icon name="chart-line" size={24} color="#fff" />
               </BlurView>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.roundButton}
-              onPress={() => router.replace("/premium")}
-            >
-              <BlurView
-                style={styles.roundButtonBlur}
-                intensity={40}
-                tint="dark"
+            {user?.role === "coureur" && (
+              <TouchableOpacity
+                style={styles.roundButton}
+                onPress={() => router.replace("/premium")}
               >
-                <Icon name="crown" size={24} color="#fff" />
-              </BlurView>
-            </TouchableOpacity>
+                <BlurView
+                  style={styles.roundButtonBlur}
+                  intensity={40}
+                  tint="dark"
+                >
+                  <Icon name="crown" size={24} color="#fff" />
+                </BlurView>
+              </TouchableOpacity>
+            )}
 
             {/* <TouchableOpacity style={homeStyles.button} onPress={createOrganisation}>
         <Text style={homeStyles.buttonText}>Créer une organisation</Text>

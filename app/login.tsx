@@ -76,6 +76,7 @@ export default function LoginScreen() {
           firstname: data.userProfile.firstname,
           lastname: data.userProfile.lastname,
           profileImage: data.userProfile.profileImage || data.profileImage,
+          role: data.userProfile.role || data.role,
           _id: userId,
           token: data.access_token,
           isConnected: !isVisitor,
@@ -90,6 +91,7 @@ export default function LoginScreen() {
           lastname: "",
           _id: data.userId || "visitor-id", // Utiliser l'ID depuis la réponse visitor-token
           token: data.access_token || data.token,
+          role: "visitor",
           isConnected: false, // Les invités ne sont pas "connectés" au sens strict
           isVisitor: true,
         });
@@ -101,6 +103,7 @@ export default function LoginScreen() {
           firstname: "Visiteur",
           lastname: "",
           _id: "visitor-id",
+          role: "visitor",
           token: "visitor-token",
           isConnected: false,
           isVisitor: true,

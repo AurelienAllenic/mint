@@ -68,6 +68,29 @@ export default function MyRacesPage() {
       const authHeader = token.startsWith("Bearer ")
         ? token
         : `Bearer ${token}`;
+
+      // Récupérer les invitations en attente : ne pas afficher ces courses dans "Mes courses"
+      let pendingRaceIds: string[] = [];
+      try {
+        const invRes = await fetch(`${API_URL}/invitations/my-invitations`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+        });
+        if (invRes.ok) {
+          const invData = await invRes.json();
+          const invitations = invData.invitations || [];
+          // L'API my-invitations ne renvoie que des invitations pending ; pas de champ status dans la réponse
+          pendingRaceIds = invitations
+            .map((inv: any) => String(inv.race?._id ?? inv.race ?? inv.raceId?._id ?? inv.raceId ?? ""))
+            .filter(Boolean);
+        }
+      } catch (_) {
+        // ignorer si les invitations ne sont pas dispo
+      }
+
       const response = await fetch(`${API_URL}/race/my-races`, {
         method: "GET",
         headers: {
@@ -78,7 +101,11 @@ export default function MyRacesPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setRaces(data.races || []);
+        const allRaces: Race[] = data.races || [];
+        const filtered = allRaces.filter(
+          (race) => !pendingRaceIds.includes(String(race._id))
+        );
+        setRaces(filtered);
       } else {
         console.error("Erreur lors de la récupération des courses");
       }

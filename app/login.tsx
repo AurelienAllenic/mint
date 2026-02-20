@@ -1,19 +1,29 @@
 "use client";
 
-import { useRouter } from "expo-router";
-import { useState } from "react";
-import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
+import { Alert, Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { useAuth } from "../context/auth";
 import { loginStyles } from "../style/login.styles";
 
 export default function LoginScreen() {
-  const [email, setEmail] = useState("aurelien@gmail.com");
+  const { email: emailParam } = useLocalSearchParams<{ 
+    email?: string;
+  }>();
+  const [email, setEmail] = useState(emailParam || "aurelien@gmail.com");
   const [password, setPassword] = useState("aurelien123");
   const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState("");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const { login } = useAuth();
   const router = useRouter();
+
+  // Pré-remplir l'email si fourni dans les paramètres
+  useEffect(() => {
+    if (emailParam && emailParam !== email) {
+      setEmail(emailParam);
+    }
+  }, [emailParam]);
 
   const handleLogin = async (isVisitor: boolean) => {
     try {
@@ -26,7 +36,10 @@ export default function LoginScreen() {
 
         response = await fetch(`${API_URL}/auth/login`, {
           method: "POST",
-          body: JSON.stringify({ email, password }),
+          body: JSON.stringify({
+            email,
+            password,
+          }),
           headers: { "Content-Type": "application/json" },
         });
 
@@ -82,6 +95,7 @@ export default function LoginScreen() {
           isConnected: !isVisitor,
           isVisitor: false,
         });
+        
         router.replace("/");
       } else if (isVisitor && response.ok && data) {
         login({

@@ -52,6 +52,12 @@ export default function RejoindreScreen() {
   const router = useRouter();
   const { token, user } = useAuth();
 
+  // Log à chaque affichage de l'écran (pour vérifier que les logs s'affichent)
+  useEffect(() => {
+    console.log("[Rejoindre] Écran affiché - user.role:", user?.role, "user._id:", user?._id);
+    return () => console.log("[Rejoindre] Écran quitté");
+  }, [user?.role, user?._id]);
+
   // Safe area insets for notches / home indicator
   const insets = useSafeAreaInsets();
   // Reduce the default top inset slightly so the page "starts higher" visually.
@@ -89,14 +95,22 @@ export default function RejoindreScreen() {
   const [hasLoadedRaces, setHasLoadedRaces] = useState(false); // Flag pour éviter les rechargements multiples
 
   useEffect(() => {
+    console.log("[Rejoindre] useEffect chargement - hasLoadedRaces:", hasLoadedRaces);
     // Ne charger qu'une seule fois
-    if (hasLoadedRaces) return;
+    if (hasLoadedRaces) {
+      console.log("[Rejoindre] Chargement déjà fait, skip fetchRaces");
+      return;
+    }
 
     const fetchRaces = async () => {
       setLoading(true);
+      console.log("[Rejoindre] fetchRaces démarré, user.role:", user?.role);
       try {
         const API_URL = process.env.EXPO_PUBLIC_API_URL;
-        if (!API_URL) return;
+        if (!API_URL) {
+          console.log("[Rejoindre] Pas d'API_URL, abandon");
+          return;
+        }
 
         const authHeader = token?.startsWith("Bearer ")
           ? token
@@ -119,6 +133,37 @@ export default function RejoindreScreen() {
 
         // Coureur : récupérer les participations via l'endpoint dédié GET /race/my-races
         if (user?.role === "coureur") {
+          console.log("[Rejoindre/Coureur] Entrée dans le flux coureur (my-races)");
+
+          // Récupérer les invitations pending pour filtrer les courses
+          let pendingInvitationRaceIds: string[] = [];
+          try {
+            const invitationsResponse = await fetch(`${API_URL}/invitations/my-invitations`, {
+              method: "GET",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: authHeader,
+              },
+            });
+            console.log("[Rejoindre/Coureur] Invitations response status:", invitationsResponse.status);
+            if (invitationsResponse.ok) {
+              const invitationsData = await invitationsResponse.json();
+              const allInvitations = invitationsData.invitations || [];
+              console.log("[Rejoindre/Coureur] Invitations brutes:", allInvitations.length, allInvitations);
+              // L'API my-invitations ne renvoie que des invitations pending ; pas de champ status dans la réponse
+              pendingInvitationRaceIds = allInvitations
+                .map((inv: any) => String(inv.race?._id ?? inv.race ?? inv.raceId?._id ?? inv.raceId ?? ""));
+              pendingInvitationRaceIds = pendingInvitationRaceIds.filter(Boolean);
+              console.log("[Rejoindre/Coureur] raceIds avec invitation pending:", pendingInvitationRaceIds);
+            } else {
+              const errText = await invitationsResponse.text();
+              console.log("[Rejoindre/Coureur] Invitations erreur body:", errText);
+            }
+          } catch (invErr) {
+            console.error("[Rejoindre/Coureur] Erreur lors de la récupération des invitations:", invErr);
+            // Continuer même si les invitations ne peuvent pas être récupérées
+          }
+
           const response = await fetch(`${API_URL}/race/my-races`, {
             method: "GET",
             headers: {
@@ -129,7 +174,9 @@ export default function RejoindreScreen() {
           if (response.ok) {
             const data = await response.json();
             const racesList = data.races || [];
-            const formatted = racesList.map((race: any) => ({
+            console.log("[Rejoindre/Coureur] my-races retourné:", racesList.length, "courses, ids:", racesList.map((r: any) => r._id));
+
+            const mapped = racesList.map((race: any) => ({
               _id: race._id,
               id: race._id,
               name: race.name,
@@ -155,6 +202,16 @@ export default function RejoindreScreen() {
               category: "Course",
               image: race.image || getRandomImage(),
             }));
+
+            const formatted = mapped.filter((race: any) => {
+              const raceIdStr = String(race._id ?? race.id ?? "");
+              const isPending = pendingInvitationRaceIds.some((id) => String(id) === raceIdStr);
+              if (isPending) {
+                console.log("[Rejoindre/Coureur] Exclue (pending):", race._id, race.name);
+              }
+              return !isPending;
+            });
+            console.log("[Rejoindre/Coureur] Après filtre pending: affichées", formatted.length, "sur", mapped.length);
             setMesRaces([]);
             setMesParticipations(formatted);
             setHasLoadedRaces(true);
@@ -220,8 +277,42 @@ export default function RejoindreScreen() {
             return isOwner;
           });
 
+          // Récupérer les invitations pending pour filtrer les participations (si coureur)
+          let pendingInvitationRaceIds: string[] = [];
+          if (user?.role === "coureur") {
+            console.log("[Rejoindre/Coureur] Flux organisateur/coureur: récupération invitations pour filtrer participations");
+            try {
+              const invitationsResponse = await fetch(`${API_URL}/invitations/my-invitations`, {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: authHeader,
+                },
+              });
+              console.log("[Rejoindre/Coureur] Invitations (flux /race) status:", invitationsResponse.status);
+              if (invitationsResponse.ok) {
+                const invitationsData = await invitationsResponse.json();
+                const allInv = invitationsData.invitations || [];
+                // L'API my-invitations ne renvoie que des invitations pending
+                pendingInvitationRaceIds = allInv
+                  .map((inv: any) => String(inv.race?._id ?? inv.race ?? inv.raceId?._id ?? inv.raceId ?? ""));
+                pendingInvitationRaceIds = pendingInvitationRaceIds.filter(Boolean);
+                console.log("[Rejoindre/Coureur] Pending raceIds (flux /race):", pendingInvitationRaceIds);
+              }
+            } catch (invErr) {
+              console.error("[Rejoindre/Coureur] Erreur invitations (flux /race):", invErr);
+              // Continuer même si les invitations ne peuvent pas être récupérées
+            }
+          }
+
           const mesParticipationsData = coursesAvecImages.filter(
             (race: any) => {
+              // Exclure les courses avec invitation pending (comparaison en string)
+              const raceIdStr = String(race._id ?? race.id ?? "");
+              if (pendingInvitationRaceIds.some((id) => String(id) === raceIdStr)) {
+                console.log("[Rejoindre/Coureur] Participations: exclue (pending)", race._id, race.name);
+                return false;
+              }
               if (
                 !race.runners ||
                 !Array.isArray(race.runners) ||

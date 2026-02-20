@@ -5,7 +5,7 @@ import { BlurView } from "expo-blur";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -71,7 +71,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [newOrganizationName, setNewOrganizationName] = useState("");
   const [creatingOrganization, setCreatingOrganization] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
-  const [selectedRunners, setSelectedRunners] = useState<string[]>([]);
+  const [runnerEmails, setRunnerEmails] = useState<string>(""); // Champ texte pour les emails
   const [showAddRunners, setShowAddRunners] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [gpxFileUri, setGpxFileUri] = useState<string | null>(
@@ -101,10 +101,19 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const FREE_RUNNERS = 2;
   const PRICE_PER_RUNNER = 1.5;
 
+  // Parser les emails depuis le champ texte (séparés par virgules, points-virgules ou retours à la ligne)
+  const parsedEmails = useMemo(() => {
+    if (!runnerEmails.trim()) return [];
+    return runnerEmails
+      .split(/[,;\n]/)
+      .map((email) => email.trim())
+      .filter((email) => email.length > 0 && email.includes("@"));
+  }, [runnerEmails]);
+
   // CALCULS DE PAIEMENT
-  const extraRunners = Math.max(0, selectedRunners.length - FREE_RUNNERS);
+  const extraRunners = Math.max(0, parsedEmails.length - FREE_RUNNERS);
   const totalPayment = extraRunners * PRICE_PER_RUNNER;
-  const needsPayment = selectedRunners.length > FREE_RUNNERS && !isPaid;
+  const needsPayment = parsedEmails.length > FREE_RUNNERS && !isPaid;
 
   useEffect(() => {
     const loadReferenceData = async () => {
@@ -173,10 +182,10 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
   // Réinitialiser isPaid si on repasse en dessous de 2 coureurs
   useEffect(() => {
-    if (selectedRunners.length <= FREE_RUNNERS) {
+    if (parsedEmails.length <= FREE_RUNNERS) {
       setIsPaid(false);
     }
-  }, [selectedRunners.length]);
+  }, [parsedEmails.length]);
 
   const pickGpxFile = async () => {
     try {
@@ -353,8 +362,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       setPaymentIntentId(piId);
       setIsPaid(true);
 
-      setSelectedRunners((prev) => [...prev]);
-
       Alert.alert(
         "Succès",
         `Paiement de ${totalPayment.toFixed(2)}€ effectué !`
@@ -414,17 +421,33 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         return;
       }
 
-      // Ne envoyer que des coureurs : le back refuse les organisateurs dans runners
-      const runnerIds = selectedRunners.filter((id) =>
-        users.some((u) => (u._id || u.id) === id)
-      );
+      // Parser les emails depuis le champ texte
+      const emails = runnerEmails
+        .split(/[,;\n]/)
+        .map((email) => email.trim())
+        .filter((email) => email.length > 0 && email.includes("@"));
+
+      if (emails.length === 0) {
+        setError("Veuillez saisir au moins un email de participant");
+        setLoading(false);
+        return;
+      }
+
+      // Valider le format des emails
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const invalidEmails = emails.filter((email) => !emailRegex.test(email));
+      if (invalidEmails.length > 0) {
+        setError(`Emails invalides : ${invalidEmails.join(", ")}`);
+        setLoading(false);
+        return;
+      }
 
       const raceData = {
         name: raceName.trim(),
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         organization: selectedOrganization!,
-        runners: runnerIds,
+        runnerEmails: emails, // Envoyer les emails au lieu des IDs
         gpxFile: gpxFileContent || "",
         ...(paymentIntentId ? { paymentIntentId } : {}),
       };
@@ -451,13 +474,15 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
         if (!SIGNATURE_SECRET) {
           console.warn("SIGNATURE_SECRET non défini, l'appel à l'API externe sera ignoré");
-        } else if (raceId && gpxFileContent && selectedRunners.length > 0) {
+        } else if (raceId && gpxFileContent && emails.length > 0) {
+          // Pour l'API WebSocket, on enverra les IDs des runners une fois qu'ils seront ajoutés
+          // Pour l'instant, on peut envoyer un tableau vide ou attendre que le backend renvoie les IDs
           try {
             const wsRaceData = {
               id: raceId,
               startDate: startDate.toISOString(),
               endDate: endDate.toISOString(),
-              runnerIds: selectedRunners,
+              runnerIds: [], // Sera mis à jour par le backend après création des invitations
               gpx: gpxFileContent,
             };
 
@@ -512,7 +537,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         setEndDate(newEndDate);
 
         setSelectedOrganization(null);
-        setSelectedRunners([]);
+        setRunnerEmails(""); // Réinitialiser le champ emails
         setGpxFileUri(null);
         setGpxFileName(null);
         setGpxFileContent(null);
@@ -738,133 +763,36 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                   )}
                 </View>
 
-                {/* Sélection des participants */}
+                {/* Saisie des emails des participants */}
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Participants</Text>
-                  <TouchableOpacity
-                    style={styles.dropdownButton}
-                    onPress={() => setShowUserDropdown(!showUserDropdown)}
-                  >
-                    <Icon name="account-multiple" size={20} color="#A1F763" />
-                    <Text style={styles.dropdownButtonText}>
-                      {selectedRunners.length > 0
-                        ? `${selectedRunners.length} participant(s) sélectionné(s)`
-                        : "Sélectionner des participants"}
-                    </Text>
-                    <Icon
-                      name={showUserDropdown ? "chevron-up" : "chevron-down"}
-                      size={20}
-                      color="#A1F763"
-                    />
-                  </TouchableOpacity>
-
-                  {/* Liste déroulante des utilisateurs */}
-                  {showUserDropdown && (
-                    <View style={styles.dropdownContainer}>
-                      <ScrollView
-                        style={styles.dropdownList}
-                        nestedScrollEnabled={true}
-                      >
-                        {users.length > 0 ? (
-                          users.map((user) => {
-                            const userId = user._id || user.id;
-                            if (!userId) return null;
-                            const isSelected = selectedRunners.includes(userId);
-                            return (
-                              <TouchableOpacity
-                                key={userId}
-                                style={[
-                                  styles.dropdownItem,
-                                  isSelected && styles.dropdownItemSelected,
-                                ]}
-                                onPress={() => {
-                                  if (isSelected) {
-                                    setSelectedRunners((prev) =>
-                                      prev.filter((id) => id !== userId)
-                                    );
-                                  } else {
-                                    setSelectedRunners((prev) => [
-                                      ...prev,
-                                      userId,
-                                    ]);
-                                  }
-                                }}
-                              >
-                                <View style={styles.userInfo}>
-                                  <Text
-                                    style={[
-                                      styles.userEmail,
-                                      isSelected && styles.userEmailSelected,
-                                    ]}
-                                  >
-                                    {user.email}
-                                  </Text>
-                                  {(user.firstname || user.lastname) && (
-                                    <Text
-                                      style={[
-                                        styles.userName,
-                                        isSelected && styles.userNameSelected,
-                                      ]}
-                                    >
-                                      {user.firstname} {user.lastname}
-                                    </Text>
-                                  )}
-                                </View>
-                                {isSelected && (
-                                  <Icon
-                                    name="check"
-                                    size={20}
-                                    color="#A1F763"
-                                  />
-                                )}
-                              </TouchableOpacity>
-                            );
-                          })
-                        ) : (
-                          <Text style={styles.noUsersText}>
-                            Aucun utilisateur disponible
-                          </Text>
-                        )}
-                      </ScrollView>
-                    </View>
-                  )}
-
-                  {/* Affichage des participants sélectionnés */}
-                  {selectedRunners.length > 0 && (
-                    <View style={styles.selectedUsersContainer}>
-                      <Text style={styles.selectedUsersLabel}>
-                        Participants sélectionnés :
+                  <Text style={styles.label}>Emails des participants</Text>
+                  <Text style={styles.hintText}>
+                    Saisissez les emails séparés par des virgules, points-virgules ou retours à la ligne
+                  </Text>
+                  <TextInput
+                    style={styles.emailInput}
+                    placeholder="email1@example.com, email2@example.com"
+                    placeholderTextColor="#666"
+                    value={runnerEmails}
+                    onChangeText={setRunnerEmails}
+                    multiline
+                    numberOfLines={4}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textAlignVertical="top"
+                  />
+                  {parsedEmails.length > 0 && (
+                    <View style={styles.emailCountContainer}>
+                      <Icon name="account-multiple" size={16} color="#A1F763" />
+                      <Text style={styles.emailCountText}>
+                        {parsedEmails.length} email(s) détecté(s)
                       </Text>
-                      <View style={styles.selectedUsersList}>
-                        {selectedRunners.map((userId) => {
-                          const user = users.find(
-                            (u) => (u._id || u.id) === userId
-                          );
-                          if (!user) return null;
-                          return (
-                            <View key={userId} style={styles.selectedUserChip}>
-                              <Text style={styles.selectedUserChipText}>
-                                {user.email}
-                              </Text>
-                              <TouchableOpacity
-                                onPress={() => {
-                                  setSelectedRunners((prev) =>
-                                    prev.filter((id) => id !== userId)
-                                  );
-                                }}
-                                style={styles.removeUserButton}
-                              >
-                                <Icon name="close" size={16} color="#3B3B3B" />
-                              </TouchableOpacity>
-                            </View>
-                          );
-                        })}
-                      </View>
                     </View>
                   )}
 
                   {/* SECTION PAIEMENT - Affichée si plus de 2 coureurs */}
-                  {selectedRunners.length > FREE_RUNNERS && (
+                  {parsedEmails.length > FREE_RUNNERS && (
                     <View style={styles.paymentSection}>
                       <View style={styles.paymentInfo}>
                         <Icon name="information" size={20} color="#FFB020" />
@@ -1412,6 +1340,34 @@ const styles = StyleSheet.create({
     color: "#888",
     padding: 20,
     fontStyle: "italic",
+  },
+  hintText: {
+    fontSize: 12,
+    color: "#888",
+    marginBottom: 8,
+    fontStyle: "italic",
+  },
+  emailInput: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    color: "#fff",
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    minHeight: 100,
+    textAlignVertical: "top",
+  },
+  emailCountContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    gap: 8,
+  },
+  emailCountText: {
+    fontSize: 14,
+    color: "#A1F763",
+    fontWeight: "500",
   },
   selectedUsersContainer: {
     marginTop: 12,

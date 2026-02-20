@@ -1,22 +1,32 @@
 "use client";
 
-import { router } from "expo-router";
-import { useState } from "react";
-import { Image, Text, TextInput, TouchableOpacity, View } from "react-native";
+import { useLocalSearchParams, router } from "expo-router";
+import { useState, useEffect } from "react";
+import { Alert, Image, Text, TextInput, TouchableOpacity, View } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import { useAuth } from "../context/auth";
 import { loginStyles } from "../style/login.styles";
 
 export default function SignupScreen() {
+  const { email: emailParam } = useLocalSearchParams<{ 
+    email?: string;
+  }>();
   const [firstname, setFirstname] = useState("");
   const [lastname, setLastname] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(emailParam || "");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<"coureur" | "organisateur">("coureur");
   const [error, setError] = useState("");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const { login } = useAuth();
+
+  // Pré-remplir l'email si fourni dans les paramètres
+  useEffect(() => {
+    if (emailParam && emailParam !== email) {
+      setEmail(emailParam);
+    }
+  }, [emailParam]);
 
   const disabled =
     !firstname ||

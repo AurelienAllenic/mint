@@ -65,8 +65,12 @@ export default function RaceDetailsScreen() {
 
   // NOUVEAUX ÉTATS POUR WEBSOCKET
   const [socket, setSocket] = useState<Socket | null>(null);
-  const [runnerPositions, setRunnerPositions] = useState<Map<string, { lon: number; lat: number; alt: number }>>(new Map());
-  const [rankings, setRankings] = useState<{ userId: string; progress: number; rank: number }[]>([]);
+  const [runnerPositions, setRunnerPositions] = useState<
+    Map<string, { lon: number; lat: number; alt: number }>
+  >(new Map());
+  const [rankings, setRankings] = useState<
+    { userId: string; progress: number; rank: number }[]
+  >([]);
   const [isRunner, setIsRunner] = useState(false);
   const [isRankingExpanded, setIsRankingExpanded] = useState(true); // Par défaut, le classement est déplié
   const [isJoiningRace, setIsJoiningRace] = useState(false); // Flag pour éviter les appels multiples
@@ -94,12 +98,12 @@ export default function RaceDetailsScreen() {
     if (race?._id !== raceId) {
       setHasLoadedRace(false);
     }
-    
+
     const fetchRaceData = async () => {
       if (!raceId) {
         return;
       }
-      
+
       // Ne pas recharger si déjà chargé pour cette course
       if (hasLoadedRace && race?._id === raceId) {
         return;
@@ -155,7 +159,7 @@ export default function RaceDetailsScreen() {
                   const maxPoints = 15;
                   const step = Math.max(
                     1,
-                    Math.floor((coordinates.length - 2) / maxPoints)
+                    Math.floor((coordinates.length - 2) / maxPoints),
                   );
 
                   optimizedCoords = [
@@ -186,7 +190,7 @@ export default function RaceDetailsScreen() {
             } catch (gpxError) {
               console.warn(
                 "Erreur lors du traitement du contenu GPX:",
-                gpxError
+                gpxError,
               );
             }
           } else {
@@ -216,39 +220,49 @@ export default function RaceDetailsScreen() {
 
     // Vérifier si l'utilisateur est un coureur
     const userId = user?._id;
-    const userIsRunner = race.runners?.some(
-      (runner: any) => (runner._id || runner.id) === userId
-    ) || false;
-    
+    const userIsRunner =
+      race.runners?.some(
+        (runner: any) => (runner._id || runner.id) === userId,
+      ) || false;
+
     setIsRunner(userIsRunner);
 
     const WS_API_URL = "http://mint-dev-ws.charles-chrismann.fr";
     let newSocket: Socket;
 
-    console.log('🔌 [WebSocket] Tentative de connexion à:', WS_API_URL);
-    console.log('🔌 [WebSocket] Mode:', userIsRunner && token ? 'COUREUR (avec JWT)' : 'SPECTATEUR (sans auth)');
+    console.log("🔌 [WebSocket] Tentative de connexion à:", WS_API_URL);
+    console.log(
+      "🔌 [WebSocket] Mode:",
+      userIsRunner && token ? "COUREUR (avec JWT)" : "SPECTATEUR (sans auth)",
+    );
 
     // TEST TEMPORAIRE : Forcer la connexion sans auth pour diagnostiquer
     const FORCE_NO_AUTH = false; // Mettre à true pour tester sans JWT
-    
+
     if (userIsRunner && token && !FORCE_NO_AUTH) {
-      const cleanToken = token.startsWith("Bearer ") ? token.replace("Bearer ", "") : token;
-      console.log('🔑 [WebSocket] JWT présent:', cleanToken.substring(0, 20) + '...');
-      
+      const cleanToken = token.startsWith("Bearer ")
+        ? token.replace("Bearer ", "")
+        : token;
+      console.log(
+        "🔑 [WebSocket] JWT présent:",
+        cleanToken.substring(0, 20) + "...",
+      );
+
       newSocket = io(WS_API_URL, {
         auth: { token: cleanToken },
-        transports: ['polling', 'websocket'], // Essayer polling en premier
+        transports: ["polling", "websocket"], // Essayer polling en premier
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
         timeout: 20000, // Augmenter le timeout
       });
     } else {
-      if (FORCE_NO_AUTH) console.warn('⚠️ [WebSocket] MODE TEST : Connexion sans auth forcée');
-      else console.log('👁️ [WebSocket] Connexion sans authentification');
-      
+      if (FORCE_NO_AUTH)
+        console.warn("⚠️ [WebSocket] MODE TEST : Connexion sans auth forcée");
+      else console.log("👁️ [WebSocket] Connexion sans authentification");
+
       newSocket = io(WS_API_URL, {
-        transports: ['polling', 'websocket'], // Essayer polling en premier
+        transports: ["polling", "websocket"], // Essayer polling en premier
         reconnection: true,
         reconnectionAttempts: 5,
         reconnectionDelay: 1000,
@@ -257,126 +271,172 @@ export default function RaceDetailsScreen() {
     }
 
     // Écouter les mises à jour de positions et rankings
-    newSocket.on('positions', (updateData: { positions: [string, number, number, number][], ranking: [string, number][] }) => {
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('📊 [STATS] Données complètes reçues du WebSocket:');
-      console.log(JSON.stringify(updateData, null, 2));
-      console.log('═══════════════════════════════════════════════════════');
-      
-      // Le serveur envoie "ranking" (sans 's'), pas "rankings"
-      const { positions, ranking: rankingsData } = updateData;
-      
-      // ========== STATISTIQUES DES POSITIONS ==========
-      console.log('📍 [STATS] === POSITIONS ===');
-      console.log(`📍 [STATS] Nombre total de positions: ${positions?.length || 0}`);
-      
-      if (positions && positions.length > 0) {
-        positions.forEach(([userId, lon, lat, alt], index) => {
-          const isCurrentUser = userId === user?._id;
-          const prefix = isCurrentUser ? '👤 [STATS] VOUS' : `📍 [STATS] Coureur #${index + 1}`;
-          console.log(`${prefix} - ID: ${userId.substring(0, 8)}...`);
-          console.log(`   📍 Coordonnées: lat=${lat.toFixed(6)}, lon=${lon.toFixed(6)}, alt=${alt.toFixed(2)}m`);
+    newSocket.on(
+      "positions",
+      (updateData: {
+        positions: [string, number, number, number][];
+        ranking: [string, number][];
+      }) => {
+        console.log("═══════════════════════════════════════════════════════");
+        console.log("📊 [STATS] Données complètes reçues du WebSocket:");
+        console.log(JSON.stringify(updateData, null, 2));
+        console.log("═══════════════════════════════════════════════════════");
+
+        // Le serveur envoie "ranking" (sans 's'), pas "rankings"
+        const { positions, ranking: rankingsData } = updateData;
+
+        // ========== STATISTIQUES DES POSITIONS ==========
+        console.log("📍 [STATS] === POSITIONS ===");
+        console.log(
+          `📍 [STATS] Nombre total de positions: ${positions?.length || 0}`,
+        );
+
+        if (positions && positions.length > 0) {
+          positions.forEach(([userId, lon, lat, alt], index) => {
+            const isCurrentUser = userId === user?._id;
+            const prefix = isCurrentUser
+              ? "👤 [STATS] VOUS"
+              : `📍 [STATS] Coureur #${index + 1}`;
+            console.log(`${prefix} - ID: ${userId.substring(0, 8)}...`);
+            console.log(
+              `   📍 Coordonnées: lat=${lat.toFixed(6)}, lon=${lon.toFixed(6)}, alt=${alt.toFixed(2)}m`,
+            );
+          });
+        }
+
+        // ========== STATISTIQUES DU CLASSEMENT ==========
+        console.log("🏆 [STATS] === CLASSEMENT ===");
+        console.log(
+          `🏆 [STATS] Nombre de coureurs classés: ${rankingsData?.length || 0}`,
+        );
+
+        if (rankingsData && rankingsData.length > 0) {
+          rankingsData.forEach(([userId, progress], index) => {
+            const rank = index + 1;
+            const isCurrentUser = userId === user?._id;
+            const prefix = isCurrentUser
+              ? "👤 [STATS] VOUS"
+              : `🏆 [STATS] #${rank}`;
+            const progressKm = (progress / 1000).toFixed(2);
+            const progressM = progress.toFixed(0);
+            const medal =
+              rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "";
+
+            console.log(
+              `${prefix} ${medal} - ID: ${userId.substring(0, 8)}...`,
+            );
+            console.log(`   📏 Progression: ${progressM}m (${progressKm}km)`);
+            console.log(`   🏅 Rang: #${rank}`);
+          });
+
+          // Statistiques globales
+          const totalDistance = rankingsData.reduce(
+            (sum, [, progress]) => sum + progress,
+            0,
+          );
+          const avgDistance = totalDistance / rankingsData.length;
+          const maxDistance = Math.max(
+            ...rankingsData.map(([, progress]) => progress),
+          );
+          const minDistance = Math.min(
+            ...rankingsData.map(([, progress]) => progress),
+          );
+
+          console.log("📊 [STATS] === STATISTIQUES GLOBALES ===");
+          console.log(
+            `📊 [STATS] Distance totale parcourue (tous coureurs): ${(totalDistance / 1000).toFixed(2)}km`,
+          );
+          console.log(
+            `📊 [STATS] Distance moyenne: ${(avgDistance / 1000).toFixed(2)}km`,
+          );
+          console.log(
+            `📊 [STATS] Distance max: ${(maxDistance / 1000).toFixed(2)}km`,
+          );
+          console.log(
+            `📊 [STATS] Distance min: ${(minDistance / 1000).toFixed(2)}km`,
+          );
+
+          // Votre position dans le classement
+          const userRanking = rankingsData.findIndex(
+            ([uid]) => uid === user?._id,
+          );
+          if (userRanking !== -1) {
+            const userRank = userRanking + 1;
+            const userProgress = rankingsData[userRanking][1];
+            console.log("👤 [STATS] === VOTRE STATISTIQUE ===");
+            console.log(`👤 [STATS] Votre rang: #${userRank}`);
+            console.log(
+              `👤 [STATS] Votre progression: ${(userProgress / 1000).toFixed(2)}km (${userProgress.toFixed(0)}m)`,
+            );
+            if (userRank > 1) {
+              const leaderProgress = rankingsData[0][1];
+              const gap = leaderProgress - userProgress;
+              console.log(
+                `👤 [STATS] Écart avec le leader: ${(gap / 1000).toFixed(2)}km (${gap.toFixed(0)}m)`,
+              );
+            }
+          }
+        } else {
+          console.warn("⚠️ [STATS] Aucune donnée de ranking disponible");
+        }
+
+        console.log("═══════════════════════════════════════════════════════");
+
+        // Mettre à jour les positions (en conservant les anciennes)
+        setRunnerPositions((prevPositions) => {
+          const updatedPositions = new Map(prevPositions);
+          positions.forEach(([userId, lon, lat, alt]) => {
+            updatedPositions.set(userId, { lon, lat, alt });
+          });
+          return updatedPositions;
         });
-      }
-      
-      // ========== STATISTIQUES DU CLASSEMENT ==========
-      console.log('🏆 [STATS] === CLASSEMENT ===');
-      console.log(`🏆 [STATS] Nombre de coureurs classés: ${rankingsData?.length || 0}`);
-      
-      if (rankingsData && rankingsData.length > 0) {
-        rankingsData.forEach(([userId, progress], index) => {
-          const rank = index + 1;
-          const isCurrentUser = userId === user?._id;
-          const prefix = isCurrentUser ? '👤 [STATS] VOUS' : `🏆 [STATS] #${rank}`;
-          const progressKm = (progress / 1000).toFixed(2);
-          const progressM = progress.toFixed(0);
-          const medal = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
-          
-          console.log(`${prefix} ${medal} - ID: ${userId.substring(0, 8)}...`);
-          console.log(`   📏 Progression: ${progressM}m (${progressKm}km)`);
-          console.log(`   🏅 Rang: #${rank}`);
-        });
-        
-        // Statistiques globales
-        const totalDistance = rankingsData.reduce((sum, [, progress]) => sum + progress, 0);
-        const avgDistance = totalDistance / rankingsData.length;
-        const maxDistance = Math.max(...rankingsData.map(([, progress]) => progress));
-        const minDistance = Math.min(...rankingsData.map(([, progress]) => progress));
-        
-        console.log('📊 [STATS] === STATISTIQUES GLOBALES ===');
-        console.log(`📊 [STATS] Distance totale parcourue (tous coureurs): ${(totalDistance / 1000).toFixed(2)}km`);
-        console.log(`📊 [STATS] Distance moyenne: ${(avgDistance / 1000).toFixed(2)}km`);
-        console.log(`📊 [STATS] Distance max: ${(maxDistance / 1000).toFixed(2)}km`);
-        console.log(`📊 [STATS] Distance min: ${(minDistance / 1000).toFixed(2)}km`);
-        
-        // Votre position dans le classement
-        const userRanking = rankingsData.findIndex(([uid]) => uid === user?._id);
-        if (userRanking !== -1) {
-          const userRank = userRanking + 1;
-          const userProgress = rankingsData[userRanking][1];
-          console.log('👤 [STATS] === VOTRE STATISTIQUE ===');
-          console.log(`👤 [STATS] Votre rang: #${userRank}`);
-          console.log(`👤 [STATS] Votre progression: ${(userProgress / 1000).toFixed(2)}km (${userProgress.toFixed(0)}m)`);
-          if (userRank > 1) {
-            const leaderProgress = rankingsData[0][1];
-            const gap = leaderProgress - userProgress;
-            console.log(`👤 [STATS] Écart avec le leader: ${(gap / 1000).toFixed(2)}km (${gap.toFixed(0)}m)`);
+
+        // Mettre à jour le ranking
+        if (rankingsData && rankingsData.length > 0) {
+          const newRankings = rankingsData.map(([userId, progress], index) => ({
+            userId,
+            progress,
+            rank: index + 1,
+          }));
+          // console.log('✅ [Ranking] Nouveau classement calculé:', newRankings);
+          setRankings(newRankings);
+        } else {
+          // console.warn('⚠️ [Ranking] Aucune donnée de ranking dans la réponse');
+          // Si pas de rankings mais des positions, on peut créer un classement basique
+          if (positions && positions.length > 0) {
+            // console.log('⚠️ [Ranking] Pas de ranking du serveur, calcul basé sur les positions');
+            const fallbackRankings = positions.map(([userId], index) => ({
+              userId,
+              progress: 0, // On ne peut pas calculer la progression sans le GPX
+              rank: index + 1,
+            }));
+            setRankings(fallbackRankings);
+          } else {
+            setRankings([]);
           }
         }
-      } else {
-        console.warn('⚠️ [STATS] Aucune donnée de ranking disponible');
-      }
-      
-      console.log('═══════════════════════════════════════════════════════');
-      
-      // Mettre à jour les positions (en conservant les anciennes)
-      setRunnerPositions(prevPositions => {
-        const updatedPositions = new Map(prevPositions);
-        positions.forEach(([userId, lon, lat, alt]) => {
-          updatedPositions.set(userId, { lon, lat, alt });
-        });
-        return updatedPositions;
-      });
+      },
+    );
 
-      // Mettre à jour le ranking
-      if (rankingsData && rankingsData.length > 0) {
-        const newRankings = rankingsData.map(([userId, progress], index) => ({
-          userId,
-          progress,
-          rank: index + 1
-        }));
-        // console.log('✅ [Ranking] Nouveau classement calculé:', newRankings);
-        setRankings(newRankings);
-      } else {
-        // console.warn('⚠️ [Ranking] Aucune donnée de ranking dans la réponse');
-        // Si pas de rankings mais des positions, on peut créer un classement basique
-        if (positions && positions.length > 0) {
-          // console.log('⚠️ [Ranking] Pas de ranking du serveur, calcul basé sur les positions');
-          const fallbackRankings = positions.map(([userId], index) => ({
-            userId,
-            progress: 0, // On ne peut pas calculer la progression sans le GPX
-            rank: index + 1
-          }));
-          setRankings(fallbackRankings);
-        } else {
-          setRankings([]);
-        }
-      }
-    });
-
-    newSocket.on('connect', () => {
-      console.log('═══════════════════════════════════════════════════════');
-      console.log('✅ [STATS] === CONNEXION WEBSOCKET ===');
+    newSocket.on("connect", () => {
+      console.log("═══════════════════════════════════════════════════════");
+      console.log("✅ [STATS] === CONNEXION WEBSOCKET ===");
       console.log(`✅ [STATS] Socket ID: ${newSocket.id}`);
-      console.log(`✅ [STATS] Transport utilisé: ${newSocket.io.engine.transport.name}`);
-      console.log(`✅ [STATS] Mode: ${userIsRunner ? 'COUREUR' : 'SPECTATEUR'}`);
+      console.log(
+        `✅ [STATS] Transport utilisé: ${newSocket.io.engine.transport.name}`,
+      );
+      console.log(
+        `✅ [STATS] Mode: ${userIsRunner ? "COUREUR" : "SPECTATEUR"}`,
+      );
       console.log(`✅ [STATS] Course ID: ${raceIdToUse}`);
-      console.log(`✅ [STATS] Nombre de participants: ${race.runners?.length || 0}`);
+      console.log(
+        `✅ [STATS] Nombre de participants: ${race.runners?.length || 0}`,
+      );
       console.log(`✅ [STATS] Timestamp: ${new Date().toISOString()}`);
-      console.log('═══════════════════════════════════════════════════════');
-      
-      newSocket.emit('join-race', raceIdToUse);
-      console.log('✅ [STATS] Événement join-race émis');
+      console.log("═══════════════════════════════════════════════════════");
+
+      newSocket.emit("join-race", raceIdToUse);
+      console.log("✅ [STATS] Événement join-race émis");
     });
 
     // Écouter tous les événements pour debug
@@ -384,47 +444,60 @@ export default function RaceDetailsScreen() {
       console.log(`📡 [WebSocket] Événement reçu: ${eventName}`, args);
     });
 
-    newSocket.on('connect_error', (error: any) => {
-      console.error('❌ [WebSocket] Erreur de connexion:', error.message);
-      console.error('❌ [WebSocket] Détails complets:', JSON.stringify(error, null, 2));
-      
+    newSocket.on("connect_error", (error: any) => {
+      console.error("❌ [WebSocket] Erreur de connexion:", error.message);
+      console.error(
+        "❌ [WebSocket] Détails complets:",
+        JSON.stringify(error, null, 2),
+      );
+
       // Si c'est un problème d'auth, essayer de se reconnecter sans auth
-      if (error.message === 'Unauthorized' || error.message.includes('websocket error')) {
-        console.warn('⚠️ [WebSocket] Le serveur rejette la connexion. Vérifiez le JWT_SECRET.');
+      if (
+        error.message === "Unauthorized" ||
+        error.message.includes("websocket error")
+      ) {
+        console.warn(
+          "⚠️ [WebSocket] Le serveur rejette la connexion. Vérifiez le JWT_SECRET.",
+        );
       }
     });
 
-    newSocket.on('disconnect', (reason) => {
-      console.log('❌ [WebSocket] Déconnecté:', reason);
-      if (reason === 'io server disconnect') {
-        console.warn('⚠️ [WebSocket] Le serveur a fermé la connexion');
-      } else if (reason === 'transport error') {
-        console.error('⚠️ [WebSocket] Erreur de transport - le serveur est-il accessible ?');
+    newSocket.on("disconnect", (reason) => {
+      console.log("❌ [WebSocket] Déconnecté:", reason);
+      if (reason === "io server disconnect") {
+        console.warn("⚠️ [WebSocket] Le serveur a fermé la connexion");
+      } else if (reason === "transport error") {
+        console.error(
+          "⚠️ [WebSocket] Erreur de transport - le serveur est-il accessible ?",
+        );
       }
     });
 
-    newSocket.io.on('error', (error) => {
-      console.error('❌ [WebSocket] Erreur du moteur:', error);
+    newSocket.io.on("error", (error) => {
+      console.error("❌ [WebSocket] Erreur du moteur:", error);
     });
 
-    newSocket.io.on('reconnect_attempt', (attemptNumber) => {
+    newSocket.io.on("reconnect_attempt", (attemptNumber) => {
       console.log(`🔄 [WebSocket] Tentative de reconnexion #${attemptNumber}`);
     });
 
-    newSocket.io.on('reconnect_failed', () => {
-      console.error('❌ [WebSocket] Toutes les tentatives de reconnexion ont échoué');
-      console.error('💡 [WebSocket] Le serveur http://mint-dev-ws.charles-chrismann.fr est-il en ligne ?');
+    newSocket.io.on("reconnect_failed", () => {
+      console.error(
+        "❌ [WebSocket] Toutes les tentatives de reconnexion ont échoué",
+      );
+      console.error(
+        "💡 [WebSocket] Le serveur http://mint-dev-ws.charles-chrismann.fr est-il en ligne ?",
+      );
     });
 
     setSocket(newSocket);
 
     return () => {
-      console.log('🧹 [WebSocket] Nettoyage - déconnexion');
+      console.log("🧹 [WebSocket] Nettoyage - déconnexion");
       newSocket.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [race?._id, race?.id, race?.runners?.length, raceId, user?._id, token]);
-
 
   // NOUVEAU useEffect pour envoyer la position du coureur
   useEffect(() => {
@@ -440,9 +513,9 @@ export default function RaceDetailsScreen() {
     // Demander les permissions de localisation
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      
-      if (status !== 'granted') {
-        console.warn('❌ Permission de localisation refusée');
+
+      if (status !== "granted") {
+        console.warn("❌ Permission de localisation refusée");
         return;
       }
 
@@ -461,31 +534,47 @@ export default function RaceDetailsScreen() {
                 lon: location.coords.longitude,
                 lat: location.coords.latitude,
                 alt: location.coords.altitude || 0,
-              }
+              },
             };
-            
+
             // Logger les statistiques de position envoyées
-            console.log('📤 [STATS] === POSITION ENVOYÉE ===');
+            console.log("📤 [STATS] === POSITION ENVOYÉE ===");
             console.log(`📤 [STATS] Course ID: ${raceIdToUse}`);
-            console.log(`📤 [STATS] Coordonnées: lat=${location.coords.latitude.toFixed(6)}, lon=${location.coords.longitude.toFixed(6)}`);
-            console.log(`📤 [STATS] Altitude: ${(location.coords.altitude || 0).toFixed(2)}m`);
+            console.log(
+              `📤 [STATS] Coordonnées: lat=${location.coords.latitude.toFixed(6)}, lon=${location.coords.longitude.toFixed(6)}`,
+            );
+            console.log(
+              `📤 [STATS] Altitude: ${(location.coords.altitude || 0).toFixed(2)}m`,
+            );
             if (location.coords.accuracy) {
-              console.log(`📤 [STATS] Précision: ±${location.coords.accuracy.toFixed(2)}m`);
+              console.log(
+                `📤 [STATS] Précision: ±${location.coords.accuracy.toFixed(2)}m`,
+              );
             }
             if (location.coords.speed) {
-              console.log(`📤 [STATS] Vitesse: ${(location.coords.speed * 3.6).toFixed(2)}km/h`);
+              console.log(
+                `📤 [STATS] Vitesse: ${(location.coords.speed * 3.6).toFixed(2)}km/h`,
+              );
             }
             if (location.coords.heading) {
-              console.log(`📤 [STATS] Direction: ${location.coords.heading.toFixed(1)}°`);
+              console.log(
+                `📤 [STATS] Direction: ${location.coords.heading.toFixed(1)}°`,
+              );
             }
-            console.log(`📤 [STATS] Timestamp: ${new Date(location.timestamp).toISOString()}`);
-            console.log('═══════════════════════════════════════════════════════');
-            
-            socket.emit('position', positionData);
+            console.log(
+              `📤 [STATS] Timestamp: ${new Date(location.timestamp).toISOString()}`,
+            );
+            console.log(
+              "═══════════════════════════════════════════════════════",
+            );
+
+            socket.emit("position", positionData);
           } else {
-            console.warn('⚠️ [STATS] Socket non connecté, position non envoyée');
+            console.warn(
+              "⚠️ [STATS] Socket non connecté, position non envoyée",
+            );
           }
-        }
+        },
       );
     })();
 
@@ -547,13 +636,16 @@ export default function RaceDetailsScreen() {
 
   // Fonction pour gérer l'inscription à la course
   const handleJoinRace = async () => {
-    if (!race?._id && !race?.id || isJoiningRace) return; // Éviter les appels multiples
+    if ((!race?._id && !race?.id) || isJoiningRace) return; // Éviter les appels multiples
 
     setIsJoiningRace(true);
     try {
-      const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
+      const API_URL =
+        process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
       const raceIdToUse = race._id || race.id;
-      const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
+      const authHeader = token?.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
 
       console.log(`Tentative d'inscription à la course ${raceIdToUse}`);
 
@@ -581,18 +673,21 @@ export default function RaceDetailsScreen() {
           // Mettre à jour uniquement les runners SANS créer un nouvel objet race
           // Cela évite de déclencher le useEffect du WebSocket
           const userId = user?._id;
-          const userIsRunner = raceData.runners?.some(
-            (runner: any) => (runner._id || runner.id) === userId
-          ) || false;
+          const userIsRunner =
+            raceData.runners?.some(
+              (runner: any) => (runner._id || runner.id) === userId,
+            ) || false;
           setIsRunner(userIsRunner);
-          
+
           // Mettre à jour race de manière optimisée
-          setRace(prevRace => {
+          setRace((prevRace) => {
             if (!prevRace) return prevRace;
             // Ne mettre à jour que si les runners ont vraiment changé
-            const runnersChanged = JSON.stringify(prevRace.runners) !== JSON.stringify(raceData.runners);
+            const runnersChanged =
+              JSON.stringify(prevRace.runners) !==
+              JSON.stringify(raceData.runners);
             if (!runnersChanged) return prevRace;
-            
+
             return {
               ...prevRace,
               runners: raceData.runners,
@@ -613,38 +708,40 @@ export default function RaceDetailsScreen() {
     }
   };
 
-    // Fonction pour quitter la course
-    const handleLeaveRace = async () => {
-      if (!race?._id && !race?.id) return;
-  
-      try {
-        const API_URL = process.env.EXPO_PUBLIC_API_URL;
-        const raceIdToUse = race._id || race.id;
-        const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
-  
-        console.log(`Tentative de désinscription de la course ${raceIdToUse}`);
-  
-        const response = await fetch(`${API_URL}/race/${raceIdToUse}/leave`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: authHeader,
-          },
-        });
-  
-        if (response.ok) {
-          alert(`Vous avez quitté la course "${race.name}"`);
-          // Recharger les données de la course
-          router.back(); // Ou recharger la page
-        } else {
-          const errorText = await response.text();
-          alert(`Erreur: ${errorText}`);
-        }
-      } catch (error) {
-        console.error("Erreur lors de la désinscription:", error);
-        alert("Erreur lors de la désinscription de la course");
+  // Fonction pour quitter la course
+  const handleLeaveRace = async () => {
+    if (!race?._id && !race?.id) return;
+
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL;
+      const raceIdToUse = race._id || race.id;
+      const authHeader = token?.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
+
+      console.log(`Tentative de désinscription de la course ${raceIdToUse}`);
+
+      const response = await fetch(`${API_URL}/race/${raceIdToUse}/leave`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+      });
+
+      if (response.ok) {
+        alert(`Vous avez quitté la course "${race.name}"`);
+        // Recharger les données de la course
+        router.back(); // Ou recharger la page
+      } else {
+        const errorText = await response.text();
+        alert(`Erreur: ${errorText}`);
       }
-    };
+    } catch (error) {
+      console.error("Erreur lors de la désinscription:", error);
+      alert("Erreur lors de la désinscription de la course");
+    }
+  };
 
   // Fonction pour formater la date
   const formatDate = (dateString: string) => {
@@ -717,7 +814,7 @@ export default function RaceDetailsScreen() {
 
     const days = Math.floor(timeDiff / (1000 * 60 * 60 * 24));
     const hours = Math.floor(
-      (timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60)
+      (timeDiff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60),
     );
     const minutes = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
     const seconds = Math.floor((timeDiff % (1000 * 60)) / 1000);
@@ -732,80 +829,88 @@ export default function RaceDetailsScreen() {
   };
 
   // Fonction de rendu d'un participant (mémorisée)
-  const renderParticipantItem = useCallback(({ item, index }: { item: any; index: number }) => (
-    <View style={styles.participantItem}>
-      <View style={styles.participantAvatar}>
-        <Text style={styles.participantAvatarText}>
-          {item.firstname?.charAt(0)?.toUpperCase() ||
-            item.name?.charAt(0)?.toUpperCase() ||
-            item.email?.charAt(0)?.toUpperCase() ||
-            (index + 1).toString()}
-        </Text>
-      </View>
-      <View style={styles.participantInfo}>
-        <Text style={styles.participantName}>
-          {item.firstname && item.lastname
-            ? `${item.firstname} ${item.lastname}`
-            : item.name ||
-              item.email ||
-              `Participant ${index + 1}`}
-        </Text>
-        {item.email && (
-          <Text style={styles.participantEmail}>{item.email}</Text>
-        )}
-        {item.progress !== undefined && (
-          <Text style={styles.participantProgress}>
-            {item.progress.toFixed(0)} m parcourus
+  const renderParticipantItem = useCallback(
+    ({ item, index }: { item: any; index: number }) => (
+      <View style={styles.participantItem}>
+        <View style={styles.participantAvatar}>
+          <Text style={styles.participantAvatarText}>
+            {item.firstname?.charAt(0)?.toUpperCase() ||
+              item.name?.charAt(0)?.toUpperCase() ||
+              item.email?.charAt(0)?.toUpperCase() ||
+              (index + 1).toString()}
           </Text>
-        )}
-      </View>
-      <View style={styles.participantNumber}>
-        <Text style={styles.participantNumberText}>
-          {item.rank ? (
-            item.rank === 1 ? '🥇' : item.rank === 2 ? '🥈' : item.rank === 3 ? '🥉' : `#${item.rank}`
-          ) : (
-            `#${index + 1}`
+        </View>
+        <View style={styles.participantInfo}>
+          <Text style={styles.participantName}>
+            {item.firstname && item.lastname
+              ? `${item.firstname} ${item.lastname}`
+              : item.name || item.email || `Participant ${index + 1}`}
+          </Text>
+          {item.email && (
+            <Text style={styles.participantEmail}>{item.email}</Text>
           )}
-        </Text>
+          {item.progress !== undefined && (
+            <Text style={styles.participantProgress}>
+              {item.progress.toFixed(0)} m parcourus
+            </Text>
+          )}
+        </View>
+        <View style={styles.participantNumber}>
+          <Text style={styles.participantNumberText}>
+            {item.rank
+              ? item.rank === 1
+                ? "🥇"
+                : item.rank === 2
+                  ? "🥈"
+                  : item.rank === 3
+                    ? "🥉"
+                    : `#${item.rank}`
+              : `#${index + 1}`}
+          </Text>
+        </View>
       </View>
-    </View>
-  ), []);
+    ),
+    [],
+  );
 
   // Fonction keyExtractor mémorisée
-  const keyExtractor = useCallback((item: any, index: number) => 
-    item._id || item.id || `participant-${index}`, []
+  const keyExtractor = useCallback(
+    (item: any, index: number) => item._id || item.id || `participant-${index}`,
+    [],
   );
 
   // Mémoriser les participants avec leur classement
   const participants = useMemo(() => {
     const runners = race?.runners || [];
-    
+
     // Si on a des rankings, les ajouter aux participants
     if (rankings.length > 0) {
-      return runners.map((runner: any) => {
-        const runnerId = runner._id || runner.id;
-        const ranking = rankings.find(r => r.userId === runnerId);
-        return {
-          ...runner,
-          rank: ranking?.rank,
-          progress: ranking?.progress
-        };
-      }).sort((a, b) => {
-        // Trier par rang (si disponible)
-        if (a.rank && b.rank) return a.rank - b.rank;
-        if (a.rank) return -1;
-        if (b.rank) return 1;
-        return 0;
-      });
+      return runners
+        .map((runner: any) => {
+          const runnerId = runner._id || runner.id;
+          const ranking = rankings.find((r) => r.userId === runnerId);
+          return {
+            ...runner,
+            rank: ranking?.rank,
+            progress: ranking?.progress,
+          };
+        })
+        .sort((a, b) => {
+          // Trier par rang (si disponible)
+          if (a.rank && b.rank) return a.rank - b.rank;
+          if (a.rank) return -1;
+          if (b.rank) return 1;
+          return 0;
+        });
     }
-    
+
     return runners;
   }, [race?.runners, rankings]);
 
   // Composant Modal pour les participants (ne se re-render que si nécessaire)
   const ParticipantsModal = useMemo(() => {
     if (!showParticipantsModal) return null;
-    
+
     return (
       <Modal
         visible={true}
@@ -857,18 +962,28 @@ export default function RaceDetailsScreen() {
         </View>
       </Modal>
     );
-  }, [showParticipantsModal, participants, keyExtractor, renderParticipantItem]);
+  }, [
+    showParticipantsModal,
+    participants,
+    keyExtractor,
+    renderParticipantItem,
+  ]);
 
   // NOUVELLE fonction pour obtenir le nom d'un coureur depuis son ID (mémorisée)
-  const getRunnerName = useCallback((userId: string) => {
-    const runner = race?.runners?.find((r: any) => (r._id || r.id) === userId);
-    if (runner) {
-      return runner.firstname && runner.lastname
-        ? `${runner.firstname} ${runner.lastname}`
-        : runner.email || `Coureur ${userId.substring(0, 8)}`;
-    }
-    return `Coureur ${userId.substring(0, 8)}`;
-  }, [race?.runners]);
+  const getRunnerName = useCallback(
+    (userId: string) => {
+      const runner = race?.runners?.find(
+        (r: any) => (r._id || r.id) === userId,
+      );
+      if (runner) {
+        return runner.firstname && runner.lastname
+          ? `${runner.firstname} ${runner.lastname}`
+          : runner.email || `Coureur ${userId.substring(0, 8)}`;
+      }
+      return `Coureur ${userId.substring(0, 8)}`;
+    },
+    [race?.runners],
+  );
 
   // Mémoriser les positions pour éviter de recréer le tableau à chaque render
   const runnerPositionsArray = useMemo(() => {
@@ -880,24 +995,40 @@ export default function RaceDetailsScreen() {
   }, [runnerPositions]);
 
   // Fonction de rendu pour le ranking (mémorisée)
-  const renderRankingItem = useCallback(({ item }: { item: { userId: string; progress: number; rank: number } }) => (
-    <View style={styles.rankingItem}>
-      <View style={styles.rankingPosition}>
-        <Text style={styles.rankingPositionText}>
-          {item.rank === 1 ? '🥇' : item.rank === 2 ? '🥈' : item.rank === 3 ? '🥉' : `#${item.rank}`}
-        </Text>
+  const renderRankingItem = useCallback(
+    ({
+      item,
+    }: {
+      item: { userId: string; progress: number; rank: number };
+    }) => (
+      <View style={styles.rankingItem}>
+        <View style={styles.rankingPosition}>
+          <Text style={styles.rankingPositionText}>
+            {item.rank === 1
+              ? "🥇"
+              : item.rank === 2
+                ? "🥈"
+                : item.rank === 3
+                  ? "🥉"
+                  : `#${item.rank}`}
+          </Text>
+        </View>
+        <View style={styles.rankingInfo}>
+          <Text style={styles.rankingName}>{getRunnerName(item.userId)}</Text>
+          <Text style={styles.rankingProgress}>
+            {item.progress.toFixed(0)} m parcourus
+          </Text>
+        </View>
       </View>
-      <View style={styles.rankingInfo}>
-        <Text style={styles.rankingName}>{getRunnerName(item.userId)}</Text>
-        <Text style={styles.rankingProgress}>
-          {item.progress.toFixed(0)} m parcourus
-        </Text>
-      </View>
-    </View>
-  ), [getRunnerName]);
+    ),
+    [getRunnerName],
+  );
 
   // KeyExtractor pour le ranking
-  const rankingKeyExtractor = useCallback((item: { userId: string; progress: number; rank: number }) => item.userId, []);
+  const rankingKeyExtractor = useCallback(
+    (item: { userId: string; progress: number; rank: number }) => item.userId,
+    [],
+  );
 
   if (loading) {
     return (
@@ -1018,8 +1149,8 @@ export default function RaceDetailsScreen() {
                           getRaceStatus().status === "ongoing"
                             ? "play"
                             : getRaceStatus().status === "upcoming"
-                            ? "clock-outline"
-                            : "check"
+                              ? "clock-outline"
+                              : "check"
                         }
                         size={24}
                         color="#0F0F0F"
@@ -1055,8 +1186,8 @@ export default function RaceDetailsScreen() {
                         {calculatedDistance > 0
                           ? `${calculatedDistance.toFixed(2)} km`
                           : race?.distance
-                          ? formatDistance(race.distance)
-                          : "Inconnue"}
+                            ? formatDistance(race.distance)
+                            : "Inconnue"}
                       </Text>
                     </View>
                   </View>
@@ -1132,17 +1263,17 @@ export default function RaceDetailsScreen() {
       {rankings.length > 0 ? (
         <View style={styles.rankingContainer}>
           <BlurView style={styles.rankingBlur} intensity={40} tint="dark">
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.rankingHeader}
               onPress={() => setIsRankingExpanded(!isRankingExpanded)}
               activeOpacity={0.7}
             >
               <Icon name="trophy" size={24} color="#A1F763" />
               <Text style={styles.rankingTitle}>Classement en direct</Text>
-              <Icon 
-                name={isRankingExpanded ? "chevron-up" : "chevron-down"} 
-                size={24} 
-                color="#A1F763" 
+              <Icon
+                name={isRankingExpanded ? "chevron-up" : "chevron-down"}
+                size={24}
+                color="#A1F763"
                 style={styles.rankingChevron}
               />
             </TouchableOpacity>
@@ -1164,7 +1295,9 @@ export default function RaceDetailsScreen() {
           <BlurView style={styles.rankingBlur} intensity={40} tint="dark">
             <View style={styles.rankingHeader}>
               <Icon name="trophy-outline" size={24} color="#888" />
-              <Text style={[styles.rankingTitle, { color: '#888' }]}>En attente du classement...</Text>
+              <Text style={[styles.rankingTitle, { color: "#888" }]}>
+                En attente du classement...
+              </Text>
             </View>
           </BlurView>
         </View>
@@ -1203,7 +1336,11 @@ export default function RaceDetailsScreen() {
                 tint="dark"
               >
                 <Text style={styles.joinButtonText}>
-                  {isJoiningRace ? 'INSCRIPTION...' : (isRunner ? 'QUITTER' : 'REJOINDRE')}
+                  {isJoiningRace
+                    ? "INSCRIPTION..."
+                    : isRunner
+                      ? "QUITTER"
+                      : "REJOINDRE"}
                 </Text>
               </BlurView>
             </TouchableOpacity>
@@ -1413,7 +1550,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: "100%",
     height: "100%",
-    zIndex: -1,
+    zIndex: 0,
   },
   radialGradient: {
     position: "absolute",
@@ -1423,6 +1560,7 @@ const styles = StyleSheet.create({
     height: "130%",
     transform: [{ translateX: "-50%" }, { translateY: "-50%" }],
     zIndex: 1,
+    opacity: 0,
     pointerEvents: "none",
   },
   container__btns: {
@@ -1706,7 +1844,7 @@ const styles = StyleSheet.create({
     lineHeight: 16,
   },
   rankingContainer: {
-    position: 'absolute',
+    position: "absolute",
     top: 200, // Positionné sous le header (top: 60) et le countdown (top: 140)
     left: 10,
     right: 10,
@@ -1714,52 +1852,52 @@ const styles = StyleSheet.create({
   },
   rankingBlur: {
     borderRadius: 12,
-    overflow: 'hidden',
+    overflow: "hidden",
     padding: 12,
   },
   rankingHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     marginBottom: 8,
     paddingVertical: 4,
   },
   rankingTitle: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 16,
-    fontWeight: 'bold',
+    fontWeight: "bold",
     marginLeft: 8,
     flex: 1,
   },
   rankingChevron: {
-    marginLeft: 'auto',
+    marginLeft: "auto",
   },
   rankingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     paddingVertical: 8,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
+    borderBottomColor: "rgba(255, 255, 255, 0.1)",
   },
   rankingPosition: {
     width: 40,
-    alignItems: 'center',
+    alignItems: "center",
   },
   rankingPositionText: {
-    color: '#A1F763',
+    color: "#A1F763",
     fontSize: 18,
-    fontWeight: 'bold',
+    fontWeight: "bold",
   },
   rankingInfo: {
     flex: 1,
     marginLeft: 12,
   },
   rankingName: {
-    color: '#fff',
+    color: "#fff",
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: "600",
   },
   rankingProgress: {
-    color: '#888',
+    color: "#888",
     fontSize: 12,
     marginTop: 2,
   },

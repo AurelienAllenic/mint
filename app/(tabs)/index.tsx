@@ -597,7 +597,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     width: "100%",
     height: "100%",
-    zIndex: -1,
+    zIndex: 0,
   },
   radialGradient: {
     position: "absolute",
@@ -607,6 +607,7 @@ const styles = StyleSheet.create({
     height: "130%",
     transform: [{ translateX: "-50%" }, { translateY: "-50%" }],
     zIndex: 1,
+    opacity: 0,
     pointerEvents: "none", // Permet aux interactions de passer à travers
   },
   container__btns: {

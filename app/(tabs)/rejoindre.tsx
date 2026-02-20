@@ -102,6 +102,72 @@ export default function RejoindreScreen() {
           ? token
           : `Bearer ${token}`;
 
+        const trailImages = [
+          "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
+          "https://mesinfos.fr/content/articles/968/A151968/image-827110557111684162009034.png",
+          "https://mesinfos.fr/content/articles/968/A151968/image-317964533121684162009039.png",
+          "https://mesinfos.fr/content/articles/968/A151968/image-496377705131684162009042.png",
+          "https://mesinfos.fr/content/articles/968/A151968/image-729770848141684162009046.png",
+          "https://mesinfos.fr/content/articles/968/A151968/image-973913459151684162009048.png",
+          "https://mesinfos.fr/content/articles/968/A151968/image-555232024161684162009055.png",
+          "https://mesinfos.fr/content/articles/968/A151968/image-216753066181684162009079.png",
+          "https://mesinfos.fr/content/articles/968/A151968/image-219702519171684162009064.png",
+          "https://www.latransju.com/wp-content/uploads/2022/12/cv-lilian-menetrier-transju_trail-2022-dimanche-hd-52-date-jj-min-2048x1365.jpg",
+        ];
+        const getRandomImage = () =>
+          trailImages[Math.floor(Math.random() * trailImages.length)];
+
+        // Coureur : récupérer les participations via l'endpoint dédié GET /race/my-races
+        if (user?.role === "coureur") {
+          const response = await fetch(`${API_URL}/race/my-races`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: authHeader,
+            },
+          });
+          if (response.ok) {
+            const data = await response.json();
+            const racesList = data.races || [];
+            const formatted = racesList.map((race: any) => ({
+              _id: race._id,
+              id: race._id,
+              name: race.name,
+              startDate: race.startDate,
+              endDate: race.endDate,
+              organization: race.organization,
+              runners: [],
+              date: race.date
+                ? new Date(race.date).toLocaleDateString("fr-FR", {
+                    year: "numeric",
+                    month: "long",
+                    day: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                    second: "2-digit",
+                    hour12: false,
+                  })
+                : undefined,
+              dateToDateFormat: race.startDate || race.date,
+              participants: 0,
+              maxParticipants: 100,
+              location: race.location || "Lieu non spécifié",
+              category: "Course",
+              image: race.image || getRandomImage(),
+            }));
+            setMesRaces([]);
+            setMesParticipations(formatted);
+            setHasLoadedRaces(true);
+          } else {
+            const errData = await response.json().catch(() => ({}));
+            console.error("Erreur /race/my-races:", response.status, errData);
+            Alert.alert("Erreur", "Impossible de charger vos participations");
+          }
+          setLoading(false);
+          return;
+        }
+
+        // Organisateur : récupérer toutes les courses puis filtrer
         const response = await fetch(`${API_URL}/race`, {
           method: "GET",
           headers: {
@@ -113,24 +179,8 @@ export default function RejoindreScreen() {
         if (response.ok) {
           const data = await response.json();
 
-          const trailImages = [
-            "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
-            "https://mesinfos.fr/content/articles/968/A151968/image-827110557111684162009034.png",
-            "https://mesinfos.fr/content/articles/968/A151968/image-317964533121684162009039.png",
-            "https://mesinfos.fr/content/articles/968/A151968/image-496377705131684162009042.png",
-            "https://mesinfos.fr/content/articles/968/A151968/image-729770848141684162009046.png",
-            "https://mesinfos.fr/content/articles/968/A151968/image-973913459151684162009048.png",
-            "https://mesinfos.fr/content/articles/968/A151968/image-555232024161684162009055.png",
-            "https://mesinfos.fr/content/articles/968/A151968/image-216753066181684162009079.png",
-            "https://mesinfos.fr/content/articles/968/A151968/image-219702519171684162009064.png",
-            "https://www.latransju.com/wp-content/uploads/2022/12/cv-lilian-menetrier-transju_trail-2022-dimanche-hd-52-date-jj-min-2048x1365.jpg",
-          ];
-
-          const getRandomImage = () => {
-            return trailImages[Math.floor(Math.random() * trailImages.length)];
-          };
-
           // Adapter les données de l'API au format attendu
+          // ⚠️ Ne pas charger gpxFile ici (peut être très volumineux) - sera chargé uniquement dans RaceDetails
           const coursesAvecImages = data.map((race: any) => ({
             _id: race._id,
             id: race._id, // Pour compatibilité
@@ -139,9 +189,8 @@ export default function RejoindreScreen() {
             endDate: race.endDate,
             organization: race.organization,
             runners: race.runners,
-            gpxFile: race.gpxFile,
+            // gpxFile: race.gpxFile, // ❌ Retiré : trop volumineux pour la liste
             owner: race.owner,
-            // Calculer des informations d'affichage
             date: race.startDate
               ? new Date(race.startDate).toLocaleDateString("fr-FR", {
                   year: "numeric",
@@ -155,20 +204,14 @@ export default function RejoindreScreen() {
               : undefined,
             dateToDateFormat: race.startDate,
             participants: race.runners?.length || 0,
-            maxParticipants: 100, // Valeur par défaut
+            maxParticipants: 100,
             location: race.organization?.name || "Lieu non spécifié",
             category: "Course",
             image: race.image || getRandomImage(),
           }));
 
-          // Log des données après mapping
-          if (coursesAvecImages[0]) {
-          }
-
-          // Filtrer les courses selon les critères
           const userId = user?._id;
 
-          // Mes courses : où l'utilisateur est le propriétaire
           const mesCourses = coursesAvecImages.filter((race: any) => {
             const isOwner =
               race.owner?._id === userId ||
@@ -177,16 +220,8 @@ export default function RejoindreScreen() {
             return isOwner;
           });
 
-          // Mes participations : où l'utilisateur est dans le tableau runners
           const mesParticipationsData = coursesAvecImages.filter(
             (race: any) => {
-              // Afficher seulement les _id des runners
-              if (race.runners && Array.isArray(race.runners)) {
-                const runnersIds = race.runners
-                  .map((runner: any) => runner._id)
-                  .filter(Boolean);
-              }
-
               if (
                 !race.runners ||
                 !Array.isArray(race.runners) ||
@@ -194,30 +229,20 @@ export default function RejoindreScreen() {
               ) {
                 return false;
               }
-
               const isParticipant = race.runners.some((runner: any) => {
-                let runnerId = null;
-                if (typeof runner === "object" && runner !== null) {
-                  runnerId = runner._id || runner.id;
-                } else {
-                  runnerId = runner;
-                }
-
-                const userIdStr = String(userId);
-                const runnerIdStr = String(runnerId);
-                return runnerIdStr === userIdStr;
+                const runnerId =
+                  typeof runner === "object" && runner !== null
+                    ? runner._id || runner.id
+                    : runner;
+                return String(runnerId) === String(userId);
               });
-
               return isParticipant;
             },
           );
 
-          // console.log("Mes courses (propriétaire):", mesCourses);
-          // console.log("Mes participations:", mesParticipationsData);
-
           setMesRaces(mesCourses);
           setMesParticipations(mesParticipationsData);
-          setHasLoadedRaces(true); // Marquer comme chargé
+          setHasLoadedRaces(true);
         } else {
           const trailImages = [
             "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",

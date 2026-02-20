@@ -36,6 +36,7 @@ interface User {
   email: string;
   firstname?: string;
   lastname?: string;
+  role?: string;
 }
 
 interface CreateRaceProps {
@@ -150,7 +151,10 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
           if (usersResponse.ok) {
             const usersList = await usersResponse.json();
-            setUsers(usersList);
+            const list = Array.isArray(usersList) ? usersList : [];
+            // Afficher uniquement les coureurs si le back envoie le champ role (évite l'erreur "organisateurs ne peuvent pas rejoindre")
+            const coureursOnly = list.filter((u: User) => u.role === "coureur");
+            setUsers(coureursOnly.length > 0 ? coureursOnly : list);
           } else {
             const errorText = await usersResponse.text();
           }
@@ -410,12 +414,17 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         return;
       }
 
+      // Ne envoyer que des coureurs : le back refuse les organisateurs dans runners
+      const runnerIds = selectedRunners.filter((id) =>
+        users.some((u) => (u._id || u.id) === id)
+      );
+
       const raceData = {
         name: raceName.trim(),
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         organization: selectedOrganization!,
-        runners: selectedRunners,
+        runners: runnerIds,
         gpxFile: gpxFileContent || "",
         ...(paymentIntentId ? { paymentIntentId } : {}),
       };

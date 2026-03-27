@@ -45,6 +45,29 @@ function InnerLayout() {
 
   const showAds = !isPremium && !hideByRoute;
 
+  // Gestion des deep links au démarrage de l'app
+  useEffect(() => {
+    const handleInitialURL = async () => {
+      const initialUrl = await Linking.getInitialURL();
+      if (initialUrl) {
+        console.log("🔗 [DeepLink] URL initiale:", initialUrl);
+        // Expo Router gère automatiquement les deep links, mais on log pour debug
+      }
+    };
+
+    handleInitialURL();
+
+    // Écouter les changements d'URL (quand l'app est déjà ouverte)
+    const subscription = Linking.addEventListener("url", (event) => {
+      console.log("🔗 [DeepLink] URL reçue:", event.url);
+      // Expo Router gère automatiquement les deep links
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
   // Randomly pick one of the two local images on each load when in Expo Go
   const selectedImageName = useMemo(() => {
     const pick = Math.random() < 0.5 ? 0 : 1;

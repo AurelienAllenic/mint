@@ -5,11 +5,14 @@ import { BlurView } from "expo-blur";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+import type { Sponsor } from "@/types/api";
+import { normalizeSponsor } from "@/utils/sponsors";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -19,6 +22,10 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../../context/auth";
+import {
+  mergeUniqueEmails,
+  parseEmailsFromCsv,
+} from "@/utils/parseEmailsFromCsv";
 
 interface RaceDiscipline {
   id: number;
@@ -71,7 +78,8 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [newOrganizationName, setNewOrganizationName] = useState("");
   const [creatingOrganization, setCreatingOrganization] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
-  const [selectedRunners, setSelectedRunners] = useState<string[]>([]);
+  const [runnerEmails, setRunnerEmails] = useState<string>(""); // Champ texte pour les emails
+  const [csvImportName, setCsvImportName] = useState<string | null>(null);
   const [showAddRunners, setShowAddRunners] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [gpxFileUri, setGpxFileUri] = useState<string | null>(
@@ -87,6 +95,15 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
+  const [sponsorsList, setSponsorsList] = useState<Sponsor[]>([]);
+  const [selectedSponsorIds, setSelectedSponsorIds] = useState<string[]>([]);
+  const [showSponsorModal, setShowSponsorModal] = useState(false);
+  const [newSponsorName, setNewSponsorName] = useState("");
+  const [newSponsorImage, setNewSponsorImage] = useState("");
+  const [newSponsorWebsite, setNewSponsorWebsite] = useState("");
+  const [sponsorFormError, setSponsorFormError] = useState<string | null>(null);
+  const [creatingSponsor, setCreatingSponsor] = useState(false);
+
   // NOUVEAUX ÉTATS POUR LE PAIEMENT
   const [isPaid, setIsPaid] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -101,10 +118,19 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const FREE_RUNNERS = 2;
   const PRICE_PER_RUNNER = 1.5;
 
+  // Parser les emails depuis le champ texte (séparés par virgules, points-virgules ou retours à la ligne)
+  const parsedEmails = useMemo(() => {
+    if (!runnerEmails.trim()) return [];
+    return runnerEmails
+      .split(/[,;\n]/)
+      .map((email) => email.trim())
+      .filter((email) => email.length > 0 && email.includes("@"));
+  }, [runnerEmails]);
+
   // CALCULS DE PAIEMENT
-  const extraRunners = Math.max(0, selectedRunners.length - FREE_RUNNERS);
+  const extraRunners = Math.max(0, parsedEmails.length - FREE_RUNNERS);
   const totalPayment = extraRunners * PRICE_PER_RUNNER;
-  const needsPayment = selectedRunners.length > FREE_RUNNERS && !isPaid;
+  const needsPayment = parsedEmails.length > FREE_RUNNERS && !isPaid;
 
   useEffect(() => {
     const loadReferenceData = async () => {
@@ -145,6 +171,22 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         }
 
         try {
+          const sponsorsResponse = await fetch(`${API_URL}/sponsors`, {
+            headers: { Authorization: authHeader },
+          });
+          if (sponsorsResponse.ok) {
+            const raw = await sponsorsResponse.json();
+            const arr = Array.isArray(raw) ? raw : raw.sponsors || [];
+            const parsed = arr
+              .map((s: unknown) => normalizeSponsor(s))
+              .filter((s: Sponsor | null): s is Sponsor => s != null);
+            setSponsorsList(parsed);
+          }
+        } catch (e) {
+          console.log("Erreur chargement sponsors:", e);
+        }
+
+        try {
           const usersResponse = await fetch(`${API_URL}/users`, {
             headers: { Authorization: authHeader },
           });
@@ -173,10 +215,10 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
   // Réinitialiser isPaid si on repasse en dessous de 2 coureurs
   useEffect(() => {
-    if (selectedRunners.length <= FREE_RUNNERS) {
+    if (parsedEmails.length <= FREE_RUNNERS) {
       setIsPaid(false);
     }
-  }, [selectedRunners.length]);
+  }, [parsedEmails.length]);
 
   const pickGpxFile = async () => {
     try {
@@ -247,6 +289,54 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         `Erreur lors de la sélection du fichier GPX: ${
           err instanceof Error ? err.message : String(err)
         }`
+      );
+    }
+  };
+
+  const pickCsvForRunners = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "text/csv",
+          "text/comma-separated-values",
+          "text/plain",
+          "application/vnd.ms-excel",
+          "*/*",
+        ],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const file = result.assets?.[0];
+      if (!file?.uri) {
+        Alert.alert("CSV", "Impossible de lire le fichier sélectionné.");
+        return;
+      }
+
+      const content = await FileSystem.readAsStringAsync(file.uri);
+      const extracted = parseEmailsFromCsv(content);
+
+      if (extracted.length === 0) {
+        Alert.alert(
+          "CSV",
+          "Aucune adresse e-mail valide trouvée. Utilisez une colonne d’e-mails ou un e-mail par ligne."
+        );
+        return;
+      }
+
+      setRunnerEmails((prev) => mergeUniqueEmails(prev, extracted));
+      setCsvImportName(file.name || "import.csv");
+      setError(null);
+      Alert.alert(
+        "Import CSV",
+        `${extracted.length} adresse(s) ajoutée(s) (doublons ignorés).`
+      );
+    } catch (e) {
+      console.error("Erreur import CSV:", e);
+      Alert.alert(
+        "Erreur",
+        e instanceof Error ? e.message : "Impossible d’importer le fichier CSV."
       );
     }
   };
@@ -353,8 +443,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       setPaymentIntentId(piId);
       setIsPaid(true);
 
-      setSelectedRunners((prev) => [...prev]);
-
       Alert.alert(
         "Succès",
         `Paiement de ${totalPayment.toFixed(2)}€ effectué !`
@@ -401,6 +489,77 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
     return true;
   };
 
+  const toggleSponsorSelection = (id: string) => {
+    setSelectedSponsorIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const clearAllSponsors = () => setSelectedSponsorIds([]);
+
+  const createSponsorAccount = async () => {
+    if (!newSponsorName.trim()) {
+      setSponsorFormError("Le nom est requis");
+      return;
+    }
+    if (!token || !API_URL) return;
+    setCreatingSponsor(true);
+    setSponsorFormError(null);
+    try {
+      const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+      const res = await fetch(`${API_URL}/sponsors`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({
+          name: newSponsorName.trim(),
+          ...(newSponsorImage.trim()
+            ? { image: newSponsorImage.trim() }
+            : {}),
+          ...(newSponsorWebsite.trim()
+            ? { websiteUrl: newSponsorWebsite.trim() }
+            : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        setSponsorFormError(
+          typeof data.message === "string"
+            ? data.message
+            : typeof data.error === "string"
+              ? data.error
+              : "Conflit : nom, image ou site déjà utilisé pour ce compte."
+        );
+        return;
+      }
+      if (!res.ok) {
+        setSponsorFormError(
+          typeof data.message === "string"
+            ? data.message
+            : typeof data.error === "string"
+              ? data.error
+              : "Impossible de créer le sponsor"
+        );
+        return;
+      }
+      const created = normalizeSponsor(data);
+      if (created) {
+        setSponsorsList((prev) => [...prev, created]);
+        setSelectedSponsorIds((prev) => [...prev, created.id]);
+      }
+      setNewSponsorName("");
+      setNewSponsorImage("");
+      setNewSponsorWebsite("");
+      setShowSponsorModal(false);
+    } catch {
+      setSponsorFormError("Erreur réseau");
+    } finally {
+      setCreatingSponsor(false);
+    }
+  };
+
   const createRace = async () => {
     if (!validateForm()) return;
 
@@ -414,18 +573,35 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         return;
       }
 
-      // Ne envoyer que des coureurs : le back refuse les organisateurs dans runners
-      const runnerIds = selectedRunners.filter((id) =>
-        users.some((u) => (u._id || u.id) === id)
-      );
+      // Parser les emails depuis le champ texte
+      const emails = runnerEmails
+        .split(/[,;\n]/)
+        .map((email) => email.trim())
+        .filter((email) => email.length > 0 && email.includes("@"));
+
+      if (emails.length === 0) {
+        setError("Veuillez saisir au moins un email de participant");
+        setLoading(false);
+        return;
+      }
+
+      // Valider le format des emails
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      const invalidEmails = emails.filter((email) => !emailRegex.test(email));
+      if (invalidEmails.length > 0) {
+        setError(`Emails invalides : ${invalidEmails.join(", ")}`);
+        setLoading(false);
+        return;
+      }
 
       const raceData = {
         name: raceName.trim(),
         startDate: startDate.toISOString(),
         endDate: endDate.toISOString(),
         organization: selectedOrganization!,
-        runners: runnerIds,
+        runnerEmails: emails, // Envoyer les emails au lieu des IDs
         gpxFile: gpxFileContent || "",
+        sponsors: selectedSponsorIds,
         ...(paymentIntentId ? { paymentIntentId } : {}),
       };
 
@@ -451,13 +627,15 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
         if (!SIGNATURE_SECRET) {
           console.warn("SIGNATURE_SECRET non défini, l'appel à l'API externe sera ignoré");
-        } else if (raceId && gpxFileContent && selectedRunners.length > 0) {
+        } else if (raceId && gpxFileContent && emails.length > 0) {
+          // Pour l'API WebSocket, on enverra les IDs des runners une fois qu'ils seront ajoutés
+          // Pour l'instant, on peut envoyer un tableau vide ou attendre que le backend renvoie les IDs
           try {
             const wsRaceData = {
               id: raceId,
               startDate: startDate.toISOString(),
               endDate: endDate.toISOString(),
-              runnerIds: selectedRunners,
+              runnerIds: [], // Sera mis à jour par le backend après création des invitations
               gpx: gpxFileContent,
             };
 
@@ -512,7 +690,8 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         setEndDate(newEndDate);
 
         setSelectedOrganization(null);
-        setSelectedRunners([]);
+        setRunnerEmails(""); // Réinitialiser le champ emails
+        setCsvImportName(null);
         setGpxFileUri(null);
         setGpxFileName(null);
         setGpxFileContent(null);
@@ -716,6 +895,143 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                   )}
                 </View>
 
+                {/* Sponsors (multi) */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Sponsors (optionnel)</Text>
+                  <Text style={styles.hintText}>
+                    Sélectionnez un ou plusieurs sponsors. Vous pouvez tous les retirer.
+                  </Text>
+                  <View style={styles.sponsorActionsRow}>
+                    <TouchableOpacity
+                      style={styles.addSponsorLink}
+                      onPress={() => {
+                        setSponsorFormError(null);
+                        setShowSponsorModal(true);
+                      }}
+                    >
+                      <Icon name="plus-circle-outline" size={18} color="#A1F763" />
+                      <Text style={styles.addSponsorLinkText}>Nouveau sponsor</Text>
+                    </TouchableOpacity>
+                    {selectedSponsorIds.length > 0 && (
+                      <TouchableOpacity onPress={clearAllSponsors}>
+                        <Text style={styles.clearSponsorsText}>Tout retirer</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.sponsorsChipsScroll}
+                  >
+                    {sponsorsList.map((sp) => {
+                      const selected = selectedSponsorIds.includes(sp.id);
+                      return (
+                        <TouchableOpacity
+                          key={sp.id}
+                          style={[
+                            styles.sponsorChip,
+                            selected && styles.sponsorChipSelected,
+                          ]}
+                          onPress={() => toggleSponsorSelection(sp.id)}
+                          activeOpacity={0.85}
+                        >
+                          {sp.image ? (
+                            <Image
+                              source={{ uri: sp.image }}
+                              style={styles.sponsorChipImage}
+                            />
+                          ) : (
+                            <View style={styles.sponsorChipPlaceholder}>
+                              <Icon name="handshake" size={18} color="#888" />
+                            </View>
+                          )}
+                          <Text
+                            style={[
+                              styles.sponsorChipText,
+                              selected && styles.sponsorChipTextSelected,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {sp.name || sp.id}
+                          </Text>
+                          {selected && (
+                            <Icon name="check" size={16} color="#212121" />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                  {sponsorsList.length === 0 && !loadingData && (
+                    <Text style={styles.hintText}>
+                      Aucun sponsor en base — créez-en un avec « Nouveau sponsor ».
+                    </Text>
+                  )}
+                </View>
+
+                <Modal
+                  visible={showSponsorModal}
+                  transparent
+                  animationType="fade"
+                  onRequestClose={() => setShowSponsorModal(false)}
+                >
+                  <View style={styles.sponsorModalOverlay}>
+                    <View style={styles.sponsorModalBox}>
+                      <Text style={styles.sponsorModalTitle}>Nouveau sponsor</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Nom *"
+                        placeholderTextColor="#888"
+                        value={newSponsorName}
+                        onChangeText={setNewSponsorName}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="URL du logo (https://...)"
+                        placeholderTextColor="#888"
+                        value={newSponsorImage}
+                        onChangeText={setNewSponsorImage}
+                        autoCapitalize="none"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Site web (https://...)"
+                        placeholderTextColor="#888"
+                        value={newSponsorWebsite}
+                        onChangeText={setNewSponsorWebsite}
+                        autoCapitalize="none"
+                      />
+                      {sponsorFormError ? (
+                        <Text style={styles.sponsorFormError}>{sponsorFormError}</Text>
+                      ) : null}
+                      <View style={styles.sponsorModalButtons}>
+                        <TouchableOpacity
+                          style={styles.sponsorModalCancel}
+                          onPress={() => {
+                            setShowSponsorModal(false);
+                            setSponsorFormError(null);
+                          }}
+                        >
+                          <Text style={styles.sponsorModalCancelText}>Annuler</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.sponsorModalSave,
+                            creatingSponsor && styles.saveOrgButtonDisabled,
+                          ]}
+                          onPress={createSponsorAccount}
+                          disabled={creatingSponsor}
+                        >
+                          {creatingSponsor ? (
+                            <ActivityIndicator color="#212121" size="small" />
+                          ) : (
+                            <Text style={styles.sponsorModalSaveText}>Créer</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                </Modal>
+
                 {/* Fichier GPX */}
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Fichier GPX (optionnel)</Text>
@@ -738,133 +1054,57 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                   )}
                 </View>
 
-                {/* Sélection des participants */}
+                {/* Saisie des emails des participants */}
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Participants</Text>
+                  <Text style={styles.label}>Emails des participants</Text>
+                  <Text style={styles.hintText}>
+                    Saisissez les emails séparés par des virgules, points-virgules ou retours à la ligne
+                  </Text>
+                  <Text style={styles.hintText}>
+                    Ou importez un fichier CSV : une colonne « email », ou plusieurs colonnes contenant des e-mails (séparateur virgule ou point-virgule). Les adresses sont fusionnées avec la saisie, sans doublons.
+                  </Text>
                   <TouchableOpacity
-                    style={styles.dropdownButton}
-                    onPress={() => setShowUserDropdown(!showUserDropdown)}
+                    style={styles.csvImportButton}
+                    onPress={pickCsvForRunners}
+                    activeOpacity={0.8}
                   >
-                    <Icon name="account-multiple" size={20} color="#A1F763" />
-                    <Text style={styles.dropdownButtonText}>
-                      {selectedRunners.length > 0
-                        ? `${selectedRunners.length} participant(s) sélectionné(s)`
-                        : "Sélectionner des participants"}
+                    <Icon name="file-delimited" size={22} color="#A1F763" />
+                    <Text style={styles.csvImportButtonText}>
+                      Importer un CSV
                     </Text>
-                    <Icon
-                      name={showUserDropdown ? "chevron-up" : "chevron-down"}
-                      size={20}
-                      color="#A1F763"
-                    />
                   </TouchableOpacity>
-
-                  {/* Liste déroulante des utilisateurs */}
-                  {showUserDropdown && (
-                    <View style={styles.dropdownContainer}>
-                      <ScrollView
-                        style={styles.dropdownList}
-                        nestedScrollEnabled={true}
-                      >
-                        {users.length > 0 ? (
-                          users.map((user) => {
-                            const userId = user._id || user.id;
-                            if (!userId) return null;
-                            const isSelected = selectedRunners.includes(userId);
-                            return (
-                              <TouchableOpacity
-                                key={userId}
-                                style={[
-                                  styles.dropdownItem,
-                                  isSelected && styles.dropdownItemSelected,
-                                ]}
-                                onPress={() => {
-                                  if (isSelected) {
-                                    setSelectedRunners((prev) =>
-                                      prev.filter((id) => id !== userId)
-                                    );
-                                  } else {
-                                    setSelectedRunners((prev) => [
-                                      ...prev,
-                                      userId,
-                                    ]);
-                                  }
-                                }}
-                              >
-                                <View style={styles.userInfo}>
-                                  <Text
-                                    style={[
-                                      styles.userEmail,
-                                      isSelected && styles.userEmailSelected,
-                                    ]}
-                                  >
-                                    {user.email}
-                                  </Text>
-                                  {(user.firstname || user.lastname) && (
-                                    <Text
-                                      style={[
-                                        styles.userName,
-                                        isSelected && styles.userNameSelected,
-                                      ]}
-                                    >
-                                      {user.firstname} {user.lastname}
-                                    </Text>
-                                  )}
-                                </View>
-                                {isSelected && (
-                                  <Icon
-                                    name="check"
-                                    size={20}
-                                    color="#A1F763"
-                                  />
-                                )}
-                              </TouchableOpacity>
-                            );
-                          })
-                        ) : (
-                          <Text style={styles.noUsersText}>
-                            Aucun utilisateur disponible
-                          </Text>
-                        )}
-                      </ScrollView>
-                    </View>
-                  )}
-
-                  {/* Affichage des participants sélectionnés */}
-                  {selectedRunners.length > 0 && (
-                    <View style={styles.selectedUsersContainer}>
-                      <Text style={styles.selectedUsersLabel}>
-                        Participants sélectionnés :
+                  {csvImportName ? (
+                    <View style={styles.csvImportMeta}>
+                      <Icon name="check-circle" size={14} color="#A1F763" />
+                      <Text style={styles.csvImportMetaText}>
+                        Dernier import : {csvImportName}
                       </Text>
-                      <View style={styles.selectedUsersList}>
-                        {selectedRunners.map((userId) => {
-                          const user = users.find(
-                            (u) => (u._id || u.id) === userId
-                          );
-                          if (!user) return null;
-                          return (
-                            <View key={userId} style={styles.selectedUserChip}>
-                              <Text style={styles.selectedUserChipText}>
-                                {user.email}
-                              </Text>
-                              <TouchableOpacity
-                                onPress={() => {
-                                  setSelectedRunners((prev) =>
-                                    prev.filter((id) => id !== userId)
-                                  );
-                                }}
-                                style={styles.removeUserButton}
-                              >
-                                <Icon name="close" size={16} color="#3B3B3B" />
-                              </TouchableOpacity>
-                            </View>
-                          );
-                        })}
-                      </View>
+                    </View>
+                  ) : null}
+                  <TextInput
+                    style={styles.emailInput}
+                    placeholder="email1@example.com, email2@example.com"
+                    placeholderTextColor="#666"
+                    value={runnerEmails}
+                    onChangeText={setRunnerEmails}
+                    multiline
+                    numberOfLines={4}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    textAlignVertical="top"
+                  />
+                  {parsedEmails.length > 0 && (
+                    <View style={styles.emailCountContainer}>
+                      <Icon name="account-multiple" size={16} color="#A1F763" />
+                      <Text style={styles.emailCountText}>
+                        {parsedEmails.length} email(s) détecté(s)
+                      </Text>
                     </View>
                   )}
 
                   {/* SECTION PAIEMENT - Affichée si plus de 2 coureurs */}
-                  {selectedRunners.length > FREE_RUNNERS && (
+                  {parsedEmails.length > FREE_RUNNERS && (
                     <View style={styles.paymentSection}>
                       <View style={styles.paymentInfo}>
                         <Icon name="information" size={20} color="#FFB020" />
@@ -1413,6 +1653,61 @@ const styles = StyleSheet.create({
     padding: 20,
     fontStyle: "italic",
   },
+  hintText: {
+    fontSize: 12,
+    color: "#888",
+    marginBottom: 8,
+    fontStyle: "italic",
+  },
+  csvImportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(161, 247, 99, 0.12)",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(161, 247, 99, 0.35)",
+  },
+  csvImportButtonText: {
+    fontSize: 15,
+    color: "#A1F763",
+    fontWeight: "600",
+  },
+  csvImportMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  csvImportMetaText: {
+    fontSize: 12,
+    color: "#888",
+  },
+  emailInput: {
+    backgroundColor: "rgba(255, 255, 255, 0.1)",
+    borderRadius: 12,
+    padding: 16,
+    color: "#fff",
+    fontSize: 16,
+    borderWidth: 1,
+    borderColor: "rgba(255, 255, 255, 0.2)",
+    minHeight: 100,
+    textAlignVertical: "top",
+  },
+  emailCountContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 8,
+    gap: 8,
+  },
+  emailCountText: {
+    fontSize: 14,
+    color: "#A1F763",
+    fontWeight: "500",
+  },
   selectedUsersContainer: {
     marginTop: 12,
     backgroundColor: "rgba(161, 247, 99, 0.05)",
@@ -1540,6 +1835,116 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#A1F763",
     fontWeight: "600",
+  },
+  sponsorActionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  addSponsorLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  addSponsorLinkText: {
+    color: "#A1F763",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  clearSponsorsText: {
+    color: "#FF8A80",
+    fontSize: 13,
+  },
+  sponsorsChipsScroll: {
+    marginBottom: 4,
+  },
+  sponsorChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    maxWidth: 200,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(161,247,99,0.25)",
+  },
+  sponsorChipSelected: {
+    backgroundColor: "#A1F763",
+    borderColor: "#A1F763",
+  },
+  sponsorChipImage: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  sponsorChipPlaceholder: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    marginRight: 8,
+    backgroundColor: "rgba(0,0,0,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sponsorChipText: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 12,
+  },
+  sponsorChipTextSelected: {
+    color: "#212121",
+    fontWeight: "600",
+  },
+  sponsorModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  sponsorModalBox: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 16,
+    padding: 20,
+  },
+  sponsorModalTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 14,
+  },
+  sponsorFormError: {
+    color: "#FF8A80",
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  sponsorModalButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+    marginTop: 12,
+  },
+  sponsorModalCancel: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  sponsorModalCancelText: {
+    color: "#aaa",
+    fontSize: 15,
+  },
+  sponsorModalSave: {
+    backgroundColor: "#A1F763",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+  },
+  sponsorModalSaveText: {
+    color: "#212121",
+    fontWeight: "700",
+    fontSize: 15,
   },
 });
 

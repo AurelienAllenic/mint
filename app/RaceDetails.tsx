@@ -1,4 +1,7 @@
 import MapComponent from "@/components/Map/Map";
+import type { Sponsor } from "@/types/api";
+import { postAcceptInvitation } from "@/utils/invitationAccept";
+import { sponsorsFromRace } from "@/utils/sponsors";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { BlurView } from "expo-blur";
 import * as Location from "expo-location";
@@ -6,9 +9,12 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
   Image,
+  Linking,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -16,6 +22,7 @@ import {
 } from "react-native";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "../context/auth";
+import AddRunnersModal from "../components/AddRunnersModal/AddRunnersModal";
 
 interface RaceDetails {
   _id: string;
@@ -47,14 +54,8 @@ interface RaceDetails {
   description?: string;
   end_date?: string;
   positive_elevation?: number;
-}
-
-interface SponsorDetails {
-  _id?: string;
-  id?: string;
-  name?: string;
-  logoUrl?: string;
-  image?: string;
+  sponsors?: any[];
+  sponsor?: any;
 }
 
 export default function RaceDetailsScreen() {
@@ -87,6 +88,22 @@ export default function RaceDetailsScreen() {
   const [isRunner, setIsRunner] = useState(false);
   const [isRankingExpanded, setIsRankingExpanded] = useState(true); // Par défaut, le classement est déplié
   const [isJoiningRace, setIsJoiningRace] = useState(false); // Flag pour éviter les appels multiples
+  const [showAddRunnersModal, setShowAddRunnersModal] = useState(false);
+  const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
+  const [pendingInvitationToken, setPendingInvitationToken] = useState<string | null>(null);
+  
+  // Vérifier si l'utilisateur est le propriétaire de la course
+  const raceSponsors: Sponsor[] = useMemo(
+    () => (race ? sponsorsFromRace(race) : []),
+    [race]
+  );
+
+  const isOwner = useMemo(() => {
+    if (!race || !user) return false;
+    const ownerId = race.owner?._id || race.owner?.id || race.owner;
+    const userId = user._id || user.id;
+    return String(ownerId) === String(userId);
+  }, [race, user]);
 
   // Surveiller les changements de rankings pour debug (désactivé pour éviter les logs excessifs)
   // useEffect(() => {
@@ -106,13 +123,8 @@ export default function RaceDetailsScreen() {
     return () => clearInterval(timer);
   }, []);
 
-  useEffect(() => {
-    // Réinitialiser le flag quand on change de course
-    if (race?._id !== raceId) {
-      setHasLoadedRace(false);
-    }
-
-    const fetchRaceData = async () => {
+  // Fonction pour recharger les données de la course (accessible depuis les callbacks)
+  const fetchRaceData = useCallback(async () => {
       if (!raceId) {
         return;
       }
@@ -142,6 +154,56 @@ export default function RaceDetailsScreen() {
 
         if (raceResponse.ok) {
           const raceData = await raceResponse.json();
+
+          // Normaliser un id (backend peut renvoyer string ou objet type { $oid: "..." })
+          const toIdStr = (v: any): string => {
+            if (v == null) return "";
+            if (typeof v === "string") return v.trim();
+            if (typeof v === "object" && v.$oid) return String(v.$oid);
+            if (typeof v === "object" && (v._id || v.id)) return String(v._id ?? v.id);
+            return String(v);
+          };
+
+          // Vérifier si l'utilisateur a une invitation pending pour cette course
+          if (token && user?.email) {
+            try {
+              const invResponse = await fetch(`${API_URL}/invitations/my-invitations`, {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: authHeader,
+                },
+              });
+              if (invResponse.ok) {
+                const invData = await invResponse.json();
+                const allInvitations = invData.invitations || [];
+                const currentRaceId = toIdStr(raceData._id ?? raceId);
+
+                // L'API my-invitations ne renvoie que des invitations en attente (pas de champ status dans la réponse)
+                const pendingInv = allInvitations.find((inv: any) => {
+                  const invRaceId = toIdStr(inv.race?._id ?? inv.race ?? inv.raceId?._id ?? inv.raceId);
+                  return invRaceId === currentRaceId;
+                });
+
+                if (pendingInv) {
+                  setHasPendingInvitation(true);
+                  setPendingInvitationToken(pendingInv.token ?? null);
+                } else {
+                  setHasPendingInvitation(false);
+                  setPendingInvitationToken(null);
+                }
+              } else {
+                setHasPendingInvitation(false);
+                setPendingInvitationToken(null);
+              }
+            } catch (_invErr) {
+              setHasPendingInvitation(false);
+              setPendingInvitationToken(null);
+            }
+          } else {
+            setHasPendingInvitation(false);
+            setPendingInvitationToken(null);
+          }
 
           // Adapter les données pour l'affichage
           const adaptedRace: RaceDetails = {
@@ -265,11 +327,24 @@ export default function RaceDetailsScreen() {
       } finally {
         setLoading(false);
       }
-    };
+  }, [raceId, token]);
+
+  useEffect(() => {
+    // Réinitialiser le flag quand on change de course
+    if (race?._id !== raceId) {
+      setHasLoadedRace(false);
+      setHasPendingInvitation(false); // Réinitialiser aussi l'invitation pending
+      setPendingInvitationToken(null); // Réinitialiser le token
+    }
+    
+    // Ne pas recharger si déjà chargé pour cette course
+    if (hasLoadedRace && race?._id === raceId) {
+      return;
+    }
 
     fetchRaceData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [raceId, token]); // hasLoadedRace n'est pas dans les dépendances pour éviter les boucles
+  }, [raceId, token, fetchRaceData]); // hasLoadedRace n'est pas dans les dépendances pour éviter les boucles
 
   // NOUVEAU useEffect pour initialiser le WebSocket
   useEffect(() => {
@@ -279,13 +354,20 @@ export default function RaceDetailsScreen() {
     if (!raceIdToUse) return;
 
     // Vérifier si l'utilisateur est un coureur
+    // IMPORTANT: Ne pas considérer comme runner si invitation est encore pending
     const userId = user?._id;
-    const userIsRunner =
-      race.runners?.some(
-        (runner: any) => (runner._id || runner.id) === userId,
-      ) || false;
-
+    const userIsInRunners = race.runners?.some(
+      (runner: any) => String(runner._id ?? runner.id ?? "") === String(userId ?? "")
+    ) || false;
+    
+    // Si invitation pending, ne pas considérer comme runner même s'il est dans runners
+    const userIsRunner = userIsInRunners && !hasPendingInvitation;
+    
     setIsRunner(userIsRunner);
+    
+    if (hasPendingInvitation && userIsInRunners) {
+      console.log("[RaceDetails] ⚠️ Utilisateur dans runners mais invitation pending - mode SPECTATEUR forcé");
+    }
 
     const WS_API_URL = "http://mint-dev-ws.charles-chrismann.fr";
     let newSocket: Socket;
@@ -557,7 +639,8 @@ export default function RaceDetailsScreen() {
       newSocket.disconnect();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [race?._id, race?.id, race?.runners?.length, raceId, user?._id, token]);
+  }, [race, raceId, isJoiningRace, hasLoadedRace, user?._id, hasPendingInvitation, token]);
+
 
   // NOUVEAU useEffect pour envoyer la position du coureur
   useEffect(() => {
@@ -695,6 +778,107 @@ export default function RaceDetailsScreen() {
   }, [trackCoordinates]);
 
   // Fonction pour gérer l'inscription à la course
+  const handleAcceptInvitation = async () => {
+    if (!pendingInvitationToken || !token) return;
+
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
+      const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
+      
+      const raceIdToUse = String(race?._id || race?.id || raceId || "");
+      const response = await postAcceptInvitation(
+        API_URL,
+        token,
+        pendingInvitationToken,
+        raceIdToUse
+      );
+
+      if (response.ok) {
+        Alert.alert("Succès", "Invitation acceptée ! Vous pouvez maintenant participer à la course.");
+        // Recharger les données de la course pour mettre à jour le statut
+        setHasLoadedRace(false);
+        setHasPendingInvitation(false);
+        setPendingInvitationToken(null);
+        // Recharger la course
+        if (raceIdToUse) {
+          const raceResponse = await fetch(`${API_URL}/race/${raceIdToUse}`, {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: authHeader,
+            },
+          });
+          if (raceResponse.ok) {
+            const raceData = await raceResponse.json();
+            const adaptedRace: RaceDetails = {
+              ...raceData,
+              start_date: raceData.startDate,
+              end_date: raceData.endDate,
+              location: raceData.organization?.name,
+              participants: raceData.runners?.length || 0,
+              maxParticipants: 100,
+              category: "Course",
+            };
+            setRace(adaptedRace);
+          }
+        }
+      } else {
+        const errorData = await response.json().catch(() => ({ error: "Erreur inconnue" }));
+        Alert.alert("Erreur", errorData.error || "Impossible d'accepter l'invitation");
+      }
+    } catch (error) {
+      console.error("[RaceDetails] Erreur acceptation invitation:", error);
+      Alert.alert("Erreur", "Impossible d'accepter l'invitation");
+    }
+  };
+
+  const handleDeclineInvitation = async () => {
+    if (!pendingInvitationToken) return;
+
+    Alert.alert(
+      "Décliner l'invitation",
+      "Êtes-vous sûr de vouloir décliner cette invitation ?",
+      [
+        { text: "Annuler", style: "cancel" },
+        {
+          text: "Décliner",
+          style: "destructive",
+          onPress: async () => {
+            try {
+              const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
+              const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
+              
+              const response = await fetch(`${API_URL}/invitations/token/${pendingInvitationToken}/reject`, {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: authHeader,
+                },
+              });
+
+              if (response.ok) {
+                Alert.alert("Succès", "Invitation déclinée.", [
+                  {
+                    text: "OK",
+                    onPress: () => router.back(), // Retourner en arrière après déclinaison
+                  },
+                ]);
+                setHasPendingInvitation(false);
+                setPendingInvitationToken(null);
+              } else {
+                const errorData = await response.json().catch(() => ({ error: "Erreur inconnue" }));
+                Alert.alert("Erreur", errorData.error || "Impossible de décliner l'invitation");
+              }
+            } catch (error) {
+              console.error("[RaceDetails] Erreur déclinaison invitation:", error);
+              Alert.alert("Erreur", "Impossible de décliner l'invitation");
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const handleJoinRace = async () => {
     if ((!race?._id && !race?.id) || isJoiningRace) return; // Éviter les appels multiples
 
@@ -1409,6 +1593,48 @@ export default function RaceDetailsScreen() {
                   </View>
                 )}
 
+                {raceSponsors.length > 0 && (
+                  <View style={styles.sponsorsBanner}>
+                    <Text style={styles.sponsorsBannerLabel}>Sponsors</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.sponsorsScrollContent}
+                    >
+                      {raceSponsors.map((sp) => (
+                        <TouchableOpacity
+                          key={sp.id}
+                          style={styles.sponsorLogoWrap}
+                          disabled={!sp.websiteUrl}
+                          onPress={() => {
+                            if (sp.websiteUrl) {
+                              Linking.openURL(sp.websiteUrl).catch(() => {});
+                            }
+                          }}
+                          activeOpacity={0.85}
+                        >
+                          {sp.image ? (
+                            <Image
+                              source={{ uri: sp.image }}
+                              style={styles.sponsorLogoImg}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <View style={styles.sponsorLogoPlaceholder}>
+                              <Text style={styles.sponsorLogoInitial}>
+                                {(sp.name || "?").slice(0, 1).toUpperCase()}
+                              </Text>
+                            </View>
+                          )}
+                          <Text style={styles.sponsorLogoName} numberOfLines={2}>
+                            {sp.name || "Sponsor"}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
                 {/* Participants */}
                 {race?.runners && (
                   <View style={styles.infoCard}>
@@ -1493,28 +1719,51 @@ export default function RaceDetailsScreen() {
       {/* Boutons d'action avec le style home */}
       <View style={styles.container__btns}>
         {!user?.isVisitor && (
-          // Interface pour utilisateur connecté : boutons rejoindre et retour
+          // Interface pour utilisateur connecté : rejoindre (sauf propriétaire) et retour
           <View style={styles.mainButtonsContainer}>
-            <TouchableOpacity
-              style={isRunner ? styles.leaveButton : styles.joinButton}
-              onPress={isRunner ? handleLeaveRace : handleJoinRace}
-              activeOpacity={0.8}
-              disabled={isJoiningRace}
-            >
-              <BlurView
-                style={styles.joinButtonBlur}
-                intensity={40}
-                tint="dark"
+            {!isOwner && hasPendingInvitation ? (
+              <View style={styles.pendingInvitationContainer}>
+                <BlurView style={styles.pendingInvitationBlur} intensity={40} tint="dark">
+                  <Icon name="email-outline" size={24} color="#A1F763" />
+                  <Text style={styles.pendingInvitationText}>
+                    Vous avez une invitation en attente pour cette course
+                  </Text>
+                  <View style={styles.invitationButtonsContainer}>
+                    <TouchableOpacity
+                      style={styles.acceptInvitationButton}
+                      onPress={handleAcceptInvitation}
+                    >
+                      <Icon name="check" size={20} color="#000" />
+                      <Text style={styles.acceptInvitationButtonText}>Accepter</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.declineInvitationButton}
+                      onPress={handleDeclineInvitation}
+                    >
+                      <Icon name="close" size={20} color="#fff" />
+                      <Text style={styles.declineInvitationButtonText}>Refuser</Text>
+                    </TouchableOpacity>
+                  </View>
+                </BlurView>
+              </View>
+            ) : !isOwner ? (
+              <TouchableOpacity
+                style={isRunner ? styles.leaveButton : styles.joinButton}
+                onPress={isRunner ? handleLeaveRace : handleJoinRace}
+                activeOpacity={0.8}
+                disabled={isJoiningRace}
               >
-                <Text style={styles.joinButtonText}>
-                  {isJoiningRace
-                    ? "INSCRIPTION..."
-                    : isRunner
-                      ? "QUITTER"
-                      : "REJOINDRE"}
-                </Text>
-              </BlurView>
-            </TouchableOpacity>
+                <BlurView
+                  style={styles.joinButtonBlur}
+                  intensity={40}
+                  tint="dark"
+                >
+                  <Text style={styles.joinButtonText}>
+                    {isJoiningRace ? 'INSCRIPTION...' : (isRunner ? 'QUITTER' : 'REJOINDRE')}
+                  </Text>
+                </BlurView>
+              </TouchableOpacity>
+            ) : null}
             <TouchableOpacity
               style={styles.mainButton}
               onPress={() => router.back()}
@@ -1542,6 +1791,16 @@ export default function RaceDetailsScreen() {
               <Icon name="account-group" size={28} color="#fff" />
             </BlurView>
           </TouchableOpacity>
+          {isOwner && (
+            <TouchableOpacity
+              style={styles.roundButton}
+              onPress={() => setShowAddRunnersModal(true)}
+            >
+              <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
+                <Icon name="account-plus" size={28} color="#A1F763" />
+              </BlurView>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.roundButton}
             onPress={() => setShowRaceInfo(!showRaceInfo)}
@@ -1556,8 +1815,20 @@ export default function RaceDetailsScreen() {
       {/* Modal des participants */}
       {ParticipantsModal}
 
-      {/* Modal des sponsors */}
-      {SponsorsModal}
+      {/* Modal pour ajouter des coureurs (propriétaire uniquement) */}
+      {isOwner && race && (
+        <AddRunnersModal
+          visible={showAddRunnersModal}
+          onClose={() => setShowAddRunnersModal(false)}
+          raceId={race._id || race.id || raceId}
+          currentRunnersCount={race.runners?.length || 0}
+          onSuccess={() => {
+            // Recharger les données de la course
+            setHasLoadedRace(false);
+            fetchRaceData();
+          }}
+        />
+      )}
     </View>
   );
 }
@@ -1796,6 +2067,64 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     overflow: "hidden",
   },
+  pendingInvitationContainer: {
+    width: "100%",
+    marginBottom: 12,
+  },
+  pendingInvitationBlur: {
+    borderRadius: 16,
+    padding: 20,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "rgba(161, 247, 99, 0.3)",
+  },
+  pendingInvitationText: {
+    color: "#A1F763",
+    fontSize: 16,
+    fontWeight: "600",
+    marginTop: 12,
+    marginBottom: 16,
+    textAlign: "center",
+  },
+  invitationButtonsContainer: {
+    flexDirection: "row",
+    gap: 12,
+    width: "100%",
+  },
+  acceptInvitationButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#A1F763",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  acceptInvitationButtonText: {
+    color: "#000",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+  declineInvitationButton: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(255, 107, 107, 0.2)",
+    borderWidth: 1,
+    borderColor: "#FF6B6B",
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 8,
+  },
+  declineInvitationButtonText: {
+    color: "#FF6B6B",
+    fontSize: 16,
+    fontWeight: "700",
+  },
   joinButtonText: {
     color: "#FFFFFF",
     fontWeight: "900",
@@ -2026,6 +2355,60 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "600",
     lineHeight: 16,
+  },
+  sponsorsBanner: {
+    width: "100%",
+    marginTop: 4,
+    marginBottom: 8,
+    padding: 12,
+    backgroundColor: "rgba(15, 15, 15, 0.8)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(42, 42, 42, 0.6)",
+  },
+  sponsorsBannerLabel: {
+    fontSize: 10,
+    color: "#666",
+    fontWeight: "500",
+    marginBottom: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sponsorsScrollContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingRight: 8,
+  },
+  sponsorLogoWrap: {
+    width: 88,
+    marginRight: 12,
+    alignItems: "center",
+  },
+  sponsorLogoImg: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  sponsorLogoPlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    backgroundColor: "rgba(161, 247, 99, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sponsorLogoInitial: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#A1F763",
+  },
+  sponsorLogoName: {
+    marginTop: 6,
+    fontSize: 11,
+    color: "#ccc",
+    textAlign: "center",
+    width: "100%",
   },
   rankingContainer: {
     position: "absolute",

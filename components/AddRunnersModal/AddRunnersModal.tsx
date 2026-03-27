@@ -1,6 +1,12 @@
+import {
+  mergeUniqueEmails,
+  parseEmailsFromCsv,
+} from "@/utils/parseEmailsFromCsv";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { StripeProvider, useStripe } from "@stripe/stripe-react-native";
 import { BlurView } from "expo-blur";
+import * as DocumentPicker from "expo-document-picker";
+import * as FileSystem from "expo-file-system";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -20,7 +26,7 @@ interface AddRunnersModalProps {
   onClose: () => void;
   raceId: string;
   currentRunnersCount: number;
-  onSuccess: () => void;
+  onSuccess: () => void | Promise<void>;
 }
 
 const FREE_RUNNERS = 2;
@@ -40,6 +46,7 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [csvImportName, setCsvImportName] = useState<string | null>(null);
 
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
   const STRIPE_PUBLIC_KEY = process.env.EXPO_PUBLIC_STRIPE_KEY;
@@ -57,8 +64,60 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
       setEmails([""]);
       setPaymentIntentId(null);
       setError(null);
+      setCsvImportName(null);
     }
   }, [visible]);
+
+  const pickCsvForRunners = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "text/csv",
+          "text/comma-separated-values",
+          "text/plain",
+          "application/vnd.ms-excel",
+          "*/*",
+        ],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const file = result.assets?.[0];
+      if (!file?.uri) {
+        Alert.alert("CSV", "Impossible de lire le fichier sélectionné.");
+        return;
+      }
+
+      const content = await FileSystem.readAsStringAsync(file.uri);
+      const extracted = parseEmailsFromCsv(content);
+
+      if (extracted.length === 0) {
+        Alert.alert(
+          "CSV",
+          "Aucune adresse e-mail valide trouvée. Utilisez une colonne d’e-mails ou un e-mail par ligne."
+        );
+        return;
+      }
+
+      const existingText = emails.filter((e) => e.trim()).join("\n");
+      const merged = mergeUniqueEmails(existingText, extracted);
+      const lines = merged.split("\n").map((s) => s.trim()).filter(Boolean);
+      setEmails(lines.length > 0 ? lines : [""]);
+      setCsvImportName(file.name || "import.csv");
+      setError(null);
+      Alert.alert(
+        "Import CSV",
+        `${extracted.length} adresse(s) ajoutée(s) (doublons ignorés).`
+      );
+    } catch (e) {
+      console.error("Erreur import CSV:", e);
+      Alert.alert(
+        "Erreur",
+        e instanceof Error ? e.message : "Impossible d’importer le fichier CSV."
+      );
+    }
+  };
 
   const handleAddEmailField = () => {
     setEmails([...emails, ""]);
@@ -180,8 +239,8 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
           {
             text: "OK",
             onPress: () => {
-              onSuccess();
               onClose();
+              void Promise.resolve(onSuccess()).catch(() => {});
             },
           },
         ]);
@@ -213,6 +272,26 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
             <Text style={styles.infoText}>
               Les coureurs recevront un email d'invitation pour rejoindre la course.
             </Text>
+
+            <Text style={styles.hintText}>
+              Importez un CSV (colonnes « email » ou plusieurs e-mails) ; fusion avec la saisie, sans doublons.
+            </Text>
+            <TouchableOpacity
+              style={styles.csvImportButton}
+              onPress={pickCsvForRunners}
+              activeOpacity={0.8}
+            >
+              <Icon name="file-delimited" size={22} color="#A1F763" />
+              <Text style={styles.csvImportButtonText}>Importer un CSV</Text>
+            </TouchableOpacity>
+            {csvImportName ? (
+              <View style={styles.csvImportMeta}>
+                <Icon name="check-circle" size={14} color="#A1F763" />
+                <Text style={[styles.csvImportMetaText, { marginLeft: 6 }]}>
+                  Dernier import : {csvImportName}
+                </Text>
+              </View>
+            ) : null}
 
             <Text style={styles.label}>Emails des coureurs</Text>
             {emails.map((email, index) => (
@@ -356,8 +435,40 @@ const styles = StyleSheet.create({
   },
   infoText: {
     color: "#A1F763",
-    marginBottom: 20,
+    marginBottom: 12,
     fontSize: 14,
+  },
+  hintText: {
+    color: "rgba(255,255,255,0.65)",
+    fontSize: 13,
+    marginBottom: 10,
+    lineHeight: 18,
+  },
+  csvImportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    backgroundColor: "rgba(161, 247, 99, 0.12)",
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "rgba(161, 247, 99, 0.35)",
+  },
+  csvImportButtonText: {
+    color: "#A1F763",
+    fontSize: 15,
+    fontWeight: "600",
+    marginLeft: 10,
+  },
+  csvImportMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+  },
+  csvImportMetaText: {
+    color: "rgba(255,255,255,0.75)",
+    fontSize: 13,
   },
   label: {
     color: "#fff",

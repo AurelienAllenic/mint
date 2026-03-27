@@ -1,5 +1,6 @@
 "use client";
 
+import { postAcceptInvitation } from "@/utils/invitationAccept";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import { Alert, Image, Text, TextInput, TouchableOpacity, View } from "react-native";
@@ -7,8 +8,10 @@ import { useAuth } from "../context/auth";
 import { loginStyles } from "../style/login.styles";
 
 export default function LoginScreen() {
-  const { email: emailParam } = useLocalSearchParams<{ 
+  const { email: emailParam, inviteToken, inviteRaceId } = useLocalSearchParams<{ 
     email?: string;
+    inviteToken?: string;
+    inviteRaceId?: string;
   }>();
   const [email, setEmail] = useState(emailParam || "aurelien@gmail.com");
   const [password, setPassword] = useState("aurelien123");
@@ -95,7 +98,42 @@ export default function LoginScreen() {
           isConnected: !isVisitor,
           isVisitor: false,
         });
-        
+
+        const API_URL = process.env.EXPO_PUBLIC_API_URL;
+        if (
+          API_URL &&
+          inviteToken &&
+          inviteRaceId &&
+          data.access_token
+        ) {
+          try {
+            const acceptRes = await postAcceptInvitation(
+              API_URL,
+              data.access_token,
+              String(inviteToken),
+              String(inviteRaceId)
+            );
+            if (acceptRes.ok) {
+              router.replace({
+                pathname: "/RaceDetails",
+                params: { raceId: String(inviteRaceId) },
+              });
+              return;
+            }
+            const errBody = await acceptRes.json().catch(() => ({}));
+            Alert.alert(
+              "Invitation",
+              typeof errBody.message === "string"
+                ? errBody.message
+                : typeof errBody.error === "string"
+                  ? errBody.error
+                  : "L'invitation n'a pas pu être enregistrée. Ouvrez la course depuis l'app."
+            );
+          } catch {
+            /* on continue vers l'accueil */
+          }
+        }
+
         router.replace("/");
       } else if (isVisitor && response.ok && data) {
         login({
@@ -230,7 +268,21 @@ export default function LoginScreen() {
       </Text>
       <Text style={loginStyles.termsText}>
         Vous n&apos;avez pas de compte ?{" "}
-        <Text style={loginStyles.link} onPress={() => router.push("/signup")}>
+        <Text
+          style={loginStyles.link}
+          onPress={() =>
+            router.push({
+              pathname: "/signup",
+              params:
+                inviteToken && inviteRaceId
+                  ? {
+                      inviteToken: String(inviteToken),
+                      inviteRaceId: String(inviteRaceId),
+                    }
+                  : {},
+            })
+          }
+        >
           Inscrivez-vous
         </Text>
       </Text>

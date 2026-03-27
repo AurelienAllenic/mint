@@ -6,10 +6,13 @@ import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
+import type { Sponsor } from "@/types/api";
+import { normalizeSponsor } from "@/utils/sponsors";
 import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   Platform,
   ScrollView,
   StyleSheet,
@@ -92,6 +95,15 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [showStartTimePicker, setShowStartTimePicker] = useState(false);
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
+  const [sponsorsList, setSponsorsList] = useState<Sponsor[]>([]);
+  const [selectedSponsorIds, setSelectedSponsorIds] = useState<string[]>([]);
+  const [showSponsorModal, setShowSponsorModal] = useState(false);
+  const [newSponsorName, setNewSponsorName] = useState("");
+  const [newSponsorImage, setNewSponsorImage] = useState("");
+  const [newSponsorWebsite, setNewSponsorWebsite] = useState("");
+  const [sponsorFormError, setSponsorFormError] = useState<string | null>(null);
+  const [creatingSponsor, setCreatingSponsor] = useState(false);
+
   // NOUVEAUX ÉTATS POUR LE PAIEMENT
   const [isPaid, setIsPaid] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -156,6 +168,22 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           }
         } catch (e) {
           console.log("Erreur chargement organisations:", e);
+        }
+
+        try {
+          const sponsorsResponse = await fetch(`${API_URL}/sponsors`, {
+            headers: { Authorization: authHeader },
+          });
+          if (sponsorsResponse.ok) {
+            const raw = await sponsorsResponse.json();
+            const arr = Array.isArray(raw) ? raw : raw.sponsors || [];
+            const parsed = arr
+              .map((s: unknown) => normalizeSponsor(s))
+              .filter((s: Sponsor | null): s is Sponsor => s != null);
+            setSponsorsList(parsed);
+          }
+        } catch (e) {
+          console.log("Erreur chargement sponsors:", e);
         }
 
         try {
@@ -461,6 +489,77 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
     return true;
   };
 
+  const toggleSponsorSelection = (id: string) => {
+    setSelectedSponsorIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const clearAllSponsors = () => setSelectedSponsorIds([]);
+
+  const createSponsorAccount = async () => {
+    if (!newSponsorName.trim()) {
+      setSponsorFormError("Le nom est requis");
+      return;
+    }
+    if (!token || !API_URL) return;
+    setCreatingSponsor(true);
+    setSponsorFormError(null);
+    try {
+      const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+      const res = await fetch(`${API_URL}/sponsors`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+        },
+        body: JSON.stringify({
+          name: newSponsorName.trim(),
+          ...(newSponsorImage.trim()
+            ? { image: newSponsorImage.trim() }
+            : {}),
+          ...(newSponsorWebsite.trim()
+            ? { websiteUrl: newSponsorWebsite.trim() }
+            : {}),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 409) {
+        setSponsorFormError(
+          typeof data.message === "string"
+            ? data.message
+            : typeof data.error === "string"
+              ? data.error
+              : "Conflit : nom, image ou site déjà utilisé pour ce compte."
+        );
+        return;
+      }
+      if (!res.ok) {
+        setSponsorFormError(
+          typeof data.message === "string"
+            ? data.message
+            : typeof data.error === "string"
+              ? data.error
+              : "Impossible de créer le sponsor"
+        );
+        return;
+      }
+      const created = normalizeSponsor(data);
+      if (created) {
+        setSponsorsList((prev) => [...prev, created]);
+        setSelectedSponsorIds((prev) => [...prev, created.id]);
+      }
+      setNewSponsorName("");
+      setNewSponsorImage("");
+      setNewSponsorWebsite("");
+      setShowSponsorModal(false);
+    } catch {
+      setSponsorFormError("Erreur réseau");
+    } finally {
+      setCreatingSponsor(false);
+    }
+  };
+
   const createRace = async () => {
     if (!validateForm()) return;
 
@@ -502,6 +601,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         organization: selectedOrganization!,
         runnerEmails: emails, // Envoyer les emails au lieu des IDs
         gpxFile: gpxFileContent || "",
+        sponsors: selectedSponsorIds,
         ...(paymentIntentId ? { paymentIntentId } : {}),
       };
 
@@ -794,6 +894,143 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     </View>
                   )}
                 </View>
+
+                {/* Sponsors (multi) */}
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>Sponsors (optionnel)</Text>
+                  <Text style={styles.hintText}>
+                    Sélectionnez un ou plusieurs sponsors. Vous pouvez tous les retirer.
+                  </Text>
+                  <View style={styles.sponsorActionsRow}>
+                    <TouchableOpacity
+                      style={styles.addSponsorLink}
+                      onPress={() => {
+                        setSponsorFormError(null);
+                        setShowSponsorModal(true);
+                      }}
+                    >
+                      <Icon name="plus-circle-outline" size={18} color="#A1F763" />
+                      <Text style={styles.addSponsorLinkText}>Nouveau sponsor</Text>
+                    </TouchableOpacity>
+                    {selectedSponsorIds.length > 0 && (
+                      <TouchableOpacity onPress={clearAllSponsors}>
+                        <Text style={styles.clearSponsorsText}>Tout retirer</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    style={styles.sponsorsChipsScroll}
+                  >
+                    {sponsorsList.map((sp) => {
+                      const selected = selectedSponsorIds.includes(sp.id);
+                      return (
+                        <TouchableOpacity
+                          key={sp.id}
+                          style={[
+                            styles.sponsorChip,
+                            selected && styles.sponsorChipSelected,
+                          ]}
+                          onPress={() => toggleSponsorSelection(sp.id)}
+                          activeOpacity={0.85}
+                        >
+                          {sp.image ? (
+                            <Image
+                              source={{ uri: sp.image }}
+                              style={styles.sponsorChipImage}
+                            />
+                          ) : (
+                            <View style={styles.sponsorChipPlaceholder}>
+                              <Icon name="handshake" size={18} color="#888" />
+                            </View>
+                          )}
+                          <Text
+                            style={[
+                              styles.sponsorChipText,
+                              selected && styles.sponsorChipTextSelected,
+                            ]}
+                            numberOfLines={1}
+                          >
+                            {sp.name || sp.id}
+                          </Text>
+                          {selected && (
+                            <Icon name="check" size={16} color="#212121" />
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </ScrollView>
+                  {sponsorsList.length === 0 && !loadingData && (
+                    <Text style={styles.hintText}>
+                      Aucun sponsor en base — créez-en un avec « Nouveau sponsor ».
+                    </Text>
+                  )}
+                </View>
+
+                <Modal
+                  visible={showSponsorModal}
+                  transparent
+                  animationType="fade"
+                  onRequestClose={() => setShowSponsorModal(false)}
+                >
+                  <View style={styles.sponsorModalOverlay}>
+                    <View style={styles.sponsorModalBox}>
+                      <Text style={styles.sponsorModalTitle}>Nouveau sponsor</Text>
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Nom *"
+                        placeholderTextColor="#888"
+                        value={newSponsorName}
+                        onChangeText={setNewSponsorName}
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="URL du logo (https://...)"
+                        placeholderTextColor="#888"
+                        value={newSponsorImage}
+                        onChangeText={setNewSponsorImage}
+                        autoCapitalize="none"
+                      />
+                      <TextInput
+                        style={styles.input}
+                        placeholder="Site web (https://...)"
+                        placeholderTextColor="#888"
+                        value={newSponsorWebsite}
+                        onChangeText={setNewSponsorWebsite}
+                        autoCapitalize="none"
+                      />
+                      {sponsorFormError ? (
+                        <Text style={styles.sponsorFormError}>{sponsorFormError}</Text>
+                      ) : null}
+                      <View style={styles.sponsorModalButtons}>
+                        <TouchableOpacity
+                          style={styles.sponsorModalCancel}
+                          onPress={() => {
+                            setShowSponsorModal(false);
+                            setSponsorFormError(null);
+                          }}
+                        >
+                          <Text style={styles.sponsorModalCancelText}>Annuler</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity
+                          style={[
+                            styles.sponsorModalSave,
+                            creatingSponsor && styles.saveOrgButtonDisabled,
+                          ]}
+                          onPress={createSponsorAccount}
+                          disabled={creatingSponsor}
+                        >
+                          {creatingSponsor ? (
+                            <ActivityIndicator color="#212121" size="small" />
+                          ) : (
+                            <Text style={styles.sponsorModalSaveText}>Créer</Text>
+                          )}
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                </Modal>
 
                 {/* Fichier GPX */}
                 <View style={styles.inputGroup}>
@@ -1598,6 +1835,116 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#A1F763",
     fontWeight: "600",
+  },
+  sponsorActionsRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 10,
+  },
+  addSponsorLink: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  addSponsorLinkText: {
+    color: "#A1F763",
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  clearSponsorsText: {
+    color: "#FF8A80",
+    fontSize: 13,
+  },
+  sponsorsChipsScroll: {
+    marginBottom: 4,
+  },
+  sponsorChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    maxWidth: 200,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    marginRight: 8,
+    borderRadius: 20,
+    backgroundColor: "rgba(255,255,255,0.08)",
+    borderWidth: 1,
+    borderColor: "rgba(161,247,99,0.25)",
+  },
+  sponsorChipSelected: {
+    backgroundColor: "#A1F763",
+    borderColor: "#A1F763",
+  },
+  sponsorChipImage: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  sponsorChipPlaceholder: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    marginRight: 8,
+    backgroundColor: "rgba(0,0,0,0.2)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sponsorChipText: {
+    flex: 1,
+    color: "#fff",
+    fontSize: 12,
+  },
+  sponsorChipTextSelected: {
+    color: "#212121",
+    fontWeight: "600",
+  },
+  sponsorModalOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.65)",
+    justifyContent: "center",
+    padding: 24,
+  },
+  sponsorModalBox: {
+    backgroundColor: "#2a2a2a",
+    borderRadius: 16,
+    padding: 20,
+  },
+  sponsorModalTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 14,
+  },
+  sponsorFormError: {
+    color: "#FF8A80",
+    fontSize: 13,
+    marginBottom: 8,
+  },
+  sponsorModalButtons: {
+    flexDirection: "row",
+    justifyContent: "flex-end",
+    gap: 12,
+    marginTop: 12,
+  },
+  sponsorModalCancel: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  sponsorModalCancelText: {
+    color: "#aaa",
+    fontSize: 15,
+  },
+  sponsorModalSave: {
+    backgroundColor: "#A1F763",
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 10,
+  },
+  sponsorModalSaveText: {
+    color: "#212121",
+    fontWeight: "700",
+    fontSize: 15,
   },
 });
 

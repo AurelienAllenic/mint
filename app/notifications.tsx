@@ -12,6 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { postAcceptInvitation } from "@/utils/invitationAccept";
 import { useAuth } from "../context/auth";
 
 interface Invitation {
@@ -81,16 +82,15 @@ export default function NotificationsScreen() {
     fetchInvitations();
   }, [fetchInvitations]);
 
-  const handleAccept = async (invitationToken: string) => {
+  const handleAccept = async (invitationToken: string, raceId: string) => {
     try {
-      const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
-      const response = await fetch(`${API_URL}/invitations/token/${invitationToken}/accept`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: authHeader,
-        },
-      });
+      if (!API_URL || !token) return;
+      const response = await postAcceptInvitation(
+        API_URL,
+        token,
+        invitationToken,
+        raceId
+      );
 
       if (response.ok) {
         const data = await response.json();
@@ -189,7 +189,9 @@ export default function NotificationsScreen() {
             <View style={styles.invitationActions}>
               <TouchableOpacity
                 style={[styles.actionButton, styles.acceptButton]}
-                onPress={() => handleAccept(item.token)}
+                onPress={() =>
+                  handleAccept(item.token, item.raceId._id)
+                }
               >
                 <Icon name="check" size={20} color="#000" />
                 <Text style={styles.acceptButtonText}>Accepter</Text>

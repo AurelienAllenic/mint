@@ -19,6 +19,10 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../../context/auth";
+import {
+  mergeUniqueEmails,
+  parseEmailsFromCsv,
+} from "@/utils/parseEmailsFromCsv";
 
 interface RaceDiscipline {
   id: number;
@@ -72,6 +76,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [creatingOrganization, setCreatingOrganization] = useState(false);
   const [users, setUsers] = useState<User[]>([]);
   const [runnerEmails, setRunnerEmails] = useState<string>(""); // Champ texte pour les emails
+  const [csvImportName, setCsvImportName] = useState<string | null>(null);
   const [showAddRunners, setShowAddRunners] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [gpxFileUri, setGpxFileUri] = useState<string | null>(
@@ -256,6 +261,54 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         `Erreur lors de la sélection du fichier GPX: ${
           err instanceof Error ? err.message : String(err)
         }`
+      );
+    }
+  };
+
+  const pickCsvForRunners = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: [
+          "text/csv",
+          "text/comma-separated-values",
+          "text/plain",
+          "application/vnd.ms-excel",
+          "*/*",
+        ],
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const file = result.assets?.[0];
+      if (!file?.uri) {
+        Alert.alert("CSV", "Impossible de lire le fichier sélectionné.");
+        return;
+      }
+
+      const content = await FileSystem.readAsStringAsync(file.uri);
+      const extracted = parseEmailsFromCsv(content);
+
+      if (extracted.length === 0) {
+        Alert.alert(
+          "CSV",
+          "Aucune adresse e-mail valide trouvée. Utilisez une colonne d’e-mails ou un e-mail par ligne."
+        );
+        return;
+      }
+
+      setRunnerEmails((prev) => mergeUniqueEmails(prev, extracted));
+      setCsvImportName(file.name || "import.csv");
+      setError(null);
+      Alert.alert(
+        "Import CSV",
+        `${extracted.length} adresse(s) ajoutée(s) (doublons ignorés).`
+      );
+    } catch (e) {
+      console.error("Erreur import CSV:", e);
+      Alert.alert(
+        "Erreur",
+        e instanceof Error ? e.message : "Impossible d’importer le fichier CSV."
       );
     }
   };
@@ -538,6 +591,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
         setSelectedOrganization(null);
         setRunnerEmails(""); // Réinitialiser le champ emails
+        setCsvImportName(null);
         setGpxFileUri(null);
         setGpxFileName(null);
         setGpxFileContent(null);
@@ -769,6 +823,27 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                   <Text style={styles.hintText}>
                     Saisissez les emails séparés par des virgules, points-virgules ou retours à la ligne
                   </Text>
+                  <Text style={styles.hintText}>
+                    Ou importez un fichier CSV : une colonne « email », ou plusieurs colonnes contenant des e-mails (séparateur virgule ou point-virgule). Les adresses sont fusionnées avec la saisie, sans doublons.
+                  </Text>
+                  <TouchableOpacity
+                    style={styles.csvImportButton}
+                    onPress={pickCsvForRunners}
+                    activeOpacity={0.8}
+                  >
+                    <Icon name="file-delimited" size={22} color="#A1F763" />
+                    <Text style={styles.csvImportButtonText}>
+                      Importer un CSV
+                    </Text>
+                  </TouchableOpacity>
+                  {csvImportName ? (
+                    <View style={styles.csvImportMeta}>
+                      <Icon name="check-circle" size={14} color="#A1F763" />
+                      <Text style={styles.csvImportMetaText}>
+                        Dernier import : {csvImportName}
+                      </Text>
+                    </View>
+                  ) : null}
                   <TextInput
                     style={styles.emailInput}
                     placeholder="email1@example.com, email2@example.com"
@@ -1346,6 +1421,33 @@ const styles = StyleSheet.create({
     color: "#888",
     marginBottom: 8,
     fontStyle: "italic",
+  },
+  csvImportButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "rgba(161, 247, 99, 0.12)",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "rgba(161, 247, 99, 0.35)",
+  },
+  csvImportButtonText: {
+    fontSize: 15,
+    color: "#A1F763",
+    fontWeight: "600",
+  },
+  csvImportMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginBottom: 8,
+  },
+  csvImportMetaText: {
+    fontSize: 12,
+    color: "#888",
   },
   emailInput: {
     backgroundColor: "rgba(255, 255, 255, 0.1)",

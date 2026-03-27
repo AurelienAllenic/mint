@@ -28,6 +28,7 @@ interface RaceDetails {
     name: string;
   };
   runners?: any[];
+  sponsors?: any[];
   gpxFile?: string;
   owner?: any;
   // Champs pour compatibilité avec l'ancien format
@@ -48,6 +49,14 @@ interface RaceDetails {
   positive_elevation?: number;
 }
 
+interface SponsorDetails {
+  _id?: string;
+  id?: string;
+  name?: string;
+  logoUrl?: string;
+  image?: string;
+}
+
 export default function RaceDetailsScreen() {
   const { raceId } = useLocalSearchParams<{ raceId: string }>();
   const router = useRouter();
@@ -59,9 +68,13 @@ export default function RaceDetailsScreen() {
   >([]);
   const [error, setError] = useState<string | null>(null);
   const [showParticipantsModal, setShowParticipantsModal] = useState(false);
+  const [showSponsorsModal, setShowSponsorsModal] = useState(false);
   const [showRaceInfo, setShowRaceInfo] = useState(false);
   const [currentTime, setCurrentTime] = useState(new Date());
   const [hasLoadedRace, setHasLoadedRace] = useState(false); // Flag pour éviter les rechargements multiples
+  const [sponsorsById, setSponsorsById] = useState<
+    Record<string, SponsorDetails>
+  >({});
 
   // NOUVEAUX ÉTATS POUR WEBSOCKET
   const [socket, setSocket] = useState<Socket | null>(null);
@@ -142,6 +155,53 @@ export default function RaceDetailsScreen() {
             category: "Course",
           };
           setRace(adaptedRace);
+
+          const raceSponsors = Array.isArray(raceData.sponsors)
+            ? raceData.sponsors
+            : [];
+          const raceSponsorIds = raceSponsors
+            .map((sponsor: any) =>
+              typeof sponsor === "string"
+                ? sponsor
+                : sponsor?._id || sponsor?.id,
+            )
+            .filter(Boolean);
+
+          if (raceSponsorIds.length > 0) {
+            try {
+              const sponsorsResponse = await fetch(`${API_URL}/sponsors`, {
+                method: "GET",
+                headers: {
+                  "Content-Type": "application/json",
+                  Authorization: authHeader,
+                },
+              });
+
+              if (sponsorsResponse.ok) {
+                const sponsorsList = await sponsorsResponse.json();
+                const directory = Array.isArray(sponsorsList)
+                  ? sponsorsList.reduce(
+                      (acc: Record<string, SponsorDetails>, sponsor: any) => {
+                        const sponsorId = sponsor?._id || sponsor?.id;
+                        if (sponsorId) {
+                          acc[sponsorId] = sponsor;
+                        }
+                        return acc;
+                      },
+                      {},
+                    )
+                  : {};
+
+                setSponsorsById(directory);
+              }
+            } catch (sponsorError) {
+              console.warn(
+                "Erreur lors du chargement des sponsors:",
+                sponsorError,
+              );
+            }
+          }
+
           setHasLoadedRace(true); // Marquer comme chargé
 
           // Récupérer le tracé depuis le contenu GPX de la course
@@ -873,6 +933,29 @@ export default function RaceDetailsScreen() {
     [],
   );
 
+  // Fonction de rendu d'un sponsor(mémorisée)
+  const renderSponsorItem = useCallback(
+    ({ item, index }: { item: any; index: number }) => (
+      <View style={styles.participantItem}>
+        {item.logoUrl ? (
+          <Image source={{ uri: item.logoUrl }} style={styles.sponsorLogo} />
+        ) : (
+          <View style={styles.participantAvatar}>
+            <Text style={styles.participantAvatarText}>
+              {item.name?.charAt(0)?.toUpperCase() || (index + 1).toString()}
+            </Text>
+          </View>
+        )}
+        <View style={styles.participantInfo}>
+          <Text style={styles.participantName}>
+            {item.name || `Sponsor ${index + 1}`}
+          </Text>
+        </View>
+      </View>
+    ),
+    [],
+  );
+
   // Fonction keyExtractor mémorisée
   const keyExtractor = useCallback(
     (item: any, index: number) => item._id || item.id || `participant-${index}`,
@@ -906,6 +989,39 @@ export default function RaceDetailsScreen() {
 
     return runners;
   }, [race?.runners, rankings]);
+
+  const raceSponsors = useMemo(() => {
+    const rawSponsors = Array.isArray(race?.sponsors) ? race.sponsors : [];
+
+    return rawSponsors
+      .map((sponsor: any, index: number) => {
+        if (typeof sponsor === "string") {
+          const resolved = sponsorsById[sponsor];
+          return {
+            id: sponsor,
+            _id: sponsor,
+            name: resolved?.name || `Sponsor ${index + 1}`,
+            logoUrl: resolved?.logoUrl || resolved?.image,
+          };
+        }
+
+        const sponsorId = sponsor?._id || sponsor?.id;
+        const resolved = sponsorId ? sponsorsById[sponsorId] : undefined;
+
+        return {
+          ...sponsor,
+          id: sponsorId || sponsor?.id,
+          _id: sponsorId || sponsor?._id,
+          name: sponsor?.name || resolved?.name || `Sponsor ${index + 1}`,
+          logoUrl:
+            sponsor?.logoUrl ||
+            sponsor?.image ||
+            resolved?.logoUrl ||
+            resolved?.image,
+        };
+      })
+      .filter((sponsor: any) => sponsor?.id || sponsor?._id || sponsor?.name);
+  }, [race?.sponsors, sponsorsById]);
 
   // Composant Modal pour les participants (ne se re-render que si nécessaire)
   const ParticipantsModal = useMemo(() => {
@@ -968,6 +1084,61 @@ export default function RaceDetailsScreen() {
     keyExtractor,
     renderParticipantItem,
   ]);
+
+  // Composant Modal pour les participants (ne se re-render que si nécessaire)
+  const SponsorsModal = useMemo(() => {
+    if (!showSponsorsModal) return null;
+
+    return (
+      <Modal
+        visible={true}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowSponsorsModal(false)}
+      >
+        <View style={styles.modalContainer}>
+          <BlurView style={styles.modalHeader} intensity={40} tint="dark">
+            <View style={styles.modalHeaderContent}>
+              <Text style={styles.modalTitle}>
+                Sponsors ({raceSponsors.length})
+              </Text>
+              <TouchableOpacity
+                style={styles.modalCloseButton}
+                onPress={() => setShowSponsorsModal(false)}
+              >
+                <Icon name="close" size={24} color="#A1F763" />
+              </TouchableOpacity>
+            </View>
+          </BlurView>
+
+          <View style={styles.modalContent}>
+            {raceSponsors.length === 0 ? (
+              <View style={styles.emptyParticipants}>
+                <Icon name="account-off" size={60} color="#888" />
+                <Text style={styles.emptyParticipantsText}>Aucun sponsor</Text>
+                <Text style={styles.emptyParticipantsSubText}>
+                  Cette course n&apos;a pas de sponsors.
+                </Text>
+              </View>
+            ) : (
+              <FlatList
+                data={raceSponsors}
+                keyExtractor={keyExtractor}
+                renderItem={renderSponsorItem}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.participantsList}
+                removeClippedSubviews={true}
+                maxToRenderPerBatch={10}
+                updateCellsBatchingPeriod={50}
+                initialNumToRender={10}
+                windowSize={10}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+    );
+  }, [showSponsorsModal, raceSponsors, keyExtractor, renderSponsorItem]);
 
   // NOUVELLE fonction pour obtenir le nom d'un coureur depuis son ID (mémorisée)
   const getRunnerName = useCallback(
@@ -1355,9 +1526,12 @@ export default function RaceDetailsScreen() {
         )}
 
         <View style={styles.bottomButtons}>
-          <TouchableOpacity style={styles.roundButton}>
+          <TouchableOpacity
+            style={styles.roundButton}
+            onPress={() => setShowSponsorsModal(true)}
+          >
             <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
-              <Icon name="share" size={28} color="#fff" />
+              <Icon name="advertisements" size={28} color="#fff" />
             </BlurView>
           </TouchableOpacity>
           <TouchableOpacity
@@ -1381,6 +1555,9 @@ export default function RaceDetailsScreen() {
 
       {/* Modal des participants */}
       {ParticipantsModal}
+
+      {/* Modal des sponsors */}
+      {SponsorsModal}
     </View>
   );
 }
@@ -1762,6 +1939,13 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: "bold",
     color: "#212121",
+  },
+  sponsorLogo: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 16,
+    backgroundColor: "#0F0F0F",
   },
   participantInfo: {
     flex: 1,

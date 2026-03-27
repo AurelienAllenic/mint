@@ -8,8 +8,10 @@ import { useAuth } from "../context/auth";
 import { loginStyles } from "../style/login.styles";
 
 export default function SignupScreen() {
-  const { email: emailParam } = useLocalSearchParams<{ 
+  const { email: emailParam, inviteToken, inviteRaceId } = useLocalSearchParams<{ 
     email?: string;
+    inviteToken?: string;
+    inviteRaceId?: string;
   }>();
   const [firstname, setFirstname] = useState("");
   const [lastname, setLastname] = useState("");
@@ -66,8 +68,16 @@ export default function SignupScreen() {
         console.log("Success response:", successData);
         console.log("==============================");
 
-        // Inscription réussie, redirection vers la page de connexion
-        router.replace("/login");
+        router.replace({
+          pathname: "/login",
+          params:
+            inviteToken && inviteRaceId
+              ? {
+                  inviteToken: String(inviteToken),
+                  inviteRaceId: String(inviteRaceId),
+                }
+              : {},
+        });
       }
     } catch (error) {
       console.error("Erreur lors de l'inscription:", error);

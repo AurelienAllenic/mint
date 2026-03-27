@@ -1,8 +1,9 @@
 import { getTimeUntil } from "@/utils/getTimeUntil";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { LinearGradient } from "expo-linear-gradient";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -10,6 +11,7 @@ import {
   Dimensions,
   FlatList,
   Image,
+  RefreshControl,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -24,6 +26,38 @@ import { useAuth } from "../../context/auth";
 const { width } = Dimensions.get("window");
 const CARD_WIDTH = width * 0.8;
 const CARD_MARGIN = width * 0.05;
+
+/**
+ * GET /invitations/race/:id/invitations-summary — champs officiels + alias (tous number côté back).
+ * Ordre : officiels d’abord, puis alias compat.
+ */
+function parseInvitationSummaryAccepted(sum: any, race: any): number {
+  const raw =
+    sum.acceptedParticipantsCount ??
+    sum.participantsCount ??
+    sum.accepted_count ??
+    sum.participants_accepted;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  const fb =
+    race?.participants ??
+    (Array.isArray(race?.runners) ? race.runners.length : 0);
+  const n = typeof fb === "number" ? fb : Number(fb);
+  return Number.isFinite(n) ? n : 0;
+}
+
+function parseInvitationSummaryPending(sum: any): number {
+  const raw = sum.pendingCount ?? sum.pending_count ?? sum.pending;
+  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+  if (typeof raw === "string" && raw.trim() !== "") {
+    const n = Number(raw);
+    if (Number.isFinite(n)) return n;
+  }
+  return 0;
+}
 
 interface Race {
   _id?: string;
@@ -46,6 +80,10 @@ interface Race {
   maxParticipants?: number;
   category?: string;
   image?: string;
+  /** Nombre d’invitations en attente (organisateur, API invitations-summary) */
+  pendingInvitationCount?: number | null;
+  /** true si l’appel invitations-summary a échoué (affiche « — » pour l’attente) */
+  invitationSummaryFailed?: boolean;
 }
 
 export default function RejoindreScreen() {
@@ -92,19 +130,24 @@ export default function RejoindreScreen() {
     extrapolate: "clamp",
   });
 
-  const [hasLoadedRaces, setHasLoadedRaces] = useState(false); // Flag pour éviter les rechargements multiples
+  const [refreshing, setRefreshing] = useState(false);
+  /** Après le 1er chargement, les suivants sont silencieux (pas d’écran plein) pour éviter les compteurs périmés. */
+  const hasFetchedOnceRef = useRef(false);
 
   useEffect(() => {
-    console.log("[Rejoindre] useEffect chargement - hasLoadedRaces:", hasLoadedRaces);
-    // Ne charger qu'une seule fois
-    if (hasLoadedRaces) {
-      console.log("[Rejoindre] Chargement déjà fait, skip fetchRaces");
-      return;
-    }
+    hasFetchedOnceRef.current = false;
+  }, [token, user?._id]);
 
-    const fetchRaces = async () => {
-      setLoading(true);
-      console.log("[Rejoindre] fetchRaces démarré, user.role:", user?.role);
+  const loadRaces = useCallback(
+    async (opts?: { silent?: boolean; isPullRefresh?: boolean }) => {
+      const silent = opts?.silent === true;
+      const pull = opts?.isPullRefresh === true;
+      if (pull) {
+        setRefreshing(true);
+      } else if (!silent) {
+        setLoading(true);
+      }
+      console.log("[Rejoindre] loadRaces démarré, user.role:", user?.role, "silent:", silent);
       try {
         const API_URL = process.env.EXPO_PUBLIC_API_URL;
         if (!API_URL) {
@@ -115,6 +158,13 @@ export default function RejoindreScreen() {
         const authHeader = token?.startsWith("Bearer ")
           ? token
           : `Bearer ${token}`;
+
+        const noCacheHeaders = {
+          "Content-Type": "application/json",
+          Authorization: authHeader,
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+        };
 
         const trailImages = [
           "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
@@ -140,10 +190,7 @@ export default function RejoindreScreen() {
           try {
             const invitationsResponse = await fetch(`${API_URL}/invitations/my-invitations`, {
               method: "GET",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: authHeader,
-              },
+              headers: noCacheHeaders,
             });
             console.log("[Rejoindre/Coureur] Invitations response status:", invitationsResponse.status);
             if (invitationsResponse.ok) {
@@ -166,10 +213,7 @@ export default function RejoindreScreen() {
 
           const response = await fetch(`${API_URL}/race/my-races`, {
             method: "GET",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: authHeader,
-            },
+            headers: noCacheHeaders,
           });
           if (response.ok) {
             const data = await response.json();
@@ -214,7 +258,6 @@ export default function RejoindreScreen() {
             console.log("[Rejoindre/Coureur] Après filtre pending: affichées", formatted.length, "sur", mapped.length);
             setMesRaces([]);
             setMesParticipations(formatted);
-            setHasLoadedRaces(true);
           } else {
             const errData = await response.json().catch(() => ({}));
             console.error("Erreur /race/my-races:", response.status, errData);
@@ -227,10 +270,7 @@ export default function RejoindreScreen() {
         // Organisateur : récupérer toutes les courses puis filtrer
         const response = await fetch(`${API_URL}/race`, {
           method: "GET",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: authHeader,
-          },
+          headers: noCacheHeaders,
         });
 
         if (response.ok) {
@@ -269,13 +309,54 @@ export default function RejoindreScreen() {
 
           const userId = user?._id;
 
-          const mesCourses = coursesAvecImages.filter((race: any) => {
+          let mesCourses = coursesAvecImages.filter((race: any) => {
             const isOwner =
               race.owner?._id === userId ||
               race.owner?.id === userId ||
               race.owner === userId;
             return isOwner;
           });
+
+          // Organisateur : participants acceptés + nombre en attente (API)
+          if (user?.role === "organisateur" && mesCourses.length > 0) {
+            mesCourses = await Promise.all(
+              mesCourses.map(async (race: any) => {
+                const rid = race._id || race.id;
+                if (!rid) {
+                  return {
+                    ...race,
+                    pendingInvitationCount: null,
+                    invitationSummaryFailed: true,
+                  };
+                }
+                try {
+                  const sumRes = await fetch(
+                    `${API_URL}/invitations/race/${rid}/invitations-summary`,
+                    {
+                      method: "GET",
+                      headers: noCacheHeaders,
+                    }
+                  );
+                  if (sumRes.ok) {
+                    const sum = await sumRes.json();
+                    return {
+                      ...race,
+                      participants: parseInvitationSummaryAccepted(sum, race),
+                      pendingInvitationCount: parseInvitationSummaryPending(sum),
+                      invitationSummaryFailed: false,
+                    };
+                  }
+                } catch {
+                  /* fallback ci-dessous */
+                }
+                return {
+                  ...race,
+                  pendingInvitationCount: null,
+                  invitationSummaryFailed: true,
+                };
+              })
+            );
+          }
 
           // Récupérer les invitations pending pour filtrer les participations (si coureur)
           let pendingInvitationRaceIds: string[] = [];
@@ -284,10 +365,7 @@ export default function RejoindreScreen() {
             try {
               const invitationsResponse = await fetch(`${API_URL}/invitations/my-invitations`, {
                 method: "GET",
-                headers: {
-                  "Content-Type": "application/json",
-                  Authorization: authHeader,
-                },
+                headers: noCacheHeaders,
               });
               console.log("[Rejoindre/Coureur] Invitations (flux /race) status:", invitationsResponse.status);
               if (invitationsResponse.ok) {
@@ -333,7 +411,6 @@ export default function RejoindreScreen() {
 
           setMesRaces(mesCourses);
           setMesParticipations(mesParticipationsData);
-          setHasLoadedRaces(true);
         } else {
           const trailImages = [
             "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",
@@ -353,12 +430,23 @@ export default function RejoindreScreen() {
         Alert.alert("Erreur", "Impossible de charger les courses");
       } finally {
         setLoading(false);
+        setRefreshing(false);
       }
-    };
+    },
+    [token, user?._id, user?.role]
+  );
 
-    fetchRaces();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, user?._id]); // Utiliser user._id au lieu de user pour éviter les boucles
+  useFocusEffect(
+    useCallback(() => {
+      const silent = hasFetchedOnceRef.current;
+      hasFetchedOnceRef.current = true;
+      void loadRaces({ silent });
+    }, [loadRaces])
+  );
+
+  const onRefresh = useCallback(() => {
+    loadRaces({ isPullRefresh: true });
+  }, [loadRaces]);
 
   const RaceCard = ({ race }: { race: Race }) => {
     const scaleValue = new Animated.Value(1);
@@ -415,6 +503,15 @@ export default function RejoindreScreen() {
 
     const statusInfo = getRaceStatusInfo();
 
+    const rawParticipants = race.participants;
+    const participantCount =
+      typeof rawParticipants === "number" && !Number.isNaN(rawParticipants)
+        ? rawParticipants
+        : rawParticipants === null || rawParticipants === undefined
+          ? NaN
+          : Number(rawParticipants);
+    const showParticipantCount = Number.isFinite(participantCount);
+
     return (
       <Animated.View
         style={[
@@ -465,12 +562,27 @@ export default function RejoindreScreen() {
                     </Text>
                   </View>
                 )}
-                {race.participants !== undefined && (
+                {showParticipantCount && (
                   <View style={styles.raceDetail}>
                     <Icon name="account-group" size={14} color="#A1F763" />
                     <Text style={styles.raceDetailText}>
-                      {race.participants} participant
-                      {race.participants > 1 ? "s" : ""}
+                      Participants : {participantCount}
+                    </Text>
+                  </View>
+                )}
+                {typeof race.pendingInvitationCount === "number" && (
+                  <View style={styles.raceDetail}>
+                    <Icon name="clock-outline" size={14} color="#FFB020" />
+                    <Text style={styles.raceDetailText}>
+                      En attente : {race.pendingInvitationCount}
+                    </Text>
+                  </View>
+                )}
+                {race.invitationSummaryFailed && (
+                  <View style={styles.raceDetail}>
+                    <Icon name="clock-outline" size={14} color="#888" />
+                    <Text style={[styles.raceDetailText, { color: "#888" }]}>
+                      En attente : —
                     </Text>
                   </View>
                 )}
@@ -658,6 +770,14 @@ export default function RejoindreScreen() {
             { useNativeDriver: true },
           )}
           scrollEventThrottle={16}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              tintColor="#A1F763"
+              colors={["#A1F763"]}
+            />
+          }
         >
           {/* Onglets */}
           {(user?.role === "organisateur" || user?.role === "coureur") && (

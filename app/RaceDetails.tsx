@@ -1,4 +1,7 @@
 import MapComponent from "@/components/Map/Map";
+import type { Sponsor } from "@/types/api";
+import { postAcceptInvitation } from "@/utils/invitationAccept";
+import { sponsorsFromRace } from "@/utils/sponsors";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { BlurView } from "expo-blur";
 import * as Location from "expo-location";
@@ -9,7 +12,9 @@ import {
   Alert,
   FlatList,
   Image,
+  Linking,
   Modal,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -48,6 +53,8 @@ interface RaceDetails {
   description?: string;
   end_date?: string;
   positive_elevation?: number;
+  sponsors?: any[];
+  sponsor?: any;
 }
 
 export default function RaceDetailsScreen() {
@@ -81,6 +88,11 @@ export default function RaceDetailsScreen() {
   const [pendingInvitationToken, setPendingInvitationToken] = useState<string | null>(null);
   
   // Vérifier si l'utilisateur est le propriétaire de la course
+  const raceSponsors: Sponsor[] = useMemo(
+    () => (race ? sponsorsFromRace(race) : []),
+    [race]
+  );
+
   const isOwner = useMemo(() => {
     if (!race || !user) return false;
     const ownerId = race.owner?._id || race.owner?.id || race.owner;
@@ -715,19 +727,19 @@ export default function RaceDetailsScreen() {
 
   // Fonction pour gérer l'inscription à la course
   const handleAcceptInvitation = async () => {
-    if (!pendingInvitationToken) return;
+    if (!pendingInvitationToken || !token) return;
 
     try {
       const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
       const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
       
-      const response = await fetch(`${API_URL}/invitations/token/${pendingInvitationToken}/accept`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: authHeader,
-        },
-      });
+      const raceIdToUse = String(race?._id || race?.id || raceId || "");
+      const response = await postAcceptInvitation(
+        API_URL,
+        token,
+        pendingInvitationToken,
+        raceIdToUse
+      );
 
       if (response.ok) {
         Alert.alert("Succès", "Invitation acceptée ! Vous pouvez maintenant participer à la course.");
@@ -736,7 +748,6 @@ export default function RaceDetailsScreen() {
         setHasPendingInvitation(false);
         setPendingInvitationToken(null);
         // Recharger la course
-        const raceIdToUse = race?._id || race?.id || raceId;
         if (raceIdToUse) {
           const raceResponse = await fetch(`${API_URL}/race/${raceIdToUse}`, {
             method: "GET",
@@ -1419,6 +1430,48 @@ export default function RaceDetailsScreen() {
                   </View>
                 )}
 
+                {raceSponsors.length > 0 && (
+                  <View style={styles.sponsorsBanner}>
+                    <Text style={styles.sponsorsBannerLabel}>Sponsors</Text>
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={styles.sponsorsScrollContent}
+                    >
+                      {raceSponsors.map((sp) => (
+                        <TouchableOpacity
+                          key={sp.id}
+                          style={styles.sponsorLogoWrap}
+                          disabled={!sp.websiteUrl}
+                          onPress={() => {
+                            if (sp.websiteUrl) {
+                              Linking.openURL(sp.websiteUrl).catch(() => {});
+                            }
+                          }}
+                          activeOpacity={0.85}
+                        >
+                          {sp.image ? (
+                            <Image
+                              source={{ uri: sp.image }}
+                              style={styles.sponsorLogoImg}
+                              resizeMode="contain"
+                            />
+                          ) : (
+                            <View style={styles.sponsorLogoPlaceholder}>
+                              <Text style={styles.sponsorLogoInitial}>
+                                {(sp.name || "?").slice(0, 1).toUpperCase()}
+                              </Text>
+                            </View>
+                          )}
+                          <Text style={styles.sponsorLogoName} numberOfLines={2}>
+                            {sp.name || "Sponsor"}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+
                 {/* Participants */}
                 {race?.runners && (
                   <View style={styles.infoCard}>
@@ -1503,9 +1556,9 @@ export default function RaceDetailsScreen() {
       {/* Boutons d'action avec le style home */}
       <View style={styles.container__btns}>
         {!user?.isVisitor && (
-          // Interface pour utilisateur connecté : boutons rejoindre et retour
+          // Interface pour utilisateur connecté : rejoindre (sauf propriétaire) et retour
           <View style={styles.mainButtonsContainer}>
-            {hasPendingInvitation ? (
+            {!isOwner && hasPendingInvitation ? (
               <View style={styles.pendingInvitationContainer}>
                 <BlurView style={styles.pendingInvitationBlur} intensity={40} tint="dark">
                   <Icon name="email-outline" size={24} color="#A1F763" />
@@ -1530,7 +1583,7 @@ export default function RaceDetailsScreen() {
                   </View>
                 </BlurView>
               </View>
-            ) : (
+            ) : !isOwner ? (
               <TouchableOpacity
                 style={isRunner ? styles.leaveButton : styles.joinButton}
                 onPress={isRunner ? handleLeaveRace : handleJoinRace}
@@ -1551,7 +1604,7 @@ export default function RaceDetailsScreen() {
                   </Text>
                 </BlurView>
               </TouchableOpacity>
-            )}
+            ) : null}
             <TouchableOpacity
               style={styles.mainButton}
               onPress={() => router.back()}
@@ -2133,6 +2186,60 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     fontWeight: "600",
     lineHeight: 16,
+  },
+  sponsorsBanner: {
+    width: "100%",
+    marginTop: 4,
+    marginBottom: 8,
+    padding: 12,
+    backgroundColor: "rgba(15, 15, 15, 0.8)",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "rgba(42, 42, 42, 0.6)",
+  },
+  sponsorsBannerLabel: {
+    fontSize: 10,
+    color: "#666",
+    fontWeight: "500",
+    marginBottom: 10,
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  sponsorsScrollContent: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    paddingRight: 8,
+  },
+  sponsorLogoWrap: {
+    width: 88,
+    marginRight: 12,
+    alignItems: "center",
+  },
+  sponsorLogoImg: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.06)",
+  },
+  sponsorLogoPlaceholder: {
+    width: 64,
+    height: 64,
+    borderRadius: 8,
+    backgroundColor: "rgba(161, 247, 99, 0.15)",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  sponsorLogoInitial: {
+    fontSize: 22,
+    fontWeight: "700",
+    color: "#A1F763",
+  },
+  sponsorLogoName: {
+    marginTop: 6,
+    fontSize: 11,
+    color: "#ccc",
+    textAlign: "center",
+    width: "100%",
   },
   rankingContainer: {
     position: "absolute",

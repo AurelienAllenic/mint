@@ -24,6 +24,44 @@ import { io, Socket } from "socket.io-client";
 import { useAuth } from "../context/auth";
 import AddRunnersModal from "../components/AddRunnersModal/AddRunnersModal";
 
+/** Bandeau « coureur sponsorisé par » (runnerSponsor sur le document User). */
+function RunnerPersonalSponsorBanner({
+  sponsor,
+}: {
+  sponsor: { name?: string; image?: string | null } | null | undefined;
+}) {
+  const name = typeof sponsor?.name === "string" ? sponsor.name.trim() : "";
+  if (!name) return null;
+  const imageUri =
+    typeof sponsor?.image === "string" && sponsor.image.trim().length > 0
+      ? sponsor.image.trim()
+      : null;
+
+  return (
+    <View style={styles.runnerPersonalSponsorBanner}>
+      <View style={styles.runnerPersonalSponsorRow}>
+        <Text style={styles.runnerPersonalSponsorLabel} numberOfLines={1}>
+          Coureur sponsorisé par
+        </Text>
+        {imageUri ? (
+          <Image
+            source={{ uri: imageUri }}
+            style={styles.runnerPersonalSponsorLogo}
+            resizeMode="contain"
+          />
+        ) : null}
+        <Text
+          style={styles.runnerPersonalSponsorName}
+          numberOfLines={1}
+          ellipsizeMode="tail"
+        >
+          {name}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
 interface RaceDetails {
   _id: string;
   id?: string;
@@ -1029,42 +1067,45 @@ export default function RaceDetailsScreen() {
   const renderParticipantItem = useCallback(
     ({ item, index }: { item: any; index: number }) => (
       <View style={styles.participantItem}>
-        <View style={styles.participantAvatar}>
-          <Text style={styles.participantAvatarText}>
-            {item.firstname?.charAt(0)?.toUpperCase() ||
-              item.name?.charAt(0)?.toUpperCase() ||
-              item.email?.charAt(0)?.toUpperCase() ||
-              (index + 1).toString()}
-          </Text>
-        </View>
-        <View style={styles.participantInfo}>
-          <Text style={styles.participantName}>
-            {item.firstname && item.lastname
-              ? `${item.firstname} ${item.lastname}`
-              : item.name || item.email || `Participant ${index + 1}`}
-          </Text>
-          {item.email && (
-            <Text style={styles.participantEmail}>{item.email}</Text>
-          )}
-          {item.progress !== undefined && (
-            <Text style={styles.participantProgress}>
-              {item.progress.toFixed(0)} m parcourus
+        <View style={styles.participantRowMain}>
+          <View style={styles.participantAvatar}>
+            <Text style={styles.participantAvatarText}>
+              {item.firstname?.charAt(0)?.toUpperCase() ||
+                item.name?.charAt(0)?.toUpperCase() ||
+                item.email?.charAt(0)?.toUpperCase() ||
+                (index + 1).toString()}
             </Text>
-          )}
+          </View>
+          <View style={styles.participantInfo}>
+            <Text style={styles.participantName}>
+              {item.firstname && item.lastname
+                ? `${item.firstname} ${item.lastname}`
+                : item.name || item.email || `Participant ${index + 1}`}
+            </Text>
+            {item.email && (
+              <Text style={styles.participantEmail}>{item.email}</Text>
+            )}
+            {item.progress !== undefined && (
+              <Text style={styles.participantProgress}>
+                {item.progress.toFixed(0)} m parcourus
+              </Text>
+            )}
+          </View>
+          <View style={styles.participantNumber}>
+            <Text style={styles.participantNumberText}>
+              {item.rank
+                ? item.rank === 1
+                  ? "🥇"
+                  : item.rank === 2
+                    ? "🥈"
+                    : item.rank === 3
+                      ? "🥉"
+                      : `#${item.rank}`
+                : `#${index + 1}`}
+            </Text>
+          </View>
         </View>
-        <View style={styles.participantNumber}>
-          <Text style={styles.participantNumberText}>
-            {item.rank
-              ? item.rank === 1
-                ? "🥇"
-                : item.rank === 2
-                  ? "🥈"
-                  : item.rank === 3
-                    ? "🥉"
-                    : `#${item.rank}`
-              : `#${index + 1}`}
-          </Text>
-        </View>
+        <RunnerPersonalSponsorBanner sponsor={item.runnerSponsor} />
       </View>
     ),
     [],
@@ -1085,7 +1126,9 @@ export default function RaceDetailsScreen() {
       return runners
         .map((runner: any) => {
           const runnerId = runner._id || runner.id;
-          const ranking = rankings.find((r) => r.userId === runnerId);
+          const ranking = rankings.find(
+            (r) => String(r.userId) === String(runnerId),
+          );
           return {
             ...runner,
             rank: ranking?.rank,
@@ -1170,7 +1213,7 @@ export default function RaceDetailsScreen() {
   const getRunnerName = useCallback(
     (userId: string) => {
       const runner = race?.runners?.find(
-        (r: any) => (r._id || r.id) === userId,
+        (r: any) => String(r._id || r.id) === String(userId),
       );
       if (runner) {
         return runner.firstname && runner.lastname
@@ -1178,6 +1221,16 @@ export default function RaceDetailsScreen() {
           : runner.email || `Coureur ${userId.substring(0, 8)}`;
       }
       return `Coureur ${userId.substring(0, 8)}`;
+    },
+    [race?.runners],
+  );
+
+  const getRunnerSponsor = useCallback(
+    (userId: string) => {
+      const runner = race?.runners?.find(
+        (r: any) => String(r._id || r.id) === String(userId),
+      );
+      return runner?.runnerSponsor ?? null;
     },
     [race?.runners],
   );
@@ -1199,26 +1252,31 @@ export default function RaceDetailsScreen() {
       item: { userId: string; progress: number; rank: number };
     }) => (
       <View style={styles.rankingItem}>
-        <View style={styles.rankingPosition}>
-          <Text style={styles.rankingPositionText}>
-            {item.rank === 1
-              ? "🥇"
-              : item.rank === 2
-                ? "🥈"
-                : item.rank === 3
-                  ? "🥉"
-                  : `#${item.rank}`}
-          </Text>
+        <View style={styles.rankingItemRow}>
+          <View style={styles.rankingPosition}>
+            <Text style={styles.rankingPositionText}>
+              {item.rank === 1
+                ? "🥇"
+                : item.rank === 2
+                  ? "🥈"
+                  : item.rank === 3
+                    ? "🥉"
+                    : `#${item.rank}`}
+            </Text>
+          </View>
+          <View style={styles.rankingInfo}>
+            <Text style={styles.rankingName}>
+              {getRunnerName(item.userId)}
+            </Text>
+            <Text style={styles.rankingProgress}>
+              {item.progress.toFixed(0)} m parcourus
+            </Text>
+          </View>
         </View>
-        <View style={styles.rankingInfo}>
-          <Text style={styles.rankingName}>{getRunnerName(item.userId)}</Text>
-          <Text style={styles.rankingProgress}>
-            {item.progress.toFixed(0)} m parcourus
-          </Text>
-        </View>
+        <RunnerPersonalSponsorBanner sponsor={getRunnerSponsor(item.userId)} />
       </View>
     ),
-    [getRunnerName],
+    [getRunnerName, getRunnerSponsor],
   );
 
   // KeyExtractor pour le ranking
@@ -2159,8 +2217,6 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   participantItem: {
-    flexDirection: "row",
-    alignItems: "center",
     backgroundColor: "#1E1E1E",
     borderRadius: 12,
     padding: 16,
@@ -2170,6 +2226,46 @@ const styles = StyleSheet.create({
     shadowRadius: 5,
     shadowOffset: { width: 0, height: 2 },
     elevation: 3,
+  },
+  participantRowMain: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  runnerPersonalSponsorBanner: {
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: "rgba(161, 247, 99, 0.2)",
+  },
+  runnerPersonalSponsorRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    flexWrap: "nowrap",
+    gap: 8,
+  },
+  runnerPersonalSponsorLabel: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.5)",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    flexShrink: 0,
+  },
+  runnerPersonalSponsorLogo: {
+    width: 26,
+    height: 26,
+    borderRadius: 6,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    flexShrink: 0,
+  },
+  runnerPersonalSponsorName: {
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#A1F763",
   },
   participantAvatar: {
     width: 50,
@@ -2347,11 +2443,13 @@ const styles = StyleSheet.create({
     marginLeft: "auto",
   },
   rankingItem: {
-    flexDirection: "row",
-    alignItems: "center",
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: "rgba(255, 255, 255, 0.1)",
+  },
+  rankingItemRow: {
+    flexDirection: "row",
+    alignItems: "center",
   },
   rankingPosition: {
     width: 40,

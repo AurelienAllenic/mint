@@ -25,6 +25,7 @@ import { useAuth } from "../../context/auth";
 import {
   mergeUniqueEmails,
   parseEmailsFromCsv,
+  readCsvFromPickedDocument,
 } from "@/utils/parseEmailsFromCsv";
 
 interface RaceDiscipline {
@@ -316,13 +317,23 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         return;
       }
 
-      const content = await FileSystem.readAsStringAsync(file.uri);
+      const { content, isEmptyFile } = await readCsvFromPickedDocument(
+        file.uri,
+      );
+      if (isEmptyFile) {
+        Alert.alert(
+          "CSV",
+          "Aucun texte lisible dans ce fichier. Exportez en CSV UTF-8, ou vérifiez que vous ouvrez bien la bonne copie du fichier.",
+        );
+        return;
+      }
+
       const extracted = parseEmailsFromCsv(content);
 
       if (extracted.length === 0) {
         Alert.alert(
           "CSV",
-          "Aucune adresse e-mail valide trouvée. Utilisez une colonne d’e-mails ou un e-mail par ligne."
+          "Aucune adresse e-mail valide trouvée. Utilisez une colonne « email », une adresse par ligne, ou exportez en CSV UTF-8.",
         );
         return;
       }

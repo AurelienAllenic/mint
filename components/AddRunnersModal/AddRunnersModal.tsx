@@ -1,12 +1,12 @@
 import {
   mergeUniqueEmails,
   parseEmailsFromCsv,
+  readCsvFromPickedDocument,
 } from "@/utils/parseEmailsFromCsv";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
 import { StripeProvider, useStripe } from "@stripe/stripe-react-native";
 import { BlurView } from "expo-blur";
 import * as DocumentPicker from "expo-document-picker";
-import * as FileSystem from "expo-file-system";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -89,13 +89,23 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
         return;
       }
 
-      const content = await FileSystem.readAsStringAsync(file.uri);
+      const { content, isEmptyFile } = await readCsvFromPickedDocument(
+        file.uri,
+      );
+      if (isEmptyFile) {
+        Alert.alert(
+          "CSV",
+          "Aucun texte lisible dans ce fichier. Exportez en CSV UTF-8, ou vérifiez que vous ouvrez bien la bonne copie du fichier.",
+        );
+        return;
+      }
+
       const extracted = parseEmailsFromCsv(content);
 
       if (extracted.length === 0) {
         Alert.alert(
           "CSV",
-          "Aucune adresse e-mail valide trouvée. Utilisez une colonne d’e-mails ou un e-mail par ligne."
+          "Aucune adresse e-mail valide trouvée. Utilisez une colonne « email », une adresse par ligne, ou exportez en CSV UTF-8.",
         );
         return;
       }

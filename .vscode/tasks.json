@@ -1,0 +1,14 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "shell",
+			"label": "Installer les dépendances manquantes",
+			"command": "pnpm install",
+			"group": "build",
+			"problemMatcher": [
+				"$eslint-stylish"
+			]
+		}
+	]
+}

@@ -1,3 +1,4 @@
+const mongoose = require("mongoose");
 const Invitation = require("../models/Invitation");
 const Race = require("../models/Race");
 const User = require("../models/User");
@@ -126,11 +127,16 @@ exports.getMyInvitations = async (req, res) => {
       return res.status(404).json({ error: "Utilisateur non trouvé" });
     }
 
-    // Récupérer les invitations pour l'email de l'utilisateur
+    const now = new Date();
+    // Même règle que invitations-summary : sans expiresAt, l’invitation reste valide.
     const invitations = await Invitation.find({
       email: user.email,
       status: "pending",
-      expiresAt: { $gt: new Date() },
+      $or: [
+        { expiresAt: { $gt: now } },
+        { expiresAt: null },
+        { expiresAt: { $exists: false } },
+      ],
     })
       .populate("raceId", "name startDate endDate organization")
       .populate("invitedBy", "email firstname lastname")
@@ -269,6 +275,80 @@ exports.declineInvitation = async (req, res) => {
     res.status(200).json({ message: "Invitation déclinée" });
   } catch (error) {
     console.error("Erreur déclin invitation:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+/**
+ * GET /invitations/race/:raceId/invitations-summary
+ * Compteurs pour le propriétaire : invitations pending non expirées + participants « réellement acceptés ».
+ */
+exports.getRaceInvitationSummary = async (req, res) => {
+  try {
+    const { raceId } = req.params;
+    const userId = String(req.userId || "");
+
+    const race = await Race.findById(raceId);
+    if (!race) {
+      return res.status(404).json({ error: "Course non trouvée" });
+    }
+
+    const ownerRaw = race.owner;
+    const ownerId =
+      ownerRaw && typeof ownerRaw === "object" && ownerRaw._id != null
+        ? String(ownerRaw._id)
+        : String(ownerRaw);
+    if (ownerId !== userId) {
+      return res.status(403).json({ error: "Accès refusé" });
+    }
+
+    const now = new Date();
+    // Compat : invitations sans expiresAt / null (anciennes données) restent « pending » valides.
+    // Seules les invitations explicitement expirées sont exclues.
+    const raceIdFilter =
+      mongoose.Types.ObjectId.isValid(raceId)
+        ? { $in: [new mongoose.Types.ObjectId(raceId), String(raceId)] }
+        : raceId;
+
+    const pendingList = await Invitation.find({
+      raceId: raceIdFilter,
+      status: "pending",
+      $or: [
+        { expiresAt: { $gt: now } },
+        { expiresAt: null },
+        { expiresAt: { $exists: false } },
+      ],
+    }).select("email");
+
+    const pendingEmails = new Set(
+      pendingList.map((i) => String(i.email || "").toLowerCase())
+    );
+    const pendingCount = pendingList.length;
+
+    await race.populate({ path: "runners", select: "email" });
+
+    let acceptedParticipantsCount = 0;
+    const runners = race.runners || [];
+    for (const runner of runners) {
+      const email = (runner.email || "").toLowerCase();
+      if (!email) {
+        acceptedParticipantsCount += 1;
+        continue;
+      }
+      if (!pendingEmails.has(email)) acceptedParticipantsCount += 1;
+    }
+
+    res.status(200).json({
+      pendingCount,
+      acceptedParticipantsCount,
+      participantsCount: acceptedParticipantsCount,
+      accepted_count: acceptedParticipantsCount,
+      participants_accepted: acceptedParticipantsCount,
+      pending: pendingCount,
+      pending_count: pendingCount,
+    });
+  } catch (error) {
+    console.error("Erreur invitations-summary:", error);
     res.status(500).json({ error: error.message });
   }
 };

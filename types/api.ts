@@ -6,7 +6,8 @@ export type Sponsor = {
   id: string;
   name: string;
   image: string | null;
-  websiteUrl: string | null;
+  /** Présent seulement si le back expose ce champ (ex. évolution future). */
+  websiteUrl?: string | null;
 };
 
 /** Course telle que renvoyée par le back (extrait utile au front). */
@@ -14,9 +15,9 @@ export type RaceWithSponsors = {
   _id: string;
   name: string;
   organization?: unknown;
-  /** Plusieurs sponsors (IDs peuplés ou objets selon le back). */
+  /** Si le back ajoute un tableau plus tard. */
   sponsors?: Sponsor[] | string[];
-  /** @deprecated Compat : un seul sponsor ; migrer vers sponsors[]. */
+  /** Référence optionnelle unique (contrat actuel mint-back-node). */
   sponsor?: Sponsor | string | null;
 };
 

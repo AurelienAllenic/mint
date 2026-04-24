@@ -9,7 +9,9 @@ export function normalizeSponsor(raw: any): Sponsor | null {
     id,
     name: String(raw.name ?? ""),
     image: raw.image != null ? String(raw.image) : null,
-    websiteUrl: raw.websiteUrl != null ? String(raw.websiteUrl) : null,
+    ...(raw.websiteUrl != null
+      ? { websiteUrl: String(raw.websiteUrl) }
+      : {}),
   };
 }
 

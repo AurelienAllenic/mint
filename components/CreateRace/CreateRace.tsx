@@ -96,11 +96,13 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
   const [sponsorsList, setSponsorsList] = useState<Sponsor[]>([]);
-  const [selectedSponsorIds, setSelectedSponsorIds] = useState<string[]>([]);
+  /** Un seul sponsor par course (schéma API : `sponsor` ObjectId). */
+  const [selectedSponsorId, setSelectedSponsorId] = useState<string | null>(
+    null
+  );
   const [showSponsorModal, setShowSponsorModal] = useState(false);
   const [newSponsorName, setNewSponsorName] = useState("");
   const [newSponsorImage, setNewSponsorImage] = useState("");
-  const [newSponsorWebsite, setNewSponsorWebsite] = useState("");
   const [sponsorFormError, setSponsorFormError] = useState<string | null>(null);
   const [creatingSponsor, setCreatingSponsor] = useState(false);
 
@@ -490,12 +492,10 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   };
 
   const toggleSponsorSelection = (id: string) => {
-    setSelectedSponsorIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
-    );
+    setSelectedSponsorId((prev) => (prev === id ? null : id));
   };
 
-  const clearAllSponsors = () => setSelectedSponsorIds([]);
+  const clearSponsorSelection = () => setSelectedSponsorId(null);
 
   const createSponsorAccount = async () => {
     if (!newSponsorName.trim()) {
@@ -518,9 +518,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
           ...(newSponsorImage.trim()
             ? { image: newSponsorImage.trim() }
             : {}),
-          ...(newSponsorWebsite.trim()
-            ? { websiteUrl: newSponsorWebsite.trim() }
-            : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -530,7 +527,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
             ? data.message
             : typeof data.error === "string"
               ? data.error
-              : "Conflit : nom, image ou site déjà utilisé pour ce compte."
+              : "Conflit : impossible de créer ce sponsor."
         );
         return;
       }
@@ -547,11 +544,10 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       const created = normalizeSponsor(data);
       if (created) {
         setSponsorsList((prev) => [...prev, created]);
-        setSelectedSponsorIds((prev) => [...prev, created.id]);
+        setSelectedSponsorId(created.id);
       }
       setNewSponsorName("");
       setNewSponsorImage("");
-      setNewSponsorWebsite("");
       setShowSponsorModal(false);
     } catch {
       setSponsorFormError("Erreur réseau");
@@ -601,7 +597,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         organization: selectedOrganization!,
         runnerEmails: emails, // Envoyer les emails au lieu des IDs
         gpxFile: gpxFileContent || "",
-        sponsors: selectedSponsorIds,
+        ...(selectedSponsorId ? { sponsor: selectedSponsorId } : {}),
         ...(paymentIntentId ? { paymentIntentId } : {}),
       };
 
@@ -690,6 +686,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         setEndDate(newEndDate);
 
         setSelectedOrganization(null);
+        setSelectedSponsorId(null);
         setRunnerEmails(""); // Réinitialiser le champ emails
         setCsvImportName(null);
         setGpxFileUri(null);
@@ -895,11 +892,12 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                   )}
                 </View>
 
-                {/* Sponsors (multi) */}
+                {/* Sponsor (un seul, aligné sur le champ API `sponsor`) */}
                 <View style={styles.inputGroup}>
-                  <Text style={styles.label}>Sponsors (optionnel)</Text>
+                  <Text style={styles.label}>Sponsor (optionnel)</Text>
                   <Text style={styles.hintText}>
-                    Sélectionnez un ou plusieurs sponsors. Vous pouvez tous les retirer.
+                    Au plus un sponsor par course. Appuyez à nouveau sur la puce pour
+                    retirer la sélection.
                   </Text>
                   <View style={styles.sponsorActionsRow}>
                     <TouchableOpacity
@@ -912,9 +910,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                       <Icon name="plus-circle-outline" size={18} color="#A1F763" />
                       <Text style={styles.addSponsorLinkText}>Nouveau sponsor</Text>
                     </TouchableOpacity>
-                    {selectedSponsorIds.length > 0 && (
-                      <TouchableOpacity onPress={clearAllSponsors}>
-                        <Text style={styles.clearSponsorsText}>Tout retirer</Text>
+                    {selectedSponsorId != null && (
+                      <TouchableOpacity onPress={clearSponsorSelection}>
+                        <Text style={styles.clearSponsorsText}>Retirer le sponsor</Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -924,7 +922,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     style={styles.sponsorsChipsScroll}
                   >
                     {sponsorsList.map((sp) => {
-                      const selected = selectedSponsorIds.includes(sp.id);
+                      const selected = selectedSponsorId === sp.id;
                       return (
                         <TouchableOpacity
                           key={sp.id}
@@ -990,14 +988,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                         placeholderTextColor="#888"
                         value={newSponsorImage}
                         onChangeText={setNewSponsorImage}
-                        autoCapitalize="none"
-                      />
-                      <TextInput
-                        style={styles.input}
-                        placeholder="Site web (https://...)"
-                        placeholderTextColor="#888"
-                        value={newSponsorWebsite}
-                        onChangeText={setNewSponsorWebsite}
                         autoCapitalize="none"
                       />
                       {sponsorFormError ? (

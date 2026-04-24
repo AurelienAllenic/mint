@@ -34,36 +34,105 @@ const CARD_MARGIN = width * 0.05;
  */
 let rejoindreFirstFocusInSession = true;
 
-/**
- * GET /invitations/race/:id/invitations-summary — champs officiels + alias (tous number côté back).
- * Ordre : officiels d’abord, puis alias compat.
- */
-function parseInvitationSummaryAccepted(sum: any, race: any): number {
-  const raw =
-    sum.acceptedParticipantsCount ??
-    sum.participantsCount ??
-    sum.accepted_count ??
-    sum.participants_accepted;
-  if (typeof raw === "number" && Number.isFinite(raw)) return raw;
-  if (typeof raw === "string" && raw.trim() !== "") {
-    const n = Number(raw);
-    if (Number.isFinite(n)) return n;
+/** Rôle renvoyé par l’API parfois avec casse variable. */
+function isOrganizerRole(role: string | undefined): boolean {
+  return String(role || "").toLowerCase() === "organisateur";
+}
+
+/** Désenveloppe `{ data: { ... } }` si le back renvoie une enveloppe. */
+function unwrapInvitationSummary(sum: any): any {
+  if (
+    sum &&
+    typeof sum === "object" &&
+    sum.data != null &&
+    typeof sum.data === "object" &&
+    !Array.isArray(sum.data)
+  ) {
+    return sum.data;
   }
-  const fb =
-    race?.participants ??
-    (Array.isArray(race?.runners) ? race.runners.length : 0);
-  const n = typeof fb === "number" ? fb : Number(fb);
-  return Number.isFinite(n) ? n : 0;
+  return sum;
 }
 
 function parseInvitationSummaryPending(sum: any): number {
-  const raw = sum.pendingCount ?? sum.pending_count ?? sum.pending;
+  const s = unwrapInvitationSummary(sum);
+  const list = Array.isArray(s.pendingInvitations) ? s.pendingInvitations : null;
+  if (list && list.length > 0) return list.length;
+
+  const raw =
+    s.pendingCount ?? s.pending_count ?? s.pending;
   if (typeof raw === "number" && Number.isFinite(raw)) return raw;
   if (typeof raw === "string" && raw.trim() !== "") {
     const n = Number(raw);
     if (Number.isFinite(n)) return n;
   }
   return 0;
+}
+
+/**
+ * Participants affichés = invitations acceptées (ou équivalent), pas la simple taille de runners :
+ * le back peut avoir mis un coureur dans runners tout en laissant RaceInvitation en pending.
+ * Ordre : champ explicite API → emails dans pendingInvitations vs runners peuplés → max(0, runners - pendingCount).
+ */
+function parseInvitationSummaryAccepted(sum: any, race: any): number {
+  const s = unwrapInvitationSummary(sum);
+  const explicit =
+    s.acceptedParticipantsCount ??
+    s.acceptedCount ??
+    s.confirmedParticipantsCount ??
+    s.participantsAccepted ??
+    s.accepted_invitations_count;
+  if (typeof explicit === "number" && Number.isFinite(explicit)) return explicit;
+  if (typeof explicit === "string" && explicit.trim() !== "") {
+    const n = Number(explicit);
+    if (Number.isFinite(n)) return n;
+  }
+
+  const pendingEmails = new Set(
+    (Array.isArray(s.pendingInvitations) ? s.pendingInvitations : [])
+      .map((p: any) => String(p.email ?? "").toLowerCase())
+      .filter(Boolean)
+  );
+  if (pendingEmails.size > 0 && Array.isArray(race?.runners)) {
+    let n = 0;
+    for (const r of race.runners) {
+      const em =
+        typeof r === "object" && r != null && "email" in r
+          ? String((r as { email?: string }).email ?? "").toLowerCase()
+          : "";
+      if (!em || !pendingEmails.has(em)) n++;
+    }
+    return n;
+  }
+
+  const pending = parseInvitationSummaryPending(sum);
+  const runnerLen = Array.isArray(race?.runners) ? race.runners.length : 0;
+  if (Number.isFinite(pending) && pending >= 0) {
+    return Math.max(0, runnerLen - pending);
+  }
+
+  return runnerLen;
+}
+
+/**
+ * Mes courses organisateur : GET /invitations/race/:raceId/summary + Bearer.
+ * 403 = pas owner : ne pas afficher la ligne « En attente » (voir invitationSummaryForbidden).
+ */
+async function fetchInvitationRaceSummary(
+  apiUrl: string,
+  raceId: string,
+  headers: Record<string, string>
+): Promise<
+  | { ok: true; data: any }
+  | { ok: false; status: number }
+> {
+  const base = apiUrl.replace(/\/$/, "");
+  const url = `${base}/invitations/race/${encodeURIComponent(raceId)}/summary`;
+  const res = await fetch(url, { method: "GET", headers });
+  if (res.ok) {
+    const data = await res.json().catch(() => ({}));
+    return { ok: true, data };
+  }
+  return { ok: false, status: res.status };
 }
 
 /** GET /race renvoie souvent des _id objet `{ $oid }` : obligatoire pour filtre owner + navigation. */
@@ -100,10 +169,12 @@ interface Race {
   maxParticipants?: number;
   category?: string;
   image?: string;
-  /** Nombre d’invitations en attente (organisateur, API invitations-summary) */
+  /** Invitations encore en attente (organisateur, GET .../invitations/race/:id/summary → pendingCount). */
   pendingInvitationCount?: number | null;
-  /** true si l’appel invitations-summary a échoué (affiche « — » pour l’attente) */
+  /** true si summary a échoué (≠ 403) : afficher « En attente : — ». */
   invitationSummaryFailed?: boolean;
+  /** true si summary 403 (pas owner) : masquer toute ligne En attente. */
+  invitationSummaryForbidden?: boolean;
 }
 
 export default function RejoindreScreen() {
@@ -333,8 +404,7 @@ export default function RejoindreScreen() {
             return ownerId !== "" && ownerId === userId;
           });
 
-          // Organisateur : participants acceptés + nombre en attente (API)
-          if (user?.role === "organisateur" && mesCourses.length > 0) {
+          if (isOrganizerRole(user?.role) && mesCourses.length > 0) {
             mesCourses = await Promise.all(
               mesCourses.map(async (race: any) => {
                 const rid = normalizeMongoId(race._id || race.id);
@@ -343,32 +413,50 @@ export default function RejoindreScreen() {
                     ...race,
                     pendingInvitationCount: null,
                     invitationSummaryFailed: true,
+                    invitationSummaryForbidden: false,
                   };
                 }
                 try {
-                  const sumRes = await fetch(
-                    `${API_URL}/invitations/race/${rid}/invitations-summary`,
-                    {
-                      method: "GET",
-                      headers: noCacheHeaders,
-                    }
+                  const result = await fetchInvitationRaceSummary(
+                    API_URL,
+                    rid,
+                    noCacheHeaders
                   );
-                  if (sumRes.ok) {
-                    const sum = await sumRes.json();
+                  if (result.ok) {
+                    const pending = parseInvitationSummaryPending(result.data);
+                    const participants = parseInvitationSummaryAccepted(
+                      result.data,
+                      race
+                    );
                     return {
                       ...race,
-                      participants: parseInvitationSummaryAccepted(sum, race),
-                      pendingInvitationCount: parseInvitationSummaryPending(sum),
+                      participants,
+                      pendingInvitationCount: pending,
                       invitationSummaryFailed: false,
+                      invitationSummaryForbidden: false,
                     };
                   }
-                } catch {
-                  /* fallback ci-dessous */
+                  if (result.status === 403) {
+                    return {
+                      ...race,
+                      pendingInvitationCount: null,
+                      invitationSummaryFailed: false,
+                      invitationSummaryForbidden: true,
+                    };
+                  }
+                  console.warn(
+                    "[Rejoindre] GET .../summary échoué",
+                    rid,
+                    result.status
+                  );
+                } catch (e) {
+                  console.warn("[Rejoindre] summary erreur", rid, e);
                 }
                 return {
                   ...race,
                   pendingInvitationCount: null,
                   invitationSummaryFailed: true,
+                  invitationSummaryForbidden: false,
                 };
               })
             );
@@ -570,22 +658,25 @@ export default function RejoindreScreen() {
                     </Text>
                   </View>
                 )}
-                {typeof race.pendingInvitationCount === "number" && (
-                  <View style={styles.raceDetail}>
-                    <Icon name="clock-outline" size={14} color="#FFB020" />
-                    <Text style={styles.raceDetailText}>
-                      En attente : {race.pendingInvitationCount}
-                    </Text>
-                  </View>
-                )}
-                {race.invitationSummaryFailed && (
-                  <View style={styles.raceDetail}>
-                    <Icon name="clock-outline" size={14} color="#888" />
-                    <Text style={[styles.raceDetailText, { color: "#888" }]}>
-                      En attente : —
-                    </Text>
-                  </View>
-                )}
+                {!race.invitationSummaryForbidden &&
+                  typeof race.pendingInvitationCount === "number" &&
+                  !race.invitationSummaryFailed && (
+                    <View style={styles.raceDetail}>
+                      <Icon name="clock-outline" size={14} color="#FFB020" />
+                      <Text style={styles.raceDetailText}>
+                        En attente : {race.pendingInvitationCount}
+                      </Text>
+                    </View>
+                  )}
+                {!race.invitationSummaryForbidden &&
+                  race.invitationSummaryFailed && (
+                    <View style={styles.raceDetail}>
+                      <Icon name="clock-outline" size={14} color="#888" />
+                      <Text style={[styles.raceDetailText, { color: "#888" }]}>
+                        En attente : —
+                      </Text>
+                    </View>
+                  )}
                 {race.date && (
                   <View style={styles.raceDetail}>
                     <Icon
@@ -744,7 +835,7 @@ export default function RejoindreScreen() {
           <Icon name="arrow-left" size={24} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>
-          {user?.role === "organisateur"
+          {isOrganizerRole(user?.role)
             ? "Mes courses"
             : "Rejoindre une course"}
         </Text>
@@ -781,9 +872,9 @@ export default function RejoindreScreen() {
           }
         >
           {/* Onglets */}
-          {(user?.role === "organisateur" || user?.role === "coureur") && (
+          {(isOrganizerRole(user?.role) || user?.role === "coureur") && (
             <View style={styles.tabContainer}>
-              {user?.role === "organisateur" && (
+              {isOrganizerRole(user?.role) && (
                 <TabButton
                   title="Mes courses"
                   isActive={activeTab === "courses"}

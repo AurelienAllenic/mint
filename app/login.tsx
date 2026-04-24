@@ -67,13 +67,21 @@ export default function LoginScreen() {
       }
 
       if (response.ok && !isVisitor) {
+        // mint-back-node : login peut renvoyer access_token ; register ailleurs accessToken
+        const jwt =
+          typeof data.access_token === "string"
+            ? data.access_token
+            : typeof data.accessToken === "string"
+              ? data.accessToken
+              : "";
+
         // Extraire l'ID depuis l'ObjectId si nécessaire
         let userId = data.technicalUser._id || data.technicalUser.id;
 
         // Si l'ID n'est pas dans la réponse, l'extraire du token JWT
-        if (!userId && data.access_token) {
+        if (!userId && jwt) {
           try {
-            const payload = JSON.parse(atob(data.access_token.split(".")[1]));
+            const payload = JSON.parse(atob(jwt.split(".")[1]));
             userId = payload.userId || payload.id || payload.sub;
           } catch (e) {
             console.log("Erreur lors de l'extraction du JWT:", e);
@@ -94,22 +102,17 @@ export default function LoginScreen() {
           profileImage: data.userProfile.profileImage || data.profileImage,
           role: data.userProfile.role || data.role,
           _id: userId,
-          token: data.access_token,
+          token: jwt,
           isConnected: !isVisitor,
           isVisitor: false,
         });
 
         const API_URL = process.env.EXPO_PUBLIC_API_URL;
-        if (
-          API_URL &&
-          inviteToken &&
-          inviteRaceId &&
-          data.access_token
-        ) {
+        if (API_URL && inviteToken && inviteRaceId && jwt) {
           try {
             const acceptRes = await postAcceptInvitation(
               API_URL,
-              data.access_token,
+              jwt,
               String(inviteToken),
               String(inviteRaceId)
             );

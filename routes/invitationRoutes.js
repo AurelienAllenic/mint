@@ -6,6 +6,13 @@ const auth = require("../middleware/auth");
 // Créer des invitations pour une course
 router.post("/race/:raceId/invite", auth, invitationController.createInvitations);
 
+// Résumé invitations (propriétaire) — utilisé par la liste « Mes courses » (organisateur)
+router.get(
+  "/race/:raceId/invitations-summary",
+  auth,
+  invitationController.getRaceInvitationSummary
+);
+
 // Récupérer mes invitations
 router.get("/my-invitations", auth, invitationController.getMyInvitations);
 

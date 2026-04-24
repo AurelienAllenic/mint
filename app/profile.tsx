@@ -14,6 +14,19 @@ import {
 import { useAuth } from "../context/auth";
 import { profileStyles } from "../style/profile.styles";
 
+function isCoureurRole(role: unknown): boolean {
+  return String(role ?? "").toLowerCase().trim() === "coureur";
+}
+
+function formatRoleLabel(role: unknown): string {
+  const r = String(role ?? "").toLowerCase().trim();
+  if (r === "coureur") return "Coureur";
+  if (r === "organisateur") return "Organisateur";
+  if (r === "visitor") return "Visiteur";
+  if (!r) return "—";
+  return String(role);
+}
+
 export default function ProfileScreen() {
   const { user, logout, token, updateUser } = useAuth();
   const router = useRouter();
@@ -54,12 +67,16 @@ export default function ProfileScreen() {
           setLastname(profileData.lastname || "");
           setEmail(profileData.email || "");
           setProfileImage(profileData.profileImage || "");
+          setSponsorName(profileData.runnerSponsor?.name ?? "");
+          setSponsorImage(profileData.runnerSponsor?.image ?? "");
 
           // Mettre à jour le contexte avec les données fraîches
           updateUser({
             firstname: profileData.firstname,
             lastname: profileData.lastname,
             profileImage: profileData.profileImage,
+            runnerSponsor: profileData.runnerSponsor ?? null,
+            role: profileData.role,
           });
         }
       } catch (error) {
@@ -76,17 +93,25 @@ export default function ProfileScreen() {
   const [lastname, setLastname] = useState(user?.lastname || "");
   const [email, setEmail] = useState(user?.email || "");
   const [profileImage, setProfileImage] = useState(user?.profileImage || "");
+  const [sponsorName, setSponsorName] = useState(
+    user?.runnerSponsor?.name ?? "",
+  );
+  const [sponsorImage, setSponsorImage] = useState(
+    user?.runnerSponsor?.image ?? "",
+  );
   const [isLoading, setIsLoading] = useState(false);
 
-  // Mettre à jour les états locaux seulement au montage initial
+  // Synchroniser le formulaire avec le contexte (hors mode édition)
   useEffect(() => {
     if (user && !isEditing) {
       setFirstname(user.firstname || "");
       setLastname(user.lastname || "");
       setEmail(user.email || "");
       setProfileImage(user.profileImage || "");
+      setSponsorName(user.runnerSponsor?.name ?? "");
+      setSponsorImage(user.runnerSponsor?.image ?? "");
     }
-  }, [user?._id]); // Seulement quand l'ID utilisateur change (changement d'utilisateur)
+  }, [user, isEditing]);
 
   const handleSave = async () => {
     if (!token) {
@@ -109,37 +134,116 @@ export default function ProfileScreen() {
         ? token
         : `Bearer ${token}`;
 
+      const body: Record<string, unknown> = {
+        firstname: firstname.trim() || null,
+        lastname: lastname.trim() || null,
+        profileImage: profileImage.trim() || null,
+      };
+
+      if (isCoureurRole(user?.role)) {
+        const n = sponsorName.trim();
+        body.runnerSponsor = n
+          ? { name: n, image: sponsorImage.trim() || null }
+          : null;
+      }
+
       const response = await fetch(`${API_URL}/users/profile`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
           Authorization: authHeader,
         },
-        body: JSON.stringify({
-          firstname: firstname.trim() || null,
-          lastname: lastname.trim() || null,
-          profileImage: profileImage.trim() || null,
-        }),
+        body: JSON.stringify(body),
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(
-          errorData.message || "Erreur lors de la mise à jour du profil",
-        );
+        const errorData = await response.json().catch(() => ({}));
+        const msg =
+          typeof errorData.message === "string"
+            ? errorData.message
+            : typeof errorData.error === "string"
+              ? errorData.error
+              : "Erreur lors de la mise à jour du profil";
+        if (response.status === 403) {
+          throw new Error(
+            "Le sponsor coureur n’est pas disponible pour ce type de compte.",
+          );
+        }
+        if (response.status === 400) {
+          throw new Error(msg);
+        }
+        throw new Error(msg);
       }
 
-      const updatedUserData = await response.json();
+      const updatedPayload = await response.json();
+      const u = updatedPayload.user ?? updatedPayload;
 
-      // Mettre à jour le contexte utilisateur avec les nouvelles données
-      updateUser({
-        firstname: updatedUserData.user.firstname,
-        lastname: updatedUserData.user.lastname,
-        profileImage: updatedUserData.user.profileImage,
-      });
+      /** Si le back ne renvoie pas `runnerSponsor` dans le JSON du PATCH, ne pas écraser avec null. */
+      let resolvedRunnerSponsor:
+        | { name: string; image: string | null }
+        | null
+        | undefined;
+      if (u.runnerSponsor !== undefined) {
+        resolvedRunnerSponsor = u.runnerSponsor ?? null;
+      } else if (isCoureurRole(user?.role)) {
+        resolvedRunnerSponsor = body.runnerSponsor as
+          | { name: string; image: string | null }
+          | null;
+      }
+
+      const updates: Parameters<typeof updateUser>[0] = {
+        firstname: u.firstname,
+        lastname: u.lastname,
+        profileImage: u.profileImage,
+      };
+      if (u.role !== undefined) {
+        updates.role = u.role;
+      }
+      if (resolvedRunnerSponsor !== undefined) {
+        updates.runnerSponsor = resolvedRunnerSponsor;
+      }
+
+      updateUser(updates);
+
+      if (resolvedRunnerSponsor !== undefined) {
+        setSponsorName(resolvedRunnerSponsor?.name ?? "");
+        setSponsorImage(resolvedRunnerSponsor?.image ?? "");
+      }
 
       Alert.alert("Succès", "Profil mis à jour avec succès !");
       setIsEditing(false);
+
+      // Recharger le profil pour coller à la base (sponsor inclus si le back le renvoie en GET)
+      try {
+        const authHeader = token?.startsWith("Bearer ")
+          ? token
+          : `Bearer ${token}`;
+        const verifyRes = await fetch(`${API_URL}/users/profile`, {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: authHeader,
+          },
+        });
+        if (verifyRes.ok) {
+          const fresh = await verifyRes.json();
+          setFirstname(fresh.firstname || "");
+          setLastname(fresh.lastname || "");
+          setEmail(fresh.email || "");
+          setProfileImage(fresh.profileImage || "");
+          setSponsorName(fresh.runnerSponsor?.name ?? "");
+          setSponsorImage(fresh.runnerSponsor?.image ?? "");
+          updateUser({
+            firstname: fresh.firstname,
+            lastname: fresh.lastname,
+            profileImage: fresh.profileImage,
+            runnerSponsor: fresh.runnerSponsor ?? null,
+            role: fresh.role,
+          });
+        }
+      } catch {
+        /* le merge PATCH + resolvedRunnerSponsor suffit */
+      }
     } catch (error) {
       console.error("Erreur lors de la mise à jour du profil:", error);
       Alert.alert(
@@ -254,6 +358,34 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
+        <View style={profileStyles.inputGroup}>
+          <Text style={profileStyles.label}>Type de compte</Text>
+          <TextInput
+            style={[profileStyles.input, profileStyles.inputDisabled]}
+            value={formatRoleLabel(user?.role)}
+            editable={false}
+            placeholder="—"
+            placeholderTextColor="#666"
+          />
+        </View>
+
+        {!isEditing && (
+          <View style={profileStyles.editHint}>
+            <Icon name="pencil-circle-outline" size={22} color="#A1F763" />
+            <Text style={profileStyles.editHintText}>
+              Pour modifier votre profil
+              {isCoureurRole(user?.role)
+                ? " et votre sponsor personnel (nom + logo), "
+                : ", "}
+              appuyez sur le{" "}
+              <Text style={profileStyles.editHintEm}>crayon</Text> en haut à
+              droite, puis sur{" "}
+              <Text style={profileStyles.editHintEm}>Sauvegarder</Text> en bas
+              de l’écran.
+            </Text>
+          </View>
+        )}
+
         {isEditing && (
           <View style={profileStyles.inputGroup}>
             <Text style={profileStyles.label}>Image de profil (URL)</Text>
@@ -268,6 +400,70 @@ export default function ProfileScreen() {
           </View>
         )}
 
+        {isCoureurRole(user?.role) && (
+          <>
+            <Text style={profileStyles.sectionSubtitle}>
+              Sponsor personnel (maillot / affichage)
+            </Text>
+            <Text style={profileStyles.helperText}>
+              Réservé aux comptes coureur — distinct des sponsors de vos courses
+              si vous êtes aussi organisateur. Laissez le nom vide et enregistrez
+              pour retirer le sponsor.
+            </Text>
+            <View style={profileStyles.inputGroup}>
+              <Text style={profileStyles.label}>Nom du sponsor</Text>
+              <TextInput
+                style={[
+                  profileStyles.input,
+                  !isEditing && profileStyles.inputDisabled,
+                ]}
+                value={sponsorName}
+                onChangeText={setSponsorName}
+                editable={isEditing}
+                placeholder="Ex. Ma marque"
+                placeholderTextColor="#666"
+              />
+            </View>
+            <View style={profileStyles.inputGroup}>
+              <Text style={profileStyles.label}>Logo (URL ou data URI)</Text>
+              <TextInput
+                style={[
+                  profileStyles.input,
+                  !isEditing && profileStyles.inputDisabled,
+                ]}
+                value={sponsorImage}
+                onChangeText={setSponsorImage}
+                editable={isEditing}
+                placeholder="Optionnel"
+                placeholderTextColor="#666"
+                autoCapitalize="none"
+              />
+            </View>
+            {sponsorImage.trim().length > 0 && (
+              <View style={profileStyles.sponsorPreviewWrap}>
+                <Image
+                  source={{ uri: sponsorImage.trim() }}
+                  style={profileStyles.sponsorPreviewImage}
+                  resizeMode="contain"
+                />
+              </View>
+            )}
+          </>
+        )}
+
+        {user?.role != null &&
+          String(user.role).length > 0 &&
+          !isCoureurRole(user.role) && (
+            <View style={profileStyles.organizerNote}>
+              <Icon name="account-tie" size={22} color="rgba(255,255,255,0.6)" />
+              <Text style={profileStyles.organizerNoteText}>
+                Le sponsor personnel (nom + logo coureur) n’est disponible que
+                pour les comptes « Coureur ». Les sponsors de course se gèrent
+                lors de la création ou de l’édition d’une course.
+              </Text>
+            </View>
+          )}
+
         {isEditing && (
           <View style={profileStyles.actionButtons}>
             <TouchableOpacity
@@ -278,6 +474,8 @@ export default function ProfileScreen() {
                 setLastname(user?.lastname || "");
                 setEmail(user?.email || "");
                 setProfileImage(user?.profileImage || "");
+                setSponsorName(user?.runnerSponsor?.name ?? "");
+                setSponsorImage(user?.runnerSponsor?.image ?? "");
               }}
             >
               <Text style={profileStyles.cancelButtonText}>Annuler</Text>

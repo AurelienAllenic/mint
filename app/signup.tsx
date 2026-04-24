@@ -19,6 +19,8 @@ export default function SignupScreen() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [role, setRole] = useState<"coureur" | "organisateur">("coureur");
+  const [runnerSponsorName, setRunnerSponsorName] = useState("");
+  const [runnerSponsorImage, setRunnerSponsorImage] = useState("");
   const [error, setError] = useState("");
   const [focusedInput, setFocusedInput] = useState<string | null>(null);
   const { login } = useAuth();
@@ -43,15 +45,28 @@ export default function SignupScreen() {
     setError(""); // Reset error
 
     try {
+      const payload: Record<string, unknown> = {
+        email: email,
+        firstname: firstname,
+        lastname: lastname,
+        password: password,
+        role: role,
+      };
+
+      if (role === "coureur") {
+        const sponsorName = runnerSponsorName.trim();
+        if (sponsorName) {
+          const img = runnerSponsorImage.trim();
+          payload.runnerSponsor = {
+            name: sponsorName,
+            image: img.length > 0 ? img : null,
+          };
+        }
+      }
+
       const res = await fetch(`${API_URL}/auth/register`, {
         method: "POST",
-        body: JSON.stringify({
-          email: email,
-          firstname: firstname,
-          lastname: lastname,
-          password: password,
-          role: role,
-        }),
+        body: JSON.stringify(payload),
         headers: {
           "Content-Type": "application/json",
         },
@@ -131,7 +146,9 @@ export default function SignupScreen() {
         <View style={loginStyles.pickerContainer}>
           <Picker
             selectedValue={role}
-            onValueChange={(itemValue) => setRole(itemValue as "coureur" | "organisateur")}
+            onValueChange={(itemValue) =>
+              setRole(itemValue as "coureur" | "organisateur")
+            }
             style={loginStyles.picker}
             dropdownIconColor="#A1F763"
           >
@@ -139,6 +156,30 @@ export default function SignupScreen() {
             <Picker.Item label="Organisateur" value="organisateur" />
           </Picker>
         </View>
+        {role === "coureur" && (
+          <>
+            <TextInput
+              style={loginStyles.input}
+              placeholder="Sponsor personnel (nom, optionnel)"
+              placeholderTextColor="#A1A1A1"
+              value={runnerSponsorName}
+              onChangeText={setRunnerSponsorName}
+              autoCapitalize="words"
+              onFocus={() => setFocusedInput("sponsorName")}
+              onBlur={() => setFocusedInput(null)}
+            />
+            <TextInput
+              style={loginStyles.input}
+              placeholder="Logo sponsor (URL ou data URI, optionnel)"
+              placeholderTextColor="#A1A1A1"
+              value={runnerSponsorImage}
+              onChangeText={setRunnerSponsorImage}
+              autoCapitalize="none"
+              onFocus={() => setFocusedInput("sponsorImage")}
+              onBlur={() => setFocusedInput(null)}
+            />
+          </>
+        )}
         <TextInput
           style={loginStyles.input}
           placeholder="Mot de passe"

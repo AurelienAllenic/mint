@@ -95,6 +95,9 @@ export default function LoginScreen() {
           userId = userId.toString();
         }
 
+        const runnerSponsor =
+          data.userProfile?.runnerSponsor ?? data.runnerSponsor ?? null;
+
         login({
           email: data.technicalUser.email,
           firstname: data.userProfile.firstname,
@@ -105,6 +108,7 @@ export default function LoginScreen() {
           token: jwt,
           isConnected: !isVisitor,
           isVisitor: false,
+          runnerSponsor,
         });
 
         const API_URL = process.env.EXPO_PUBLIC_API_URL;

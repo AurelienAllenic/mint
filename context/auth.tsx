@@ -1,4 +1,5 @@
 import { createContext, useContext, useState } from "react";
+import type { RunnerSponsor } from "../types/api";
 
 type User = {
   email: string;
@@ -10,6 +11,7 @@ type User = {
   role?: "visitor" | "coureur" | "organisateur";
   isConnected: boolean;
   isVisitor?: boolean;
+  runnerSponsor?: RunnerSponsor;
 } | null;
 
 type AuthContextType = {
@@ -26,12 +28,15 @@ type AuthContextType = {
     profileImage?: string | null;
     role?: "visitor" | "coureur" | "organisateur";
     isVisitor?: boolean;
+    runnerSponsor?: RunnerSponsor;
   }) => void;
   logout: () => void;
   updateUser: (userData: {
     firstname?: string | null;
     lastname?: string | null;
     profileImage?: string | null;
+    runnerSponsor?: RunnerSponsor;
+    role?: "visitor" | "coureur" | "organisateur";
   }) => void;
   refreshUserData: () => Promise<void>;
 };
@@ -52,6 +57,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     profileImage?: string | null;
     role?: "visitor" | "coureur" | "organisateur";
     isVisitor?: boolean;
+    runnerSponsor?: RunnerSponsor;
   }) => {
     setUser({
       email: userData.email,
@@ -65,6 +71,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       role: userData.role,
       isConnected: true,
       isVisitor: userData.isVisitor || false,
+      runnerSponsor: userData.runnerSponsor ?? null,
     });
     setToken(userData.token);
   };
@@ -73,15 +80,34 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     firstname?: string | null;
     lastname?: string | null;
     profileImage?: string | null;
+    runnerSponsor?: RunnerSponsor;
+    role?: "visitor" | "coureur" | "organisateur";
   }) => {
     if (!user) return;
 
-    const updatedUser = {
+    const nextFirst =
+      updatedData.firstname !== undefined
+        ? updatedData.firstname
+        : user.firstname;
+    const nextLast =
+      updatedData.lastname !== undefined ? updatedData.lastname : user.lastname;
+
+    const updatedUser: User = {
       ...user,
-      ...updatedData,
-      name: `${updatedData.firstname || user.firstname || ""} ${
-        updatedData.lastname || user.lastname || ""
-      }`.trim(),
+      ...(updatedData.firstname !== undefined && {
+        firstname: updatedData.firstname,
+      }),
+      ...(updatedData.lastname !== undefined && {
+        lastname: updatedData.lastname,
+      }),
+      ...(updatedData.profileImage !== undefined && {
+        profileImage: updatedData.profileImage,
+      }),
+      ...(updatedData.runnerSponsor !== undefined && {
+        runnerSponsor: updatedData.runnerSponsor,
+      }),
+      ...(updatedData.role !== undefined && { role: updatedData.role }),
+      name: `${nextFirst || ""} ${nextLast || ""}`.trim(),
     };
 
     setUser(updatedUser);
@@ -114,6 +140,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           firstname: profileData.firstname,
           lastname: profileData.lastname,
           profileImage: profileData.profileImage,
+          runnerSponsor: profileData.runnerSponsor ?? null,
+          role: profileData.role,
         });
       }
     } catch (error) {

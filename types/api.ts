@@ -2,6 +2,12 @@
  * Types alignés sur le contrat API (courses, sponsors, invitations-summary).
  */
 
+/** Sponsor d’affichage / profil coureur (document User), distinct des sponsors course organisateur. */
+export type RunnerSponsor = {
+  name: string;
+  image: string | null;
+} | null;
+
 export type Sponsor = {
   id: string;
   name: string;

@@ -86,7 +86,8 @@ export default function RaceDetailsScreen() {
   const [showAddRunnersModal, setShowAddRunnersModal] = useState(false);
   const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
   const [pendingInvitationToken, setPendingInvitationToken] = useState<string | null>(null);
-  
+  const [headerBlockHeight, setHeaderBlockHeight] = useState<number | null>(null);
+
   // Vérifier si l'utilisateur est le propriétaire de la course
   const raceSponsors: Sponsor[] = useMemo(
     () => (race ? sponsorsFromRace(race) : []),
@@ -117,6 +118,10 @@ export default function RaceDetailsScreen() {
 
     return () => clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    setHeaderBlockHeight(null);
+  }, [raceId]);
 
   // Fonction pour recharger les données de la course (accessible depuis les callbacks)
   const fetchRaceData = useCallback(async () => {
@@ -1249,10 +1254,31 @@ export default function RaceDetailsScreen() {
     );
   }
 
+  const timeRemainingText = getTimeRemaining();
+  const HEADER_TOP = 60;
+  const STACK_GAP = 12;
+  const hasSponsorBanner = raceSponsors.length > 0;
+  const measuredHeader =
+    headerBlockHeight != null && headerBlockHeight > 0;
+  const headerFallback =
+    84 +
+    (timeRemainingText != null ? 50 : 0) +
+    (hasSponsorBanner ? 52 : 0);
+  const effectiveHeaderH = measuredHeader
+    ? headerBlockHeight!
+    : headerFallback;
+
+  const stackPanelTop = HEADER_TOP + effectiveHeaderH + STACK_GAP;
+
   return (
     <View style={styles.container}>
       {/* Header avec design identique à home */}
-      <View style={styles.headerContainer}>
+      <View
+        style={styles.headerContainer}
+        onLayout={(e) =>
+          setHeaderBlockHeight(e.nativeEvent.layout.height)
+        }
+      >
         <BlurView style={styles.header} intensity={40} tint="dark">
           <View style={styles.headerContent}>
             <TouchableOpacity
@@ -1262,7 +1288,7 @@ export default function RaceDetailsScreen() {
               <Icon name="arrow-left" size={24} color="#A1F763" />
             </TouchableOpacity>
             <View style={styles.headerTitleContainer}>
-              <Text style={styles.headerTitle}>
+              <Text style={styles.headerTitle} numberOfLines={2}>
                 {race?.name || "Détails de la course"}
               </Text>
               {/* Indicateur de statut de la course */}
@@ -1287,36 +1313,63 @@ export default function RaceDetailsScreen() {
             </View>
             <View style={styles.headerSpacer} />
           </View>
+          {timeRemainingText ? (
+            <View style={styles.headerCountdownSection}>
+              <View style={styles.headerCountdownInner}>
+                <Icon
+                  name={
+                    getRaceStatus().status === "ongoing"
+                      ? "timer"
+                      : "clock-outline"
+                  }
+                  size={24}
+                  color={getRaceStatus().color}
+                />
+                <Text
+                  style={[
+                    styles.countdownText,
+                    { color: getRaceStatus().color },
+                  ]}
+                >
+                  {timeRemainingText}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+          {raceSponsors.length > 0 && (
+            <View style={styles.headerSponsorBanner}>
+              <View style={styles.headerSponsorBannerRow}>
+                <Text
+                  style={styles.headerSponsorBannerLabel}
+                  numberOfLines={1}
+                >
+                  Sponsorisé par
+                </Text>
+                {raceSponsors[0].image ? (
+                  <Image
+                    source={{ uri: raceSponsors[0].image }}
+                    style={styles.headerSponsorBannerLogo}
+                    resizeMode="contain"
+                  />
+                ) : null}
+                <Text
+                  style={styles.headerSponsorBannerName}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {raceSponsors[0].name?.trim() || "Sponsor"}
+                </Text>
+              </View>
+            </View>
+          )}
         </BlurView>
       </View>
 
-      {/* Panneau de compte à rebours pour les courses en cours ou à venir */}
-      {getTimeRemaining() && (
-        <View style={styles.countdownContainer}>
-          <BlurView style={styles.countdownBlur} intensity={40} tint="dark">
-            <View style={styles.countdownContent}>
-              <Icon
-                name={
-                  getRaceStatus().status === "ongoing"
-                    ? "timer"
-                    : "clock-outline"
-                }
-                size={24}
-                color={getRaceStatus().color}
-              />
-              <Text
-                style={[styles.countdownText, { color: getRaceStatus().color }]}
-              >
-                {getTimeRemaining()}
-              </Text>
-            </View>
-          </BlurView>
-        </View>
-      )}
-
       {/* Informations de la course directement sur la page */}
       {showRaceInfo && (
-        <View style={styles.raceInfoContainer}>
+        <View
+          style={[styles.raceInfoContainer, { top: stackPanelTop }]}
+        >
           <BlurView style={styles.raceInfoBlur} intensity={40} tint="dark">
             <View style={styles.raceInfoContent}>
               {/* Grille d'informations */}
@@ -1495,7 +1548,9 @@ export default function RaceDetailsScreen() {
 
       {/* NOUVEAU : Affichage du ranking si disponible */}
       {rankings.length > 0 ? (
-        <View style={styles.rankingContainer}>
+        <View
+          style={[styles.rankingContainer, { top: stackPanelTop }]}
+        >
           <BlurView style={styles.rankingBlur} intensity={40} tint="dark">
             <TouchableOpacity
               style={styles.rankingHeader}
@@ -1525,7 +1580,9 @@ export default function RaceDetailsScreen() {
         </View>
       ) : socket && socket.connected ? (
         // Afficher un message si connecté mais pas de données
-        <View style={styles.rankingContainer}>
+        <View
+          style={[styles.rankingContainer, { top: stackPanelTop }]}
+        >
           <BlurView style={styles.rankingBlur} intensity={40} tint="dark">
             <View style={styles.rankingHeader}>
               <Icon name="trophy-outline" size={24} color="#888" />
@@ -1747,12 +1804,50 @@ const styles = StyleSheet.create({
   headerTitleContainer: {
     flex: 1,
     alignItems: "center",
+    paddingHorizontal: 8,
+    minWidth: 0,
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "bold",
     color: "#A1F763",
     textAlign: "center",
+  },
+  headerSponsorBanner: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(161,247,99,0.2)",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+  },
+  headerSponsorBannerLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: "rgba(255,255,255,0.55)",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    flexShrink: 0,
+  },
+  headerSponsorBannerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    flexWrap: "nowrap",
+    gap: 10,
+  },
+  headerSponsorBannerLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    flexShrink: 0,
+  },
+  headerSponsorBannerName: {
+    flexShrink: 1,
+    minWidth: 0,
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#fff",
   },
   statusContainer: {
     flexDirection: "row",
@@ -1772,32 +1867,16 @@ const styles = StyleSheet.create({
   headerSpacer: {
     width: 40,
   },
-  countdownContainer: {
-    position: "absolute",
-    top: 140,
-    left: 20,
-    right: 20,
-    borderRadius: 15,
-    zIndex: 10,
-    shadowColor: "#000",
-    shadowOpacity: 0.2,
-    shadowRadius: 5,
-    shadowOffset: {
-      width: 0,
-      height: 4,
-    },
-    elevation: 5,
+  headerCountdownSection: {
+    borderTopWidth: 1,
+    borderTopColor: "rgba(161,247,99,0.2)",
+    paddingVertical: 10,
+    paddingHorizontal: 16,
   },
-  countdownBlur: {
-    borderRadius: 15,
-    backgroundColor: "rgba(105, 105, 105, 0.18)",
-    overflow: "hidden",
-  },
-  countdownContent: {
+  headerCountdownInner: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    padding: 12,
   },
   countdownText: {
     fontSize: 16,
@@ -1806,7 +1885,6 @@ const styles = StyleSheet.create({
   },
   raceInfoContainer: {
     position: "absolute",
-    top: 200, // Position ajustée pour laisser de la place au compte à rebours
     left: 20,
     right: 20,
     borderRadius: 20,
@@ -2243,7 +2321,6 @@ const styles = StyleSheet.create({
   },
   rankingContainer: {
     position: "absolute",
-    top: 200, // Positionné sous le header (top: 60) et le countdown (top: 140)
     left: 10,
     right: 10,
     zIndex: 9, // En dessous du header (zIndex: 10) mais au-dessus de la carte

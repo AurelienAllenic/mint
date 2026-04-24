@@ -1,19 +1,21 @@
+import type { Sponsor } from "@/types/api";
+import {
+  mergeUniqueEmails,
+  parseEmailsFromCsv,
+} from "@/utils/parseEmailsFromCsv";
+import { normalizeSponsor } from "@/utils/sponsors";
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
-import DateTimePicker from "@react-native-community/datetimepicker";
 import { StripeProvider, useStripe } from "@stripe/stripe-react-native";
 import { BlurView } from "expo-blur";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
-import type { Sponsor } from "@/types/api";
-import { normalizeSponsor } from "@/utils/sponsors";
 import {
   ActivityIndicator,
   Alert,
   Image,
   Modal,
-  Platform,
   ScrollView,
   StyleSheet,
   Text,
@@ -22,10 +24,6 @@ import {
   View,
 } from "react-native";
 import { useAuth } from "../../context/auth";
-import {
-  mergeUniqueEmails,
-  parseEmailsFromCsv,
-} from "@/utils/parseEmailsFromCsv";
 
 interface RaceDiscipline {
   id: number;
@@ -53,22 +51,32 @@ interface CreateRaceProps {
 
 const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [raceName, setRaceName] = useState("Course du Lac de Paris");
-  const [startDate, setStartDate] = useState(() => {
+  const [startDateStr, setStartDateStr] = useState(() => {
     const date = new Date();
     date.setDate(date.getDate() + 7);
     date.setHours(9, 0, 0, 0);
-    return date;
+    const d = String(date.getDate()).padStart(2, "0");
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const y = date.getFullYear();
+    const h = String(date.getHours()).padStart(2, "0");
+    const min = String(date.getMinutes()).padStart(2, "0");
+    return `${d}/${m}/${y} ${h}:${min}`;
   });
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
-  const [endDate, setEndDate] = useState(() => {
+  const [endDateStr, setEndDateStr] = useState(() => {
     const date = new Date();
     date.setDate(date.getDate() + 7);
     date.setHours(12, 0, 0, 0);
-    return date;
+    const d = String(date.getDate()).padStart(2, "0");
+    const m = String(date.getMonth() + 1).padStart(2, "0");
+    const y = date.getFullYear();
+    const h = String(date.getHours()).padStart(2, "0");
+    const min = String(date.getMinutes()).padStart(2, "0");
+    return `${d}/${m}/${y} ${h}:${min}`;
   });
   const [raceDisciplines, setRaceDisciplines] = useState<RaceDiscipline[]>([]);
   const [selectedDiscipline, setSelectedDiscipline] = useState<number | null>(
-    null
+    null,
   );
   const [organizations, setOrganizations] = useState<Organization[]>([]);
   const [selectedOrganization, setSelectedOrganization] = useState<
@@ -83,17 +91,13 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [showAddRunners, setShowAddRunners] = useState(false);
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [gpxFileUri, setGpxFileUri] = useState<string | null>(
-    initialGpxUri || null
+    initialGpxUri || null,
   );
   const [gpxFileName, setGpxFileName] = useState<string | null>(null);
   const [gpxFileContent, setGpxFileContent] = useState<string | null>(null);
-  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
-  const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
   const [sponsorsList, setSponsorsList] = useState<Sponsor[]>([]);
   const [selectedSponsorIds, setSelectedSponsorIds] = useState<string[]>([]);
@@ -145,7 +149,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
             `${API_URL}/race-disciplines`,
             {
               headers: { Authorization: authHeader },
-            }
+            },
           );
           if (disciplinesResponse.ok) {
             const disciplines = await disciplinesResponse.json();
@@ -160,7 +164,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
             `${API_URL}/organizations`,
             {
               headers: { Authorization: authHeader },
-            }
+            },
           );
           if (organizationsResponse.ok) {
             const orgs = await organizationsResponse.json();
@@ -252,7 +256,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         !fileName.toLowerCase().includes(".xml")
       ) {
         console.warn(
-          "Le fichier sélectionné ne semble pas être un fichier GPX"
+          "Le fichier sélectionné ne semble pas être un fichier GPX",
         );
       }
 
@@ -266,7 +270,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
         if (!gpxContent.includes("<gpx") && !gpxContent.includes("<trk")) {
           console.warn(
-            "Le fichier ne semble pas contenir de données GPX valides"
+            "Le fichier ne semble pas contenir de données GPX valides",
           );
         }
 
@@ -279,7 +283,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         setError(
           `Impossible de lire le fichier GPX: ${
             readError instanceof Error ? readError.message : String(readError)
-          }`
+          }`,
         );
         return;
       }
@@ -288,7 +292,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       setError(
         `Erreur lors de la sélection du fichier GPX: ${
           err instanceof Error ? err.message : String(err)
-        }`
+        }`,
       );
     }
   };
@@ -320,7 +324,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       if (extracted.length === 0) {
         Alert.alert(
           "CSV",
-          "Aucune adresse e-mail valide trouvée. Utilisez une colonne d’e-mails ou un e-mail par ligne."
+          "Aucune adresse e-mail valide trouvée. Utilisez une colonne d’e-mails ou un e-mail par ligne.",
         );
         return;
       }
@@ -330,13 +334,15 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       setError(null);
       Alert.alert(
         "Import CSV",
-        `${extracted.length} adresse(s) ajoutée(s) (doublons ignorés).`
+        `${extracted.length} adresse(s) ajoutée(s) (doublons ignorés).`,
       );
     } catch (e) {
       console.error("Erreur import CSV:", e);
       Alert.alert(
         "Erreur",
-        e instanceof Error ? e.message : "Impossible d’importer le fichier CSV."
+        e instanceof Error
+          ? e.message
+          : "Impossible d’importer le fichier CSV.",
       );
     }
   };
@@ -445,19 +451,37 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
       Alert.alert(
         "Succès",
-        `Paiement de ${totalPayment.toFixed(2)}€ effectué !`
+        `Paiement de ${totalPayment.toFixed(2)}€ effectué !`,
       );
     } catch (err) {
       console.error("Erreur lors du paiement:", err);
       setError(
         `Erreur lors du paiement: ${
           err instanceof Error ? err.message : String(err)
-        }`
+        }`,
       );
       Alert.alert("Erreur", "Le paiement a échoué. Veuillez réessayer.");
     } finally {
       setIsProcessingPayment(false);
     }
+  };
+
+  const parseDateTime = (str: string): Date | null => {
+    const parts = str.trim().split(" ");
+    if (parts.length !== 2) return null;
+    const dateParts = parts[0].split("/");
+    const timeParts = parts[1].split(":");
+    if (dateParts.length !== 3 || timeParts.length !== 2) return null;
+
+    const day = parseInt(dateParts[0], 10);
+    const month = parseInt(dateParts[1], 10) - 1;
+    const year = parseInt(dateParts[2], 10);
+    const hours = parseInt(timeParts[0], 10);
+    const minutes = parseInt(timeParts[1], 10);
+
+    const date = new Date(year, month, day, hours, minutes);
+    if (isNaN(date.getTime())) return null;
+    return date;
   };
 
   const validateForm = (): boolean => {
@@ -471,6 +495,14 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
       return false;
     }
 
+    const startDate = parseDateTime(startDateStr);
+    const endDate = parseDateTime(endDateStr);
+
+    if (!startDate || !endDate) {
+      setError("Le format de la date est invalide. Utilisez JJ/MM/AAAA HH:MM");
+      return false;
+    }
+
     if (startDate >= endDate) {
       setError("La date de fin doit être postérieure à la date de début");
       return false;
@@ -480,8 +512,8 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
     if (needsPayment) {
       setError(
         `Vous devez payer ${totalPayment.toFixed(
-          2
-        )}€ pour ajouter ${extraRunners} coureur(s) supplémentaire(s)`
+          2,
+        )}€ pour ajouter ${extraRunners} coureur(s) supplémentaire(s)`,
       );
       return false;
     }
@@ -491,7 +523,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
   const toggleSponsorSelection = (id: string) => {
     setSelectedSponsorIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
   };
 
@@ -506,7 +538,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
     setCreatingSponsor(true);
     setSponsorFormError(null);
     try {
-      const authHeader = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+      const authHeader = token.startsWith("Bearer ")
+        ? token
+        : `Bearer ${token}`;
       const res = await fetch(`${API_URL}/sponsors`, {
         method: "POST",
         headers: {
@@ -515,9 +549,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         },
         body: JSON.stringify({
           name: newSponsorName.trim(),
-          ...(newSponsorImage.trim()
-            ? { image: newSponsorImage.trim() }
-            : {}),
+          ...(newSponsorImage.trim() ? { image: newSponsorImage.trim() } : {}),
           ...(newSponsorWebsite.trim()
             ? { websiteUrl: newSponsorWebsite.trim() }
             : {}),
@@ -530,7 +562,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
             ? data.message
             : typeof data.error === "string"
               ? data.error
-              : "Conflit : nom, image ou site déjà utilisé pour ce compte."
+              : "Conflit : nom, image ou site déjà utilisé pour ce compte.",
         );
         return;
       }
@@ -540,7 +572,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
             ? data.message
             : typeof data.error === "string"
               ? data.error
-              : "Impossible de créer le sponsor"
+              : "Impossible de créer le sponsor",
         );
         return;
       }
@@ -594,6 +626,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         return;
       }
 
+      const startDate = parseDateTime(startDateStr)!;
+      const endDate = parseDateTime(endDateStr)!;
+
       const raceData = {
         name: raceName.trim(),
         startDate: startDate.toISOString(),
@@ -626,7 +661,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         const SIGNATURE_SECRET = process.env.EXPO_PUBLIC_SIGNATURE_SECRET;
 
         if (!SIGNATURE_SECRET) {
-          console.warn("SIGNATURE_SECRET non défini, l'appel à l'API externe sera ignoré");
+          console.warn(
+            "SIGNATURE_SECRET non défini, l'appel à l'API externe sera ignoré",
+          );
         } else if (raceId && gpxFileContent && emails.length > 0) {
           // Pour l'API WebSocket, on enverra les IDs des runners une fois qu'ils seront ajoutés
           // Pour l'instant, on peut envoyer un tableau vide ou attendre que le backend renvoie les IDs
@@ -650,12 +687,15 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
 
             if (!wsResponse.ok) {
               const wsErrorText = await wsResponse.text();
-              console.error("Erreur lors de l'appel à l'API WebSocket:", wsErrorText);
+              console.error(
+                "Erreur lors de l'appel à l'API WebSocket:",
+                wsErrorText,
+              );
               // Ne pas bloquer la création si l'API externe échoue
               Alert.alert(
                 "Avertissement",
                 "Course créée mais l'API de suivi en temps réel n'a pas pu être initialisée. " +
-                "La course fonctionnera normalement mais le suivi en temps réel pourrait être limité."
+                  "La course fonctionnera normalement mais le suivi en temps réel pourrait être limité.",
               );
             } else {
               console.log("API WebSocket initialisée avec succès");
@@ -666,7 +706,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
             Alert.alert(
               "Avertissement",
               "Course créée mais l'API de suivi en temps réel n'a pas pu être initialisée. " +
-              "La course fonctionnera normalement mais le suivi en temps réel pourrait être limité."
+                "La course fonctionnera normalement mais le suivi en temps réel pourrait être limité.",
             );
           }
         }
@@ -679,15 +719,23 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         ]);
 
         setRaceName("Course du Lac de Paris");
-        const newStartDate = new Date();
-        newStartDate.setDate(newStartDate.getDate() + 7);
-        newStartDate.setHours(9, 0, 0, 0);
-        setStartDate(newStartDate);
+        const resetDate = new Date();
+        resetDate.setDate(resetDate.getDate() + 7);
+        resetDate.setHours(9, 0, 0, 0);
+        const formatReset = (date: Date) => {
+          const d = String(date.getDate()).padStart(2, "0");
+          const m = String(date.getMonth() + 1).padStart(2, "0");
+          const y = date.getFullYear();
+          const h = String(date.getHours()).padStart(2, "0");
+          const min = String(date.getMinutes()).padStart(2, "0");
+          return `${d}/${m}/${y} ${h}:${min}`;
+        };
 
-        const newEndDate = new Date();
-        newEndDate.setDate(newEndDate.getDate() + 7);
-        newEndDate.setHours(12, 0, 0, 0);
-        setEndDate(newEndDate);
+        setStartDateStr(formatReset(resetDate));
+
+        const resetEndDate = new Date(resetDate);
+        resetEndDate.setHours(12, 0, 0, 0);
+        setEndDateStr(formatReset(resetEndDate));
 
         setSelectedOrganization(null);
         setRunnerEmails(""); // Réinitialiser le champ emails
@@ -707,16 +755,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString("fr-FR", {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
   };
 
   if (loadingData) {
@@ -781,26 +819,24 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                 <View style={styles.dateRow}>
                   <View style={styles.dateGroup}>
                     <Text style={styles.label}>Date de début *</Text>
-                    <TouchableOpacity
-                      style={styles.dateButton}
-                      onPress={() => setShowStartDatePicker(true)}
-                    >
-                      <Icon name="calendar" size={20} color="#A1F763" />
-                      <Text style={styles.dateText}>
-                        {formatDate(startDate)}
-                      </Text>
-                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="JJ/MM/AAAA HH:MM"
+                      placeholderTextColor="#888"
+                      value={startDateStr}
+                      onChangeText={setStartDateStr}
+                    />
                   </View>
 
                   <View style={styles.dateGroup}>
                     <Text style={styles.label}>Date de fin *</Text>
-                    <TouchableOpacity
-                      style={styles.dateButton}
-                      onPress={() => setShowEndDatePicker(true)}
-                    >
-                      <Icon name="calendar" size={20} color="#A1F763" />
-                      <Text style={styles.dateText}>{formatDate(endDate)}</Text>
-                    </TouchableOpacity>
+                    <TextInput
+                      style={styles.input}
+                      placeholder="JJ/MM/AAAA HH:MM"
+                      placeholderTextColor="#888"
+                      value={endDateStr}
+                      onChangeText={setEndDateStr}
+                    />
                   </View>
                 </View>
 
@@ -899,7 +935,8 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Sponsors (optionnel)</Text>
                   <Text style={styles.hintText}>
-                    Sélectionnez un ou plusieurs sponsors. Vous pouvez tous les retirer.
+                    Sélectionnez un ou plusieurs sponsors. Vous pouvez tous les
+                    retirer.
                   </Text>
                   <View style={styles.sponsorActionsRow}>
                     <TouchableOpacity
@@ -909,12 +946,20 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                         setShowSponsorModal(true);
                       }}
                     >
-                      <Icon name="plus-circle-outline" size={18} color="#A1F763" />
-                      <Text style={styles.addSponsorLinkText}>Nouveau sponsor</Text>
+                      <Icon
+                        name="plus-circle-outline"
+                        size={18}
+                        color="#A1F763"
+                      />
+                      <Text style={styles.addSponsorLinkText}>
+                        Nouveau sponsor
+                      </Text>
                     </TouchableOpacity>
                     {selectedSponsorIds.length > 0 && (
                       <TouchableOpacity onPress={clearAllSponsors}>
-                        <Text style={styles.clearSponsorsText}>Tout retirer</Text>
+                        <Text style={styles.clearSponsorsText}>
+                          Tout retirer
+                        </Text>
                       </TouchableOpacity>
                     )}
                   </View>
@@ -963,7 +1008,8 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                   </ScrollView>
                   {sponsorsList.length === 0 && !loadingData && (
                     <Text style={styles.hintText}>
-                      Aucun sponsor en base — créez-en un avec « Nouveau sponsor ».
+                      Aucun sponsor en base — créez-en un avec « Nouveau sponsor
+                      ».
                     </Text>
                   )}
                 </View>
@@ -976,7 +1022,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                 >
                   <View style={styles.sponsorModalOverlay}>
                     <View style={styles.sponsorModalBox}>
-                      <Text style={styles.sponsorModalTitle}>Nouveau sponsor</Text>
+                      <Text style={styles.sponsorModalTitle}>
+                        Nouveau sponsor
+                      </Text>
                       <TextInput
                         style={styles.input}
                         placeholder="Nom *"
@@ -1001,7 +1049,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                         autoCapitalize="none"
                       />
                       {sponsorFormError ? (
-                        <Text style={styles.sponsorFormError}>{sponsorFormError}</Text>
+                        <Text style={styles.sponsorFormError}>
+                          {sponsorFormError}
+                        </Text>
                       ) : null}
                       <View style={styles.sponsorModalButtons}>
                         <TouchableOpacity
@@ -1011,7 +1061,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                             setSponsorFormError(null);
                           }}
                         >
-                          <Text style={styles.sponsorModalCancelText}>Annuler</Text>
+                          <Text style={styles.sponsorModalCancelText}>
+                            Annuler
+                          </Text>
                         </TouchableOpacity>
                         <TouchableOpacity
                           style={[
@@ -1024,7 +1076,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                           {creatingSponsor ? (
                             <ActivityIndicator color="#212121" size="small" />
                           ) : (
-                            <Text style={styles.sponsorModalSaveText}>Créer</Text>
+                            <Text style={styles.sponsorModalSaveText}>
+                              Créer
+                            </Text>
                           )}
                         </TouchableOpacity>
                       </View>
@@ -1058,10 +1112,14 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Emails des participants</Text>
                   <Text style={styles.hintText}>
-                    Saisissez les emails séparés par des virgules, points-virgules ou retours à la ligne
+                    Saisissez les emails séparés par des virgules,
+                    points-virgules ou retours à la ligne
                   </Text>
                   <Text style={styles.hintText}>
-                    Ou importez un fichier CSV : une colonne « email », ou plusieurs colonnes contenant des e-mails (séparateur virgule ou point-virgule). Les adresses sont fusionnées avec la saisie, sans doublons.
+                    Ou importez un fichier CSV : une colonne « email », ou
+                    plusieurs colonnes contenant des e-mails (séparateur virgule
+                    ou point-virgule). Les adresses sont fusionnées avec la
+                    saisie, sans doublons.
                   </Text>
                   <TouchableOpacity
                     style={styles.csvImportButton}
@@ -1223,85 +1281,6 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
             )}
           </TouchableOpacity>
         </View>
-
-        {/* Date Pickers */}
-        {showStartDatePicker && (
-          <DateTimePicker
-            value={startDate}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, selectedDate) => {
-              setShowStartDatePicker(false);
-              if (selectedDate) {
-                if (Platform.OS === "android") {
-                  const newDate = new Date(selectedDate);
-                  newDate.setHours(startDate.getHours());
-                  newDate.setMinutes(startDate.getMinutes());
-                  setStartDate(newDate);
-                  setShowStartTimePicker(true);
-                } else {
-                  setStartDate(selectedDate);
-                }
-              }
-            }}
-          />
-        )}
-
-        {showEndDatePicker && (
-          <DateTimePicker
-            value={endDate}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, selectedDate) => {
-              setShowEndDatePicker(false);
-              if (selectedDate) {
-                if (Platform.OS === "android") {
-                  const newDate = new Date(selectedDate);
-                  newDate.setHours(endDate.getHours());
-                  newDate.setMinutes(endDate.getMinutes());
-                  setEndDate(newDate);
-                  setShowEndTimePicker(true);
-                } else {
-                  setEndDate(selectedDate);
-                }
-              }
-            }}
-          />
-        )}
-
-        {showStartTimePicker && (
-          <DateTimePicker
-            value={startDate}
-            mode="time"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, selectedTime) => {
-              setShowStartTimePicker(false);
-              if (selectedTime) {
-                const newDate = new Date(startDate);
-                newDate.setHours(selectedTime.getHours());
-                newDate.setMinutes(selectedTime.getMinutes());
-                setStartDate(newDate);
-              }
-            }}
-          />
-        )}
-
-        {showEndTimePicker && (
-          <DateTimePicker
-            value={endDate}
-            mode="time"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, selectedTime) => {
-              setShowEndTimePicker(false);
-              if (selectedTime) {
-                const newDate = new Date(endDate);
-                newDate.setHours(selectedTime.getHours());
-                newDate.setMinutes(selectedTime.getMinutes());
-                setEndDate(newDate);
-              }
-            }}
-          />
-        )}
       </View>
     </StripeProvider>
   );

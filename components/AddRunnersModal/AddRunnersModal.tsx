@@ -41,6 +41,7 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
 }) => {
   const { token } = useAuth();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const freeSlotsRemaining = Math.max(0, FREE_RUNNERS - currentRunnersCount);
   const [emails, setEmails] = useState<string[]>([""]);
   const [loading, setLoading] = useState(false);
   const [isProcessingPayment, setIsProcessingPayment] = useState(false);
@@ -51,11 +52,11 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
   const API_URL = process.env.EXPO_PUBLIC_API_URL;
   const STRIPE_PUBLIC_KEY = process.env.EXPO_PUBLIC_STRIPE_KEY;
 
-  // Calculer le nombre de coureurs supplémentaires
+  // Calculer le nombre de coureurs supplémentaires (au-delà du quota gratuit)
   const newRunnersCount = emails.filter((e) => e.trim() !== "").length;
-  const freeSlotsRemaining = Math.max(0, FREE_RUNNERS - currentRunnersCount);
   const extraRunners = Math.max(0, newRunnersCount - freeSlotsRemaining);
   const totalPayment = extraRunners * PRICE_PER_RUNNER;
+  // Paiement requis à l'envoi final s'il y a des coureurs payants non encore payés.
   const needsPayment = extraRunners > 0 && !paymentIntentId;
 
   useEffect(() => {
@@ -104,6 +105,8 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
       const merged = mergeUniqueEmails(existingText, extracted);
       const lines = merged.split("\n").map((s) => s.trim()).filter(Boolean);
       setEmails(lines.length > 0 ? lines : [""]);
+      // Un nouvel import peut changer le montant : on invalide un éventuel paiement déjà fait.
+      setPaymentIntentId(null);
       setCsvImportName(file.name || "import.csv");
       setError(null);
       Alert.alert(
@@ -120,7 +123,9 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
   };
 
   const handleAddEmailField = () => {
-    setEmails([...emails, ""]);
+    setEmails((prev) => [...prev, ""]);
+    // Le nombre de coureurs payants peut changer : on invalide un paiement déjà fait.
+    setPaymentIntentId(null);
   };
 
   const handleRemoveEmailField = (index: number) => {
@@ -135,8 +140,13 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
     setEmails(newEmails);
   };
 
-  const handlePayment = async () => {
-    if (!token || !API_URL) return;
+  // Lance le tunnel de paiement Stripe pour `quantity` coureur(s).
+  // Retourne l'identifiant du PaymentIntent si le paiement a réussi, sinon null.
+  const processPayment = async (
+    amount: number,
+    quantity: number
+  ): Promise<string | null> => {
+    if (!token || !API_URL) return null;
 
     setIsProcessingPayment(true);
     setError(null);
@@ -151,9 +161,9 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
           Authorization: authHeader,
         },
         body: JSON.stringify({
-          amount: totalPayment,
+          amount,
           currency: "eur",
-          quantity: extraRunners,
+          quantity,
         }),
       });
 
@@ -180,16 +190,17 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
         } else {
           throw new Error(`Erreur paiement: ${presentError.message}`);
         }
-        return;
+        return null;
       }
 
       const piId = clientSecret.split("_secret_")[0];
       setPaymentIntentId(piId);
-      Alert.alert("Succès", `Paiement de ${totalPayment.toFixed(2)}€ effectué !`);
+      return piId;
     } catch (err) {
       console.error("Erreur lors du paiement:", err);
       setError(`Erreur lors du paiement: ${err instanceof Error ? err.message : String(err)}`);
       Alert.alert("Erreur", "Le paiement a échoué. Veuillez réessayer.");
+      return null;
     } finally {
       setIsProcessingPayment(false);
     }
@@ -211,9 +222,11 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
       return;
     }
 
-    if (needsPayment) {
-      setError(`Vous devez payer ${totalPayment.toFixed(2)}€ pour ajouter ${extraRunners} coureur(s) supplémentaire(s)`);
-      return;
+    // Paiement à l'envoi final si on dépasse le quota gratuit
+    let intentId = paymentIntentId;
+    if (extraRunners > 0 && !intentId) {
+      intentId = await processPayment(totalPayment, extraRunners);
+      if (!intentId) return; // paiement annulé/échoué : on n'envoie pas
     }
 
     setLoading(true);
@@ -230,7 +243,7 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
         },
         body: JSON.stringify({
           emails: validEmails,
-          ...(paymentIntentId ? { paymentIntentId } : {}),
+          ...(intentId ? { paymentIntentId: intentId } : {}),
         }),
       });
 
@@ -321,36 +334,20 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
               <Text style={styles.addButtonText}>Ajouter un email</Text>
             </TouchableOpacity>
 
-            {/* Affichage du coût */}
+            {/* Info coût : calculé en direct, payé seulement à l'envoi */}
             {newRunnersCount > 0 && (
               <View style={styles.paymentInfo}>
                 <Text style={styles.paymentLabel}>
-                  Coureurs gratuits restants : {freeSlotsRemaining}
+                  Coureurs gratuits restants : {Math.max(0, freeSlotsRemaining - newRunnersCount)}
                 </Text>
                 {extraRunners > 0 && (
                   <>
                     <Text style={styles.paymentLabel}>
-                      Coureurs supplémentaires : {extraRunners}
+                      Coureurs supplémentaires : {extraRunners} × {PRICE_PER_RUNNER.toFixed(2)}€
                     </Text>
                     <Text style={styles.paymentAmount}>
-                      Coût : {totalPayment.toFixed(2)}€
+                      À payer à l'envoi : {totalPayment.toFixed(2)}€
                     </Text>
-                    {!paymentIntentId && (
-                      <TouchableOpacity
-                        onPress={handlePayment}
-                        style={styles.payButton}
-                        disabled={isProcessingPayment}
-                      >
-                        {isProcessingPayment ? (
-                          <ActivityIndicator color="#000" />
-                        ) : (
-                          <>
-                            <Icon name="credit-card" size={20} color="#000" />
-                            <Text style={styles.payButtonText}>Payer {totalPayment.toFixed(2)}€</Text>
-                          </>
-                        )}
-                      </TouchableOpacity>
-                    )}
                     {paymentIntentId && (
                       <View style={styles.paidBadge}>
                         <Icon name="check-circle" size={20} color="#A1F763" />
@@ -370,13 +367,20 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
 
             <TouchableOpacity
               onPress={handleSubmit}
-              style={[styles.submitButton, (loading || needsPayment) && styles.submitButtonDisabled]}
-              disabled={loading || needsPayment}
+              style={[
+                styles.submitButton,
+                (loading || isProcessingPayment) && styles.submitButtonDisabled,
+              ]}
+              disabled={loading || isProcessingPayment}
             >
-              {loading ? (
+              {loading || isProcessingPayment ? (
                 <ActivityIndicator color="#000" />
               ) : (
-                <Text style={styles.submitButtonText}>Envoyer les invitations</Text>
+                <Text style={styles.submitButtonText}>
+                  {needsPayment
+                    ? `Payer ${totalPayment.toFixed(2)}€ et envoyer`
+                    : "Envoyer les invitations"}
+                </Text>
               )}
             </TouchableOpacity>
           </ScrollView>
@@ -389,12 +393,8 @@ const AddRunnersModalContent: React.FC<AddRunnersModalProps> = ({
 const AddRunnersModal: React.FC<AddRunnersModalProps> = (props) => {
   const STRIPE_PUBLIC_KEY = process.env.EXPO_PUBLIC_STRIPE_KEY;
 
-  if (!STRIPE_PUBLIC_KEY) {
-    return null;
-  }
-
   return (
-    <StripeProvider publishableKey={STRIPE_PUBLIC_KEY}>
+    <StripeProvider publishableKey={STRIPE_PUBLIC_KEY || ""}>
       <AddRunnersModalContent {...props} />
     </StripeProvider>
   );

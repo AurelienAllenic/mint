@@ -301,6 +301,7 @@ export default function RejoindreScreen() {
             name: race.name,
             startDate: race.startDate,
             endDate: race.endDate,
+            createdAt: race.createdAt,
             organization: race.organization,
             runners: race.runners,
             // gpxFile: race.gpxFile, // ❌ Retiré : trop volumineux pour la liste
@@ -426,8 +427,13 @@ export default function RejoindreScreen() {
             },
           );
 
-          setMesRaces(mesCourses);
-          setMesParticipations(mesParticipationsData);
+          // Trier par date de création : la plus récente en haut, la plus ancienne en bas
+          const byCreatedAtDesc = (a: any, b: any) =>
+            new Date(b.createdAt || 0).getTime() -
+            new Date(a.createdAt || 0).getTime();
+
+          setMesRaces([...mesCourses].sort(byCreatedAtDesc));
+          setMesParticipations([...mesParticipationsData].sort(byCreatedAtDesc));
         } else {
           const trailImages = [
             "https://www.sitesdexception.fr/wp-content/uploads/2021/12/Trail-des-Cathares.jpg",

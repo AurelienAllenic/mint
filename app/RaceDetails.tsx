@@ -1639,6 +1639,20 @@ export default function RaceDetailsScreen() {
               </BlurView>
             </TouchableOpacity>
           )}
+          {isOwner && (
+            <TouchableOpacity
+              style={styles.roundButton}
+              onPress={() =>
+                router.push(
+                  `/edit-race?raceId=${race?._id || race?.id || raceId}`
+                )
+              }
+            >
+              <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
+                <Icon name="pencil" size={28} color="#A1F763" />
+              </BlurView>
+            </TouchableOpacity>
+          )}
           <TouchableOpacity
             style={styles.roundButton}
             onPress={() => setShowRaceInfo(!showRaceInfo)}

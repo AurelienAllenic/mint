@@ -86,6 +86,8 @@ export default function RaceDetailsScreen() {
   const [showAddRunnersModal, setShowAddRunnersModal] = useState(false);
   const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
   const [pendingInvitationToken, setPendingInvitationToken] = useState<string | null>(null);
+  const [visitorCode, setVisitorCode] = useState<string | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
   
   // Vérifier si l'utilisateur est le propriétaire de la course
   const raceSponsors: Sponsor[] = useMemo(
@@ -825,6 +827,39 @@ export default function RaceDetailsScreen() {
         },
       ]
     );
+  };
+
+  const handleGenerateVisitorCode = async () => {
+    if (!race || generatingCode) return;
+    setGeneratingCode(true);
+    try {
+      const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
+      const authHeader = token?.startsWith("Bearer ") ? token : `Bearer ${token}`;
+      const raceIdToUse = race._id || race.id;
+
+      const response = await fetch(`${API_URL}/visitor/generate-code`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: authHeader },
+        body: JSON.stringify({ raceId: raceIdToUse }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setVisitorCode(data.code);
+        Alert.alert(
+          "Code visiteur",
+          `Partagez ce code pour donner accès à la course :\n\n${data.code}\n\n(valable 2h)`,
+          [{ text: "OK" }]
+        );
+      } else {
+        const err = await response.json().catch(() => ({}));
+        Alert.alert("Erreur", err.message || "Impossible de générer le code.");
+      }
+    } catch {
+      Alert.alert("Erreur", "Impossible de contacter le serveur.");
+    } finally {
+      setGeneratingCode(false);
+    }
   };
 
   const handleJoinRace = async () => {
@@ -1661,6 +1696,17 @@ export default function RaceDetailsScreen() {
               <Icon name="information-outline" size={28} color="#fff" />
             </BlurView>
           </TouchableOpacity>
+          {isRunner && (
+            <TouchableOpacity
+              style={styles.roundButton}
+              onPress={visitorCode ? () => Alert.alert("Code visiteur", `Code actif :\n\n${visitorCode}\n\n(valable 2h)`) : handleGenerateVisitorCode}
+              disabled={generatingCode}
+            >
+              <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
+                <Icon name="qrcode" size={28} color="#A1F763" />
+              </BlurView>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 

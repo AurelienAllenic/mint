@@ -22,7 +22,7 @@ export default function PremiumPage() {
   const [loading, setLoading] = useState(false);
 
   const API_URL = process.env.EXPO_PUBLIC_API_URL!;
-  const STRIPE_PUBLIC_KEY = process.env.EXPO_PUBLIC_STRIPE_PUBLIC_KEY!;
+  const STRIPE_PUBLIC_KEY = process.env.EXPO_PUBLIC_STRIPE_KEY!;
 
   const isPremium = usePremiumStatus();
 

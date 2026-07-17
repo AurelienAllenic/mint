@@ -23,6 +23,7 @@ import {
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "../context/auth";
 import AddRunnersModal from "../components/AddRunnersModal/AddRunnersModal";
+import ReportProblemModal from "../components/ReportProblemModal/ReportProblemModal";
 
 interface RaceDetails {
   _id: string;
@@ -84,6 +85,7 @@ export default function RaceDetailsScreen() {
   const [isRankingExpanded, setIsRankingExpanded] = useState(true); // Par défaut, le classement est déplié
   const [isJoiningRace, setIsJoiningRace] = useState(false); // Flag pour éviter les appels multiples
   const [showAddRunnersModal, setShowAddRunnersModal] = useState(false);
+  const [showReportProblemModal, setShowReportProblemModal] = useState(false);
   const [hasPendingInvitation, setHasPendingInvitation] = useState(false);
   const [pendingInvitationToken, setPendingInvitationToken] = useState<string | null>(null);
   const [visitorCode, setVisitorCode] = useState<string | null>(null);
@@ -1707,6 +1709,16 @@ export default function RaceDetailsScreen() {
               </BlurView>
             </TouchableOpacity>
           )}
+          {isRunner && (
+            <TouchableOpacity
+              style={[styles.roundButton, styles.reportButton]}
+              onPress={() => setShowReportProblemModal(true)}
+            >
+              <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
+                <Icon name="alert-octagon" size={28} color="#FF6B6B" />
+              </BlurView>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -1725,6 +1737,16 @@ export default function RaceDetailsScreen() {
             setHasLoadedRace(false);
             fetchRaceData();
           }}
+        />
+      )}
+
+      {/* Modal de signalement de problème (coureurs uniquement) */}
+      {isRunner && race && (
+        <ReportProblemModal
+          visible={showReportProblemModal}
+          onClose={() => setShowReportProblemModal(false)}
+          raceId={String(race._id || race.id || raceId)}
+          raceName={race.name}
         />
       )}
     </View>
@@ -2086,6 +2108,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
+  },
+  reportButton: {
+    backgroundColor: "rgba(255, 107, 107, 0.18)",
+    borderWidth: 1,
+    borderColor: "#FF6B6B",
   },
   // Styles pour la modal des participants
   modalContainer: {

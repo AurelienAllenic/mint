@@ -3,7 +3,7 @@ import { useAuth } from "../context/auth";
 
 // Hook: returns whether the current user has premium. Safe to call from components.
 export function usePremiumStatus(): boolean {
-  const { user, token, refreshUserData } = useAuth();
+  const { user, token } = useAuth();
   const [isPremium, setIsPremium] = useState<boolean>(
     !!(user as any)?.isPremium
   );
@@ -36,11 +36,6 @@ export function usePremiumStatus(): boolean {
         if (response.ok) {
           const data = await response.json();
           setIsPremium(!!data.isPremium);
-          if (refreshUserData) {
-            try {
-              await refreshUserData();
-            } catch {}
-          }
         }
       } catch (error) {
         // noop
@@ -51,8 +46,11 @@ export function usePremiumStatus(): boolean {
     return () => {
       mounted = false;
     };
-    // include refreshUserData so hook re-checks if that function changes
-  }, [user, token, API_URL, refreshUserData]);
+    // Depend on the user id (stable string) rather than the `user` object, and
+    // don't call refreshUserData here: refreshUserData recreates `user` on every
+    // render, which combined with a `user` dependency caused an infinite
+    // fetch/render loop that froze the app.
+  }, [user?._id, (user as any)?.isPremium, token, API_URL]);
 
   return isPremium;
 }

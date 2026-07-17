@@ -1,5 +1,7 @@
 import Icon from "@expo/vector-icons/MaterialCommunityIcons";
-import DateTimePicker from "@react-native-community/datetimepicker";
+import DateTimePicker, {
+  DateTimePickerAndroid,
+} from "@react-native-community/datetimepicker";
 import { StripeProvider, useStripe } from "@stripe/stripe-react-native";
 import { BlurView } from "expo-blur";
 import * as DocumentPicker from "expo-document-picker";
@@ -7,7 +9,7 @@ import * as FileSystem from "expo-file-system";
 import { useRouter } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import type { Sponsor } from "@/types/api";
-import { normalizeSponsor } from "@/utils/sponsors";
+import { normalizeSponsor, sponsorsFromRace } from "@/utils/sponsors";
 import {
   ActivityIndicator,
   Alert,
@@ -49,11 +51,21 @@ interface User {
 interface CreateRaceProps {
   user: any;
   initialGpxUri?: string;
+  // Si fourni, le composant passe en mode édition (PUT au lieu de POST).
+  editRace?: any;
 }
 
-const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
-  const [raceName, setRaceName] = useState("Course du Lac de Paris");
+const CreateRace: React.FC<CreateRaceProps> = ({
+  user,
+  initialGpxUri,
+  editRace,
+}) => {
+  const isEditMode = !!editRace;
+  const [raceName, setRaceName] = useState(
+    editRace?.name ?? "Course du Lac de Paris"
+  );
   const [startDate, setStartDate] = useState(() => {
+    if (editRace?.startDate) return new Date(editRace.startDate);
     const date = new Date();
     date.setDate(date.getDate() + 7);
     date.setHours(9, 0, 0, 0);
@@ -61,6 +73,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   });
   const [paymentIntentId, setPaymentIntentId] = useState<string | null>(null);
   const [endDate, setEndDate] = useState(() => {
+    if (editRace?.endDate) return new Date(editRace.endDate);
     const date = new Date();
     date.setDate(date.getDate() + 7);
     date.setHours(12, 0, 0, 0);
@@ -71,9 +84,15 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
     null
   );
   const [organizations, setOrganizations] = useState<Organization[]>([]);
-  const [selectedOrganization, setSelectedOrganization] = useState<
-    number | null
-  >(null);
+  const [selectedOrganization, setSelectedOrganization] = useState<any>(
+    editRace?.organization
+      ? String(
+          editRace.organization._id ??
+            editRace.organization.id ??
+            editRace.organization
+        )
+      : null
+  );
   const [showCreateOrganization, setShowCreateOrganization] = useState(false);
   const [newOrganizationName, setNewOrganizationName] = useState("");
   const [creatingOrganization, setCreatingOrganization] = useState(false);
@@ -85,18 +104,22 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const [gpxFileUri, setGpxFileUri] = useState<string | null>(
     initialGpxUri || null
   );
-  const [gpxFileName, setGpxFileName] = useState<string | null>(null);
-  const [gpxFileContent, setGpxFileContent] = useState<string | null>(null);
+  const [gpxFileName, setGpxFileName] = useState<string | null>(
+    editRace?.gpxFile ? "Fichier GPX existant" : null
+  );
+  const [gpxFileContent, setGpxFileContent] = useState<string | null>(
+    editRace?.gpxFile ?? null
+  );
   const [showStartDatePicker, setShowStartDatePicker] = useState(false);
   const [showEndDatePicker, setShowEndDatePicker] = useState(false);
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showStartTimePicker, setShowStartTimePicker] = useState(false);
-  const [showEndTimePicker, setShowEndTimePicker] = useState(false);
 
   const [sponsorsList, setSponsorsList] = useState<Sponsor[]>([]);
-  const [selectedSponsorIds, setSelectedSponsorIds] = useState<string[]>([]);
+  const [selectedSponsorIds, setSelectedSponsorIds] = useState<string[]>(
+    editRace ? sponsorsFromRace(editRace).map((s) => s.id) : []
+  );
   const [showSponsorModal, setShowSponsorModal] = useState(false);
   const [newSponsorName, setNewSponsorName] = useState("");
   const [newSponsorImage, setNewSponsorImage] = useState("");
@@ -563,16 +586,61 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
   const createRace = async () => {
     if (!validateForm()) return;
 
+    if (!token) {
+      setError("Token d'authentification manquant");
+      return;
+    }
+
+    // MODE ÉDITION : PUT /race/:id (pas d'emails ni de paiement ici)
+    if (isEditMode) {
+      setLoading(true);
+      setError(null);
+      try {
+        const raceId = editRace._id || editRace.id;
+        const raceData = {
+          name: raceName.trim(),
+          startDate: startDate.toISOString(),
+          endDate: endDate.toISOString(),
+          organization: selectedOrganization,
+          gpxFile: gpxFileContent || "",
+          // Le modèle backend ne gère qu'un sponsor : on envoie le premier
+          // sélectionné, ou null pour retirer le sponsor.
+          sponsor: selectedSponsorIds[0] ?? null,
+        };
+
+        const response = await fetch(`${API_URL}/race/${raceId}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: token.startsWith("Bearer ")
+              ? token
+              : `Bearer ${token}`,
+          },
+          body: JSON.stringify(raceData),
+        });
+
+        if (response.ok) {
+          Alert.alert("Succès", "Course modifiée avec succès !", [
+            { text: "Retour", onPress: () => router.back() },
+          ]);
+        } else {
+          const errorText = await response.text();
+          console.log("Erreur API (édition):", response.status, errorText);
+          setError(`Erreur lors de la modification: ${errorText}`);
+        }
+      } catch (err) {
+        console.error("Erreur lors de la modification de la course:", err);
+        setError(`Erreur: ${err instanceof Error ? err.message : String(err)}`);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      if (!token) {
-        setError("Token d'authentification manquant");
-        setLoading(false);
-        return;
-      }
-
       // Parser les emails depuis le champ texte
       const emails = runnerEmails
         .split(/[,;\n]/)
@@ -709,6 +777,49 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
     }
   };
 
+  // Sur Android, on utilise l'API impérative (date puis heure enchaînées)
+  // pour éviter le bug de remontage du composant qui réinitialise l'heure.
+  const openAndroidDateTime = (
+    current: Date,
+    onConfirm: (date: Date) => void
+  ) => {
+    DateTimePickerAndroid.open({
+      value: current,
+      mode: "date",
+      onChange: (dateEvent, selectedDate) => {
+        if (dateEvent.type !== "set" || !selectedDate) return;
+        DateTimePickerAndroid.open({
+          value: selectedDate,
+          mode: "time",
+          is24Hour: true,
+          onChange: (timeEvent, selectedTime) => {
+            if (timeEvent.type !== "set" || !selectedTime) return;
+            const finalDate = new Date(selectedDate);
+            finalDate.setHours(selectedTime.getHours());
+            finalDate.setMinutes(selectedTime.getMinutes());
+            onConfirm(finalDate);
+          },
+        });
+      },
+    });
+  };
+
+  const openStartPicker = () => {
+    if (Platform.OS === "android") {
+      openAndroidDateTime(startDate, setStartDate);
+    } else {
+      setShowStartDatePicker(true);
+    }
+  };
+
+  const openEndPicker = () => {
+    if (Platform.OS === "android") {
+      openAndroidDateTime(endDate, setEndDate);
+    } else {
+      setShowEndDatePicker(true);
+    }
+  };
+
   const formatDate = (date: Date) => {
     return date.toLocaleDateString("fr-FR", {
       year: "numeric",
@@ -743,7 +854,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
               >
                 <Icon name="arrow-left" size={24} color="#A1F763" />
               </TouchableOpacity>
-              <Text style={styles.headerTitle}>Créer une course</Text>
+              <Text style={styles.headerTitle}>
+                {isEditMode ? "Modifier la course" : "Créer une course"}
+              </Text>
               <View style={styles.headerSpacer} />
             </View>
           </BlurView>
@@ -783,7 +896,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     <Text style={styles.label}>Date de début *</Text>
                     <TouchableOpacity
                       style={styles.dateButton}
-                      onPress={() => setShowStartDatePicker(true)}
+                      onPress={openStartPicker}
                     >
                       <Icon name="calendar" size={20} color="#A1F763" />
                       <Text style={styles.dateText}>
@@ -796,7 +909,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     <Text style={styles.label}>Date de fin *</Text>
                     <TouchableOpacity
                       style={styles.dateButton}
-                      onPress={() => setShowEndDatePicker(true)}
+                      onPress={openEndPicker}
                     >
                       <Icon name="calendar" size={20} color="#A1F763" />
                       <Text style={styles.dateText}>{formatDate(endDate)}</Text>
@@ -1054,7 +1167,9 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                   )}
                 </View>
 
-                {/* Saisie des emails des participants */}
+                {/* Saisie des emails des participants (création uniquement —
+                    en édition, les coureurs se gèrent via le bouton « + ») */}
+                {!isEditMode && (
                 <View style={styles.inputGroup}>
                   <Text style={styles.label}>Emails des participants</Text>
                   <Text style={styles.hintText}>
@@ -1191,6 +1306,7 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
                     </View>
                   )}
                 </View>
+                )}
 
                 {/* Erreur */}
                 {error && (
@@ -1218,31 +1334,25 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
               <ActivityIndicator size="small" color="#3B3B3B" />
             ) : (
               <Text style={styles.createButtonText}>
-                {needsPayment ? "PAIEMENT REQUIS" : "CRÉER LA COURSE"}
+                {isEditMode
+                  ? "ENREGISTRER"
+                  : needsPayment
+                    ? "PAIEMENT REQUIS"
+                    : "CRÉER LA COURSE"}
               </Text>
             )}
           </TouchableOpacity>
         </View>
 
-        {/* Date Pickers */}
+        {/* Date Pickers (iOS uniquement — Android utilise l'API impérative) */}
         {showStartDatePicker && (
           <DateTimePicker
             value={startDate}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
+            mode="datetime"
+            display="spinner"
             onChange={(_, selectedDate) => {
               setShowStartDatePicker(false);
-              if (selectedDate) {
-                if (Platform.OS === "android") {
-                  const newDate = new Date(selectedDate);
-                  newDate.setHours(startDate.getHours());
-                  newDate.setMinutes(startDate.getMinutes());
-                  setStartDate(newDate);
-                  setShowStartTimePicker(true);
-                } else {
-                  setStartDate(selectedDate);
-                }
-              }
+              if (selectedDate) setStartDate(selectedDate);
             }}
           />
         )}
@@ -1250,55 +1360,11 @@ const CreateRace: React.FC<CreateRaceProps> = ({ user, initialGpxUri }) => {
         {showEndDatePicker && (
           <DateTimePicker
             value={endDate}
-            mode="date"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
+            mode="datetime"
+            display="spinner"
             onChange={(_, selectedDate) => {
               setShowEndDatePicker(false);
-              if (selectedDate) {
-                if (Platform.OS === "android") {
-                  const newDate = new Date(selectedDate);
-                  newDate.setHours(endDate.getHours());
-                  newDate.setMinutes(endDate.getMinutes());
-                  setEndDate(newDate);
-                  setShowEndTimePicker(true);
-                } else {
-                  setEndDate(selectedDate);
-                }
-              }
-            }}
-          />
-        )}
-
-        {showStartTimePicker && (
-          <DateTimePicker
-            value={startDate}
-            mode="time"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, selectedTime) => {
-              setShowStartTimePicker(false);
-              if (selectedTime) {
-                const newDate = new Date(startDate);
-                newDate.setHours(selectedTime.getHours());
-                newDate.setMinutes(selectedTime.getMinutes());
-                setStartDate(newDate);
-              }
-            }}
-          />
-        )}
-
-        {showEndTimePicker && (
-          <DateTimePicker
-            value={endDate}
-            mode="time"
-            display={Platform.OS === "ios" ? "spinner" : "default"}
-            onChange={(_, selectedTime) => {
-              setShowEndTimePicker(false);
-              if (selectedTime) {
-                const newDate = new Date(endDate);
-                newDate.setHours(selectedTime.getHours());
-                newDate.setMinutes(selectedTime.getMinutes());
-                setEndDate(newDate);
-              }
+              if (selectedDate) setEndDate(selectedDate);
             }}
           />
         )}

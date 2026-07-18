@@ -5,6 +5,7 @@
   },
   "build": {
     "development": {
+      "developmentClient": true,
       "distribution": "internal",
       "android": {
         "buildType": "apk"
@@ -14,11 +15,21 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://back-mint-node.vercel.app",
+        "EXPO_PUBLIC_STRIPE_KEY": "pk_test_51OxtBLCRrXyKqFuXOS02wuAbsKoa8G2O2bzVaACNz6EFvI0CGRZOcI0K0EIylFejGDQvEKwFYfO9amDpuxOwuBz600n6QDYYEP",
+        "EXPO_PUBLIC_SIGNATURE_SECRET": "signature-s3cr3t"
       }
     },
     "production": {
       "android": {
         "buildType": "apk"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "https://back-mint-node.vercel.app",
+        "EXPO_PUBLIC_STRIPE_KEY": "pk_test_51OxtBLCRrXyKqFuXOS02wuAbsKoa8G2O2bzVaACNz6EFvI0CGRZOcI0K0EIylFejGDQvEKwFYfO9amDpuxOwuBz600n6QDYYEP",
+        "EXPO_PUBLIC_SIGNATURE_SECRET": "signature-s3cr3t"
       }
     }
   }

@@ -15,11 +15,14 @@ import {
   Linking,
   Modal,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from "react-native";
+import QRCode from "react-native-qrcode-svg";
 import { io, Socket } from "socket.io-client";
 import { useAuth } from "../context/auth";
 import AddRunnersModal from "../components/AddRunnersModal/AddRunnersModal";
@@ -90,6 +93,7 @@ export default function RaceDetailsScreen() {
   const [pendingInvitationToken, setPendingInvitationToken] = useState<string | null>(null);
   const [visitorCode, setVisitorCode] = useState<string | null>(null);
   const [generatingCode, setGeneratingCode] = useState(false);
+  const [showVisitorCodeModal, setShowVisitorCodeModal] = useState(false);
   
   // Vérifier si l'utilisateur est le propriétaire de la course
   const raceSponsors: Sponsor[] = useMemo(
@@ -831,8 +835,9 @@ export default function RaceDetailsScreen() {
     );
   };
 
-  const handleGenerateVisitorCode = async () => {
-    if (!race || generatingCode) return;
+  const handleGenerateVisitorCode = async (): Promise<string | null> => {
+    if (!race) return visitorCode;
+    if (generatingCode) return null;
     setGeneratingCode(true);
     try {
       const API_URL = process.env.EXPO_PUBLIC_API_URL || "https://back-mint-node.vercel.app";
@@ -848,19 +853,38 @@ export default function RaceDetailsScreen() {
       if (response.ok) {
         const data = await response.json();
         setVisitorCode(data.code);
-        Alert.alert(
-          "Code visiteur",
-          `Partagez ce code pour donner accès à la course :\n\n${data.code}\n\n(valable 2h)`,
-          [{ text: "OK" }]
-        );
+        return data.code;
       } else {
         const err = await response.json().catch(() => ({}));
         Alert.alert("Erreur", err.message || "Impossible de générer le code.");
+        return null;
       }
     } catch {
       Alert.alert("Erreur", "Impossible de contacter le serveur.");
+      return null;
     } finally {
       setGeneratingCode(false);
+    }
+  };
+
+  const handleShowVisitorCode = async () => {
+    if (visitorCode) {
+      setShowVisitorCodeModal(true);
+      return;
+    }
+    const code = await handleGenerateVisitorCode();
+    if (code) setShowVisitorCodeModal(true);
+  };
+
+  const handleShareVisitorCode = async () => {
+    const code = visitorCode || (await handleGenerateVisitorCode());
+    if (!code) return;
+    try {
+      await Share.share({
+        message: `Rejoins la course "${race?.name}" en tant que visiteur avec le code : ${code}`,
+      });
+    } catch {
+      // Partage annulé ou indisponible, on ignore
     }
   };
 
@@ -938,7 +962,7 @@ export default function RaceDetailsScreen() {
   };
 
   // Fonction pour quitter la course
-  const handleLeaveRace = async () => {
+  const leaveRace = async () => {
     if (!race?._id && !race?.id) return;
 
     try {
@@ -970,6 +994,19 @@ export default function RaceDetailsScreen() {
       console.error("Erreur lors de la désinscription:", error);
       alert("Erreur lors de la désinscription de la course");
     }
+  };
+
+  const handleLeaveRace = () => {
+    if (!race?._id && !race?.id) return;
+
+    Alert.alert(
+      "Quitter la course",
+      `Êtes-vous sûr de vouloir quitter la course "${race.name}" ?`,
+      [
+        { text: "Annuler", style: "cancel" },
+        { text: "Quitter", style: "destructive", onPress: leaveRace },
+      ]
+    );
   };
 
   // Fonction pour formater la date
@@ -1353,9 +1390,32 @@ export default function RaceDetailsScreen() {
 
       {/* Informations de la course directement sur la page */}
       {showRaceInfo && (
-        <View style={styles.raceInfoContainer}>
+        <Modal
+          visible={true}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setShowRaceInfo(false)}
+        >
+          <TouchableOpacity
+            style={styles.raceInfoBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowRaceInfo(false)}
+          >
+          <TouchableWithoutFeedback>
+          <View style={styles.raceInfoContainer}>
           <BlurView style={styles.raceInfoBlur} intensity={40} tint="dark">
             <View style={styles.raceInfoContent}>
+              <View style={styles.raceInfoHeader}>
+                <Text style={styles.raceInfoHeaderTitle}>
+                  Infos de la course
+                </Text>
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => setShowRaceInfo(false)}
+                >
+                  <Icon name="close" size={20} color="#A1F763" />
+                </TouchableOpacity>
+              </View>
               {/* Grille d'informations */}
               <View style={styles.infoGrid}>
                 {/* Statut de la course */}
@@ -1527,7 +1587,10 @@ export default function RaceDetailsScreen() {
               </View>
             </View>
           </BlurView>
-        </View>
+          </View>
+          </TouchableWithoutFeedback>
+          </TouchableOpacity>
+        </Modal>
       )}
 
       {/* NOUVEAU : Affichage du ranking si disponible */}
@@ -1653,11 +1716,6 @@ export default function RaceDetailsScreen() {
         )}
 
         <View style={styles.bottomButtons}>
-          <TouchableOpacity style={styles.roundButton}>
-            <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
-              <Icon name="share" size={28} color="#fff" />
-            </BlurView>
-          </TouchableOpacity>
           <TouchableOpacity
             style={styles.roundButton}
             onPress={() => setShowParticipantsModal(true)}
@@ -1701,7 +1759,7 @@ export default function RaceDetailsScreen() {
           {isRunner && (
             <TouchableOpacity
               style={styles.roundButton}
-              onPress={visitorCode ? () => Alert.alert("Code visiteur", `Code actif :\n\n${visitorCode}\n\n(valable 2h)`) : handleGenerateVisitorCode}
+              onPress={handleShowVisitorCode}
               disabled={generatingCode}
             >
               <BlurView style={styles.roundButtonBlur} intensity={40} tint="dark">
@@ -1724,6 +1782,47 @@ export default function RaceDetailsScreen() {
 
       {/* Modal des participants */}
       {ParticipantsModal}
+
+      {/* Modal du code visiteur (partage + QR code) */}
+      {showVisitorCodeModal && visitorCode && (
+        <Modal
+          visible={true}
+          animationType="fade"
+          transparent
+          onRequestClose={() => setShowVisitorCodeModal(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalBackdrop}
+            activeOpacity={1}
+            onPress={() => setShowVisitorCodeModal(false)}
+          >
+            <TouchableWithoutFeedback>
+              <View style={styles.visitorCodeCard}>
+                <TouchableOpacity
+                  style={styles.modalCloseButton}
+                  onPress={() => setShowVisitorCodeModal(false)}
+                >
+                  <Icon name="close" size={24} color="#A1F763" />
+                </TouchableOpacity>
+                <Text style={styles.visitorCodeTitle}>Code visiteur</Text>
+                <View style={styles.qrCodeWrapper}>
+                  <QRCode value={visitorCode} size={180} backgroundColor="#fff" />
+                </View>
+                <Text style={styles.visitorCodeText}>{visitorCode}</Text>
+                <Text style={styles.visitorCodeSubtext}>Valable 2h</Text>
+                <TouchableOpacity
+                  style={styles.shareCodeButton}
+                  onPress={handleShareVisitorCode}
+                  activeOpacity={0.8}
+                >
+                  <Icon name="share" size={20} color="#0F0F0F" />
+                  <Text style={styles.shareCodeButtonText}>Partager</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableWithoutFeedback>
+          </TouchableOpacity>
+        </Modal>
+      )}
 
       {/* Modal pour ajouter des coureurs (propriétaire uniquement) */}
       {isOwner && race && (
@@ -2385,5 +2484,72 @@ const styles = StyleSheet.create({
     color: "#888",
     fontSize: 12,
     marginTop: 2,
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0, 0, 0, 0.6)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+  },
+  visitorCodeCard: {
+    width: "100%",
+    maxWidth: 320,
+    backgroundColor: "#181818",
+    borderRadius: 20,
+    padding: 24,
+    alignItems: "center",
+  },
+  visitorCodeTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: 16,
+  },
+  qrCodeWrapper: {
+    backgroundColor: "#fff",
+    padding: 12,
+    borderRadius: 12,
+    marginBottom: 16,
+  },
+  visitorCodeText: {
+    color: "#A1F763",
+    fontSize: 24,
+    fontWeight: "bold",
+    letterSpacing: 2,
+    marginBottom: 4,
+  },
+  visitorCodeSubtext: {
+    color: "#888",
+    fontSize: 12,
+    marginBottom: 20,
+  },
+  shareCodeButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "#A1F763",
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 12,
+  },
+  shareCodeButtonText: {
+    color: "#0F0F0F",
+    fontSize: 15,
+    fontWeight: "700",
+  },
+  raceInfoBackdrop: {
+    flex: 1,
+  },
+  raceInfoHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 12,
+  },
+  raceInfoHeaderTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 });

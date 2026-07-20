@@ -5,7 +5,10 @@ import * as Linking from "expo-linking";
 import { Slot, useSegments } from "expo-router";
 import React, { useEffect, useMemo, useState } from "react";
 import { Image, StyleSheet, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  SafeAreaProvider,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 import { AuthProvider } from "../context/auth";
 import { usePremiumStatus } from "../utils/getPremiumStatus";
 // Note: react-native-google-mobile-ads is native — we require it dynamically
@@ -24,13 +27,16 @@ export default function RootLayout() {
   if (!fontsLoaded) return null;
 
   return (
-    <AuthProvider>
-      <InnerLayout />
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AuthProvider>
+        <InnerLayout />
+      </AuthProvider>
+    </SafeAreaProvider>
   );
 }
 
 function InnerLayout() {
+  const insets = useSafeAreaInsets();
   const segments = useSegments();
   const firstSegment = segments && segments.length > 0 ? segments[0] : "";
 
@@ -113,11 +119,11 @@ function InnerLayout() {
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: insets.bottom }]}>
       <Slot />
 
       {showAds && (
-        <SafeAreaView style={styles.adWrapper} edges={["bottom"]}>
+        <View style={styles.adWrapper}>
           {isBuilt ? (
             BuiltAd
           ) : (
@@ -135,7 +141,7 @@ function InnerLayout() {
               />
             </TouchableOpacity>
           )}
-        </SafeAreaView>
+        </View>
       )}
     </View>
   );

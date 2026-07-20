@@ -455,15 +455,6 @@ export default function HomeScreen() {
             </Text>
           </TouchableOpacity> */}
           <View style={styles.bottomButtons}>
-            <TouchableOpacity style={styles.roundButton}>
-              <BlurView
-                style={styles.roundButtonBlur}
-                intensity={40}
-                tint="dark"
-              >
-                <Icon name="account-group" size={24} color="#fff" />
-              </BlurView>
-            </TouchableOpacity>
             {user?.role === "coureur" && (
               <TouchableOpacity
                 style={styles.roundButton}
